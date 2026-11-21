@@ -1,6 +1,72 @@
 Warpath changelog
 
 =====================================================================
+3.4.0
+=====================================================================
+
+The chronicle
+- /warpath chronicle opens a book of your campaigns: one per page, the last
+  30 kept per character. Each page has a headline ("The Hillsbrad Skirmish
+  - 9 kills, 3 deaths"), kills, deaths, best streak, miles and time played,
+  six highlights (nemesis, favourite victim, bloodiest ground, longest
+  streak and who ended it, grudges settled and deaths avenged, screenshot
+  numbers) and every kill and death. Click one to set a waypoint there.
+- A campaign is play with gaps under 2 hours: a /reload or a quick relog no
+  longer splits a night in two, and empty logins don't push out real ones.
+- The nemesis is the enemy you were fighting when you fell. The game doesn't
+  say who landed the blow, so a third player's kill is credited to them.
+- At login, a one-line headline for the campaign that just ended (option),
+  or the window itself (option, off by default).
+- /warpath chronicle chat prints the full report to chat instead.
+- Share a campaign: the Share button, or /warpath chronicle share
+  [guild|party|say|whisper <name>]. Two plain chat lines anyone can read.
+- /warpath chronicle preview shows the window with sample data.
+
+Zone records
+- Entering a zone you have history in: a chat line (kills, deaths, miles,
+  enemies sighted, deaths avenged, best streak there, and a tag such as
+  "your deadliest zone") and a short line under the big zone name. Each can
+  be turned off on its own. Again after 30+ minutes away.
+- Enemy busy hours are gone from zone messages and /warpath zone.
+
+The map
+- A button in the world map's top-right corner (crossed swords): left-click
+  hides or shows everything Warpath draws, right-click picks layers,
+  shift-drag moves it. Recording never stops.
+- Roads gild gradually: silver, warm silver, pale gold, light gold, gold.
+  Well-worn gold gets a warm centre stripe, a bronze edge, a slow shimmer
+  (can be turned off) and a few amber glints.
+- Footsteps are about a third smaller; fresh ones are vivid with a thin dark
+  rim for their first 10 minutes.
+- The solid line covers your last 5 minutes and fades along its length into
+  the footsteps. Fixed: it was often much shorter than intended after you
+  stood still.
+- Corpse runs and flights have their own layer ("runs"): spirit runs are
+  dashed ice blue with a soft glow, flights thin, soft gold dashes. They fade
+  along their length and stay 24 hours (1 to 48, in options).
+- Flight routes you keep taking (about five separate days within a couple
+  of weeks) stay on the map as faint, sparse dashes, a little stronger with
+  use, fading over weeks if unused.
+
+Commands and options
+- /warpath help lists the everyday commands; /warpath help all lists
+  everything, grouped. Unknown commands get a one-line hint, not a dump.
+- Every on/off setting takes on or off (or toggles with neither).
+- New names: map (was toggle), table (was hud), waypoint death|kill (was
+  revenge / lastkill), options (was setup), layer trail / guild / runs. The
+  old names still work.
+- /warpath clear all asks you to confirm.
+- The options window has tabs: General, Map, Screenshots, Chronicle & zones.
+- The map on/off switch is shared by all your characters.
+
+Under the hood
+- Split into several files. After updating, restart the game (a /reload
+  isn't enough the first time).
+- Kill marks also store tag, streak and times killed (for a future
+  screenshot renamer).
+- Saved data upgrades itself; trail recorded before 3.4 shows as footsteps.
+
+=====================================================================
 EVERYTHING SINCE 3.2 (the 3.3 series, up to 3.3.5)
 =====================================================================
 
