@@ -25,10 +25,16 @@ local function HadFighting(c)
     return c and ((c.kills or 0) + (c.deaths or 0) + (c.sightings or 0)) > 0
 end
 
+-- A real zone, not a continent or world view (flying can report those).
+local function IsZone(mapID)
+    local info = C_Map.GetMapInfo(mapID)
+    return not (info and info.mapType and info.mapType < 3)
+end
+
 local function ZoneCount(c)
     if c.zoneCount and next(c.zones or {}) == nil then return c.zoneCount end
     local n = 0
-    for _ in pairs(c.zones or {}) do n = n + 1 end
+    for mapID in pairs(c.zones or {}) do if IsZone(mapID) then n = n + 1 end end
     return n
 end
 
@@ -219,7 +225,7 @@ function Campaign.Highlights(s)
     local settled = {}
     if s.grudges > 0 then settled[#settled + 1] = s.grudges .. (s.grudges == 1 and " grudge settled" or " grudges settled") end
     if s.avenged > 0 then settled[#settled + 1] = s.avenged .. (s.avenged == 1 and " death avenged" or " deaths avenged") end
-    list[5] = { "Grudges and vengeance", #settled > 0 and table.concat(settled, ", ") or nil }
+    list[5] = { "Vengeance", #settled > 0 and table.concat(settled, ", ") or nil }
     list[6] = { "Screenshots", s.shotLo and (s.shotLo == s.shotHi and ("#" .. s.shotLo) or ("#" .. s.shotLo .. "\226\128\147#" .. s.shotHi)) }
     return list
 end
@@ -249,7 +255,9 @@ function Campaign.Prose(s)
     -- where you went
     local names = {}
     local zones = {}
-    for mapID, e in pairs(c.zones or {}) do zones[#zones + 1] = { id = mapID, n = (e.k or 0) + (e.d or 0) } end
+    for mapID, e in pairs(c.zones or {}) do
+        if IsZone(mapID) then zones[#zones + 1] = { id = mapID, n = (e.k or 0) + (e.d or 0) } end
+    end
     table.sort(zones, function(a, b) return a.n > b.n end)
     for i, z in ipairs(zones) do if i <= 2 then names[#names + 1] = MapName(z.id) end end
     local through = ""

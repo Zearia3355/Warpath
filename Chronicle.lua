@@ -17,7 +17,7 @@ local PH = H - 2 * PAD
 local INK, FADED, RUBRIC = { 0.18, 0.11, 0.04 }, { 0.30, 0.22, 0.12 }, { 0.48, 0.12, 0.06 }
 local LEATHER = { 0.27, 0.14, 0.06 }
 local GILT = { 0.84, 0.66, 0.32 }
-local DEED_ROWS, INDEX_ROWS, LOG_ROWS = 13, 8, 9
+local DEED_ROWS, INDEX_ROWS, LOG_ROWS = 13, 9, 11
 local NONE = "|cff4d3a20\226\128\148|r"
 local TEX = {
     border  = "Interface\\DialogFrame\\UI-DialogBox-Border",
@@ -80,7 +80,15 @@ local function Roman(n)
     return out
 end
 
--- A thin rule with a small red star in the middle.
+-- A small red diamond (a square turned 45 degrees).
+local function Diamond(parent, size)
+    local t = Solid(parent, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 1)
+    t:SetSize(size, size)
+    pcall(t.SetRotation, t, math.pi / 4)
+    return t
+end
+
+-- A thin rule with a small red diamond in the middle.
 local function Ornament(parent, y)
     local l = Solid(parent, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 0.7)
     l:SetSize(70, 1)
@@ -88,11 +96,8 @@ local function Ornament(parent, y)
     local r = Solid(parent, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 0.7)
     r:SetSize(70, 1)
     r:SetPoint("TOP", parent, "TOP", 46, y)
-    local star = parent:CreateTexture(nil, "ARTWORK")
-    star:SetTexture(C.TEX_GLOW)
-    star:SetVertexColor(RUBRIC[1], RUBRIC[2], RUBRIC[3])
-    star:SetSize(12, 12)
-    star:SetPoint("CENTER", parent, "TOP", 0, y)
+    local d = Diamond(parent, 7)
+    d:SetPoint("CENTER", parent, "TOP", 0, y)
 end
 
 -- A big red initial on a gilt-edged square.
@@ -110,27 +115,24 @@ local function DropCap(parent, size)
     return f
 end
 
-local function PageButton(parent, text, arrow, onLeft)
-    local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-    b:SetSize(168, 26)
-    b:SetText(text)
-    local a = b:CreateTexture(nil, "OVERLAY")
-    a:SetTexture(arrow)
-    a:SetTexCoord(0.2, 0.8, 0.2, 0.8)
-    a:SetSize(18, 18)
-    if onLeft then a:SetPoint("LEFT", 6, 0) else a:SetPoint("RIGHT", -6, 0) end
-    b.arrow = a
+-- A quiet page-turn control: the spellbook arrow and a word in ink.
+local function TurnButton(parent, text, onLeft)
+    local b = CreateFrame("Button", nil, parent)
+    b:SetSize(96, 28)
+    local arrow = b:CreateTexture(nil, "ARTWORK")
+    arrow:SetTexture(onLeft and "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up" or "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+    arrow:SetSize(28, 28)
+    arrow:SetPoint(onLeft and "LEFT" or "RIGHT")
+    b.label = Font(b, QuestFont, GameFontHighlight, INK)
+    if onLeft then b.label:SetPoint("LEFT", arrow, "RIGHT", 2, 0) else b.label:SetPoint("RIGHT", arrow, "LEFT", -2, 0) end
+    b.label:SetText(text)
+    local hl = b:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetTexture("Interface\\Buttons\\UI-Common-MouseHilight")
+    hl:SetBlendMode("ADD")
+    hl:SetAllPoints(arrow)
+    b:SetScript("OnEnable", function(self) self:SetAlpha(1) end)
+    b:SetScript("OnDisable", function(self) self:SetAlpha(0.3) end)
     return b
-end
-
-local function Check(parent, label, key)
-    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    cb:SetSize(22, 22)
-    cb.text2 = Font(parent, QuestFontNormalSmall, GameFontNormalSmall)
-    cb.text2:SetPoint("LEFT", cb, "RIGHT", 2, 0)
-    cb.text2:SetText(label)
-    cb:SetScript("OnClick", function(self) cfg[key] = self:GetChecked() and true or false end)
-    return cb
 end
 
 local function ClassIcon(tex, class)
@@ -178,21 +180,25 @@ local function Page(f, left)
     return p
 end
 
-local function SectionTab(f, label, key, y)
+-- Section tabs stand on the top edge of the book, left of the title plate,
+-- dark with a gilt edge like the plate. The open section's tab is taller.
+local function SectionTab(f, label, key, x)
     local t = CreateFrame("Button", nil, f)
-    t:SetSize(98, 30)
-    t:SetPoint("TOPLEFT", f, "TOPRIGHT", -6, y)
-    t:SetFrameLevel(f:GetFrameLevel() - 1)
-    t.bg = Solid(t, "BACKGROUND", LEATHER[1], LEATHER[2], LEATHER[3], 1)
-    t.bg:SetAllPoints()
-    t.edge = Solid(t, "BORDER", GILT[1], GILT[2], GILT[3], 0.8)
-    t.edge:SetPoint("TOPLEFT", -1, 1)
-    t.edge:SetPoint("BOTTOMRIGHT", 1, -1)
+    t:SetSize(116, 26)
+    t:SetPoint("BOTTOMLEFT", f, "TOPLEFT", x, -8)
+    t:SetFrameLevel(math.max(0, f:GetFrameLevel() - 1))
+    t.edge = Solid(t, "BACKGROUND", GILT[1], GILT[2], GILT[3], 0.9)
+    t.edge:SetAllPoints()
+    t.bg = Solid(t, "BORDER", 0.10, 0.07, 0.04, 1)
+    t.bg:SetPoint("TOPLEFT", 2, -2)
+    t.bg:SetPoint("BOTTOMRIGHT", -2, 0)
     t.text = Font(t, GameFontNormal, GameFontNormal, { 0.85, 0.78, 0.62 })
-    t.text:SetPoint("CENTER", 4, 0)
+    t.text:SetPoint("CENTER", 0, 3)
+    t.text:SetJustifyH("CENTER")
     t.text:SetText(label)
-    local hl = Solid(t, "HIGHLIGHT", 1, 0.82, 0, 0.12)
-    hl:SetAllPoints()
+    local hl = Solid(t, "HIGHLIGHT", 1, 0.82, 0, 0.10)
+    hl:SetPoint("TOPLEFT", 2, -2)
+    hl:SetPoint("BOTTOMRIGHT", -2, 0)
     t:SetScript("OnClick", function()
         if view.section ~= key then
             view.section = key
@@ -249,7 +255,7 @@ local function BuildBook()
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
 
-    f.tabs = { SectionTab(f, "Campaigns", "campaigns", -70), SectionTab(f, "Grudges", "grudges", -106) }
+    f.tabs = { SectionTab(f, "Campaigns", "campaigns", 36), SectionTab(f, "Grudges", "grudges", 158) }
     return f
 end
 
@@ -275,30 +281,33 @@ local function BuildCampaignPages(f)
     c.headline:SetJustifyH("CENTER")
     Ornament(L, -80)
 
-    c.cap = DropCap(L, 40)
-    c.cap:SetPoint("TOPLEFT", 32, -94)
     c.prose = Font(L, QuestFont, GameFontHighlight, INK)
-    c.prose:SetPoint("TOPLEFT", c.cap, "TOPRIGHT", 8, 2)
-    c.prose:SetWidth(inner - 48)
+    c.prose:SetPoint("TOPLEFT", 32, -96)
+    c.prose:SetWidth(inner)
     c.prose:SetJustifyV("TOP")
     c.prose:SetSpacing(2)
 
+    -- numbers and highlights follow straight on from the paragraph
+    local box = CreateFrame("Frame", nil, L)
+    box:SetSize(inner, 48)
+    box:SetPoint("TOPLEFT", c.prose, "BOTTOMLEFT", 0, -16)
+    c.statsBox = box
     c.stats = {}
     local labels = { "kills", "deaths", "best streak", "miles", "in the field" }
     local cw = math.floor(inner / 5)
-    local top = Solid(L, "ARTWORK", FADED[1], FADED[2], FADED[3], 0.45)
+    local top = Solid(box, "ARTWORK", FADED[1], FADED[2], FADED[3], 0.45)
     top:SetHeight(1)
-    top:SetPoint("TOPLEFT", 32, -262)
-    top:SetPoint("TOPRIGHT", -32, -262)
-    local bottom = Solid(L, "ARTWORK", FADED[1], FADED[2], FADED[3], 0.45)
+    top:SetPoint("TOPLEFT")
+    top:SetPoint("TOPRIGHT")
+    local bottom = Solid(box, "ARTWORK", FADED[1], FADED[2], FADED[3], 0.45)
     bottom:SetHeight(1)
-    bottom:SetPoint("TOPLEFT", 32, -310)
-    bottom:SetPoint("TOPRIGHT", -32, -310)
+    bottom:SetPoint("BOTTOMLEFT")
+    bottom:SetPoint("BOTTOMRIGHT")
     for i = 1, 5 do
-        local v = Font(L, QuestTitleFont, GameFontNormalLarge, INK, 17)
-        v:SetPoint("TOP", L, "TOPLEFT", 32 + cw * (i - 0.5), -268)
+        local v = Font(box, QuestTitleFont, GameFontNormalLarge, INK, 17)
+        v:SetPoint("TOP", box, "TOPLEFT", cw * (i - 0.5), -6)
         v:SetJustifyH("CENTER")
-        local lab = Font(L, QuestFontNormalSmall, GameFontNormalSmall, FADED)
+        local lab = Font(box, QuestFontNormalSmall, GameFontNormalSmall, FADED)
         lab:SetPoint("TOP", v, "BOTTOM", 0, -2)
         lab:SetJustifyH("CENTER")
         lab:SetText(labels[i])
@@ -308,17 +317,18 @@ local function BuildCampaignPages(f)
     c.high = {}
     for i = 1, 6 do
         local lab = Font(L, QuestFontNormalSmall, GameFontNormalSmall, RUBRIC)
-        lab:SetPoint("TOPLEFT", 32, -322 - (i - 1) * 21)
+        lab:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -12 - (i - 1) * 21)
         lab:SetWidth(128)
+        lab:SetWordWrap(false)
         local val = Font(L, QuestFont, GameFontHighlight, INK)
-        val:SetPoint("TOPLEFT", 162, -320 - (i - 1) * 21)
+        val:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 130, -10 - (i - 1) * 21)
         val:SetWidth(inner - 130)
         val:SetWordWrap(false)
         c.high[i] = { label = lab, value = val }
     end
 
-    c.earlier = PageButton(L, "Earlier campaign", TEX.prev, true)
-    c.earlier:SetPoint("BOTTOMLEFT", 26, 34)
+    c.earlier = TurnButton(L, "Earlier", true)
+    c.earlier:SetPoint("BOTTOMLEFT", 24, 8)
     c.earlier:SetScript("OnClick", function()
         if view.page < #view.list then view.page = view.page + 1 UISound("IG_ABILITY_PAGE_TURN", 836) Render() end
     end)
@@ -375,45 +385,23 @@ local function BuildCampaignPages(f)
     c.finis = Font(R, QuestFontNormalSmall, GameFontNormalSmall, FADED)
     c.finis:SetJustifyH("CENTER")
 
-    c.optLogin = Check(R, "Headline in chat when I log in", "chronLogin")
-    c.optLogin:SetPoint("BOTTOMLEFT", 28, 96)
-    c.optOpen = Check(R, "Open this book when I log in", "chronOpen")
-    c.optOpen:SetPoint("BOTTOMLEFT", 28, 74)
-
-    -- Share: a wax seal
-    local seal = CreateFrame("Button", nil, R)
-    seal:SetSize(58, 58)
-    seal:SetPoint("BOTTOMRIGHT", -30, 72)
-    local wax = seal:CreateTexture(nil, "ARTWORK")
-    wax:SetTexture(C.TEX_STEP)
-    wax:SetVertexColor(0.50, 0.07, 0.04)
-    wax:SetAllPoints()
-    local ring = seal:CreateTexture(nil, "ARTWORK", nil, 1)
-    ring:SetTexture(C.TEX_STEP)
-    ring:SetVertexColor(0.62, 0.12, 0.07)
-    ring:SetPoint("TOPLEFT", 6, -6)
-    ring:SetPoint("BOTTOMRIGHT", -6, 6)
-    local lit = seal:CreateTexture(nil, "HIGHLIGHT")
-    lit:SetTexture(C.TEX_STEP)
-    lit:SetVertexColor(1, 0.45, 0.3, 0.35)
-    lit:SetBlendMode("ADD")
-    lit:SetAllPoints()
-    seal.text = Font(seal, GameFontNormalSmall, GameFontNormalSmall, { 0.95, 0.78, 0.38 })
-    seal.text:SetPoint("CENTER")
-    seal.text:SetJustifyH("CENTER")
-    seal.text:SetText("Share")
-    seal:SetScript("OnClick", function(self) ns.ChronicleShareMenu(self) end)
-    seal:SetScript("OnEnter", function(self)
+    -- Share: a small plain button beside the page heading
+    local share = CreateFrame("Button", nil, R, "UIPanelButtonTemplate")
+    share:SetSize(72, 22)
+    share:SetPoint("TOPRIGHT", -26, -26)
+    share:SetText("Share")
+    share:SetScript("OnClick", function(self) ns.ChronicleShareMenu(self) end)
+    share:SetScript("OnEnter", function(self)
         GameTooltip:SetOwner(self, "ANCHOR_LEFT")
         GameTooltip:AddLine("Share this campaign")
         GameTooltip:AddLine("Two lines in guild, party, say or a whisper.", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
-    seal:SetScript("OnLeave", GameTooltip_Hide)
-    c.seal = seal
+    share:SetScript("OnLeave", GameTooltip_Hide)
+    c.share = share
 
-    c.later = PageButton(R, "Later campaign", TEX.next, false)
-    c.later:SetPoint("BOTTOMRIGHT", -26, 34)
+    c.later = TurnButton(R, "Later", false)
+    c.later:SetPoint("BOTTOMRIGHT", -24, 8)
     c.later:SetScript("OnClick", function()
         if view.page > 1 then view.page = view.page - 1 UISound("IG_ABILITY_PAGE_TURN", 836) Render() end
     end)
@@ -454,8 +442,7 @@ local function RenderCampaign()
     c.date:SetText(date("%A, %B %d", camp.start):gsub(" 0(%d)", " %1") .. status)
     c.headline:SetText(s.title)
     local prose = Campaign.Prose(s)
-    c.cap.letter:SetText(prose:sub(1, 1))
-    c.prose:SetText(prose:sub(2))
+    c.prose:SetText(prose)
 
     local values = { s.kills, s.deaths, s.best, ("%.1f"):format(s.miles), Campaign.Duration(s.played) }
     for i, v in ipairs(c.stats) do v:SetText(values[i]) end
@@ -500,13 +487,11 @@ local function RenderCampaign()
     c.finis:SetText(#list == 0 and (camp.old and "Kills and deaths weren't listed before 3.4." or "No blood spilled yet.")
         or (shown < DEED_ROWS and "here the entries end" or ""))
 
-    c.optLogin:SetChecked(cfg.chronLogin)
-    c.optOpen:SetChecked(cfg.chronOpen)
     if view.page < n then c.earlier:Enable() else c.earlier:Disable() end
     if view.page > 1 then c.later:Enable() else c.later:Disable() end
-    if view.preview then c.seal:Disable() c.seal:SetAlpha(0.5) else c.seal:Enable() c.seal:SetAlpha(1) end
-    f.left.number:SetText("\226\128\148 " .. Roman(number * 2 - 1) .. " \226\128\148")
-    f.right.number:SetText("\226\128\148 " .. Roman(number * 2) .. " \226\128\148   \194\183   campaign " .. number .. " of " .. n)
+    if view.preview then c.share:Disable() else c.share:Enable() end
+    f.right.number:SetText("\226\128\148 " .. Roman(number * 2) .. " \226\128\148")
+    f.left.number:SetText("\226\128\148 " .. Roman(number * 2 - 1) .. " \226\128\148    campaign " .. number .. " of " .. n)
 end
 
 ---------------------------------------------------------------------------
@@ -540,11 +525,6 @@ local LOG_TEXT = {
     d = function(z) return "Fell to them" .. z .. "." end,
 }
 
-local function InscribeTarget()
-    if view.preview then return end
-    ns.Dispatch("grudge")
-end
-
 local function BuildGrudgePages(f)
     local L = CreateFrame("Frame", nil, f.left)
     L:SetAllPoints()
@@ -567,15 +547,12 @@ local function BuildGrudgePages(f)
     for i = 1, INDEX_ROWS do
         local row = CreateFrame("Button", nil, L)
         row:SetSize(inner + 8, 38)
-        row:SetPoint("TOPLEFT", 28, -92 - (i - 1) * 40)
+        row:SetPoint("TOPLEFT", 28, -142 - (i - 1) * 40)
         row:SetHighlightTexture(TEX.hilite, "ADD")
         row.sel = Solid(row, "BACKGROUND", 0.48, 0.12, 0.06, 0.12)
         row.sel:SetAllPoints()
-        row.mark = row:CreateTexture(nil, "ARTWORK")
-        row.mark:SetTexture(C.TEX_GLOW)
-        row.mark:SetVertexColor(RUBRIC[1], RUBRIC[2], RUBRIC[3])
-        row.mark:SetSize(12, 12)
-        row.mark:SetPoint("RIGHT", row, "LEFT", 0, 8)
+        row.mark = Diamond(row, 7)
+        row.mark:SetPoint("RIGHT", row, "LEFT", -3, 8)
         row.name = Font(row, QuestFont, GameFontHighlight, INK)
         row.name:SetPoint("TOPLEFT", 4, -3)
         row.tally = Font(row, QuestFont, GameFontHighlight, INK)
@@ -598,29 +575,25 @@ local function BuildGrudgePages(f)
         g.rows[i] = row
     end
     g.scroll = CreateFrame("ScrollFrame", "WarpathChronicleLedger", L, "FauxScrollFrameTemplate")
-    g.scroll:SetPoint("TOPLEFT", 28, -92)
+    g.scroll:SetPoint("TOPLEFT", 28, -142)
     g.scroll:SetSize(inner + 4, INDEX_ROWS * 40)
     g.scroll:SetScript("OnVerticalScroll", function(self, offset)
         FauxScrollFrame_OnVerticalScroll(self, offset, 40, Render)
     end)
     g.empty = Font(L, QuestFont, GameFontHighlight, FADED)
-    g.empty:SetPoint("TOP", 0, -110)
+    g.empty:SetPoint("TOP", 0, -160)
     g.empty:SetWidth(inner)
     g.empty:SetJustifyH("CENTER")
-    g.empty:SetText("No grudges held.\n\nTarget an enemy and choose\n\"Inscribe my target\".")
+    g.empty:SetText("No grudges held.\n\nTarget an enemy and click the skull\non the war table, or inscribe a name.")
 
     local legend = Font(L, QuestFontNormalSmall, GameFontNormalSmall, FADED)
-    legend:SetPoint("BOTTOM", 0, 92)
-    legend:SetJustifyH("CENTER")
-    legend:SetText("|cff2e5a1cslain by you|r  \194\183  |cff7a1f0fslain by them|r")
-    local byTarget = CreateFrame("Button", nil, L, "UIPanelButtonTemplate")
-    byTarget:SetSize(150, 24)
-    byTarget:SetPoint("BOTTOMLEFT", 30, 56)
-    byTarget:SetText("Inscribe my target")
-    byTarget:SetScript("OnClick", InscribeTarget)
+    legend:SetPoint("TOPRIGHT", -36, -126)
+    legend:SetJustifyH("RIGHT")
+    legend:SetText("|cff2e5a1cyou|r \194\183 |cff7a1f0fthem|r")
+    g.legend = legend
     local byName = CreateFrame("Button", nil, L, "UIPanelButtonTemplate")
-    byName:SetSize(150, 24)
-    byName:SetPoint("BOTTOMRIGHT", -30, 56)
+    byName:SetSize(160, 24)
+    byName:SetPoint("TOP", L, "TOP", 0, -92)
     byName:SetText("Inscribe a name...")
     byName:SetScript("OnClick", function() if not view.preview then StaticPopup_Show("WARPATH_GRUDGE_NAME") end end)
 
@@ -690,15 +663,15 @@ local function BuildGrudgePages(f)
     g.note = note
 
     local enc = Font(E, QuestTitleFont, GameFontNormal, RUBRIC, 14)
-    enc:SetPoint("TOPLEFT", 32, -228)
+    enc:SetPoint("TOPLEFT", 32, -266)
     enc:SetText("Encounters")
     g.log = {}
     for i = 1, LOG_ROWS do
         local t = Font(E, QuestFontNormalSmall, GameFontNormalSmall, FADED)
-        t:SetPoint("TOPLEFT", 32, -250 - (i - 1) * 19)
+        t:SetPoint("TOPLEFT", 32, -288 - (i - 1) * 19)
         t:SetWidth(80)
         local text = Font(E, QuestFont, GameFontHighlight, INK)
-        text:SetPoint("TOPLEFT", 116, -248 - (i - 1) * 19)
+        text:SetPoint("TOPLEFT", 116, -286 - (i - 1) * 19)
         text:SetWidth(inner - 84)
         text:SetWordWrap(false)
         g.log[i] = { t = t, text = text }
@@ -706,7 +679,7 @@ local function BuildGrudgePages(f)
 
     local way = CreateFrame("Button", nil, E, "UIPanelButtonTemplate")
     way:SetSize(190, 24)
-    way:SetPoint("BOTTOMLEFT", 30, 56)
+    way:SetPoint("TOP", E, "TOP", -60, -226)
     way:SetText("Waypoint to last sighting")
     way:SetScript("OnClick", function()
         local item = view.grudges[view.pick]
@@ -716,7 +689,7 @@ local function BuildGrudgePages(f)
     g.way = way
     local forgive = CreateFrame("Button", nil, E, "UIPanelButtonTemplate")
     forgive:SetSize(110, 24)
-    forgive:SetPoint("BOTTOMRIGHT", -30, 56)
+    forgive:SetPoint("TOP", E, "TOP", 100, -226)
     forgive:SetText("Forgive")
     forgive:SetScript("OnClick", function()
         local item = view.grudges[view.pick]
@@ -742,6 +715,7 @@ local function RenderGrudges()
     g.summary:SetText(#list == 0 and "" or (held .. " held  \194\183  " .. (settledWeek == 0 and "none" or Campaign.Word(settledWeek))
         .. " settled this week  \194\183  last seen first"))
     g.empty:SetShown(#list == 0)
+    g.legend:SetShown(#list > 0)
 
     FauxScrollFrame_Update(g.scroll, #list, INDEX_ROWS, 40)
     local offset = FauxScrollFrame_GetOffset(g.scroll)
@@ -777,7 +751,9 @@ local function RenderGrudges()
     g.name:SetText(short:sub(2))
     local who = Foes.Describe(r.lv, r.ra, r.class, nil)
     who = who ~= "" and ((r.lv and "Level " or "") .. who) or "Class unknown"
-    g.who:SetText(who .. (r.gu and ("  \194\183  <" .. r.gu .. ">") or "") .. "  \194\183  " .. item.full:match("%-(.+)$"))
+    local realm = item.full:match("%-(.+)$")
+    if realm == GetNormalizedRealmName() then realm = nil end
+    g.who:SetText(who .. (r.gu and ("  \194\183  <" .. r.gu .. ">") or "") .. (realm and ("  \194\183  " .. realm) or ""))
     g.since:SetText("Held since " .. date("%B %d", r.added or time()):gsub(" 0(%d)", " %1")
         .. (r.auto and ", added automatically" or ""))
     g.tallies[1]:SetText(r.kills or 0)
@@ -816,8 +792,9 @@ function Render()
     book.gr.R:SetShown(not camp)
     for _, t in ipairs(book.tabs) do
         local on = t.key == view.section
-        t.bg:SetColorTexture(on and 0.50 or LEATHER[1], on and 0.09 or LEATHER[2], on and 0.05 or LEATHER[3], 1)
-        t.text:SetTextColor(on and 0.95 or 0.80, on and 0.78 or 0.72, on and 0.38 or 0.58)
+        t:SetHeight(on and 32 or 26)
+        t.bg:SetColorTexture(on and 0.16 or 0.08, on and 0.09 or 0.06, on and 0.04 or 0.04, 1)
+        t.text:SetTextColor(on and 1 or 0.62, on and 0.82 or 0.58, on and 0 or 0.50)
     end
     if camp then RenderCampaign() else RenderGrudges() end
 end

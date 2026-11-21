@@ -180,8 +180,9 @@ function Grudge.OnDeath(full, class, mapID)
     elseif not offered[full] then
         offered[full] = true
         pending = { full = full, class = class, at = GetTime() }
-        Print(("%s has killed you %d times. Type %s/warpath grudge|r to hold a grudge against them.")
+        Print(("%s has killed you %d times. Click the skull on the war table, or type %s/warpath grudge|r, to hold a grudge against them.")
             :format(Short(full), n, C.GOLD))
+        if ns.GrudgeButtonRefresh then ns.GrudgeButtonRefresh() end
     end
 end
 
@@ -248,6 +249,7 @@ local function TargetHolder()
 end
 
 function Grudge.OnTarget()
+    if ns.GrudgeButtonRefresh then ns.GrudgeButtonRefresh() end
     local tf, portrait = TargetHolder()
     if not tf then return end
     local full = cfg.grudge.plates and not S.inInstance and FullName("target")
@@ -270,6 +272,7 @@ function Grudge.OnTarget()
 end
 
 function Grudge.RefreshMarks()
+    if ns.GrudgeButtonRefresh then ns.GrudgeButtonRefresh() end
     local ok, plates = pcall(C_NamePlate.GetNamePlates)
     if ok and type(plates) == "table" then
         for _, plate in ipairs(plates) do

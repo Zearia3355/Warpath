@@ -71,12 +71,93 @@ local function CreateHUD()
         local fs = S.hud:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
         fs:SetPoint("TOPLEFT", 12, -14 - i * 15)
         fs:SetJustifyH("LEFT")
-        fs:SetWidth(186)
+        fs:SetWidth(i >= 4 and 160 or 186) -- rows 4-5 leave room for the grudge button
         fs:SetWordWrap(false)
         S.hud.rows[i] = fs
     end
+    ns.CreateGrudgeButton(S.hud)
     S.hud:SetShown(cfg.hudShown and not S.inInstance)
 end
+
+---------------------------------------------------------------------------
+-- The grudge button on the war table: one click holds a grudge against
+-- your target (or the player last offered in chat). Right-click opens
+-- the ledger.
+---------------------------------------------------------------------------
+
+local gbtn
+
+-- What a click would do now: "add", full, short | "held", full, short | nil.
+local function GrudgeAction()
+    if UnitExists("target") and UnitIsPlayer("target") then
+        local full, short = ns.FullName("target")
+        if full and short ~= myName then
+            return ns.Grudge.Get(full) and "held" or "add", full, short
+        end
+    end
+    local offer = ns.Grudge.Pending()
+    if offer then return "add", offer.full, ns.Grudge.Short(offer.full) end
+end
+
+local function GrudgeButtonRefresh()
+    if not gbtn then return end
+    local action = GrudgeAction()
+    gbtn.icon:SetDesaturated(action == nil)
+    gbtn.icon:SetAlpha(action == nil and 0.55 or 1)
+    if action == "held" then gbtn.icon:SetVertexColor(1, 0.35, 0.25) else gbtn.icon:SetVertexColor(1, 1, 1) end
+    if gbtn:IsMouseOver() and gbtn:GetScript("OnEnter") then gbtn:GetScript("OnEnter")(gbtn) end
+end
+
+function ns.CreateGrudgeButton(hud)
+    gbtn = CreateFrame("Button", nil, hud)
+    gbtn:SetSize(24, 24)
+    gbtn:SetPoint("BOTTOMRIGHT", -9, 9)
+    gbtn:RegisterForClicks("LeftButtonUp", "RightButtonUp")
+    local edge = gbtn:CreateTexture(nil, "BACKGROUND")
+    edge:SetColorTexture(1, 0.82, 0, 0.6)
+    edge:SetAllPoints()
+    local bg = gbtn:CreateTexture(nil, "BORDER")
+    bg:SetColorTexture(0.08, 0.04, 0.02, 1)
+    bg:SetPoint("TOPLEFT", 1, -1)
+    bg:SetPoint("BOTTOMRIGHT", -1, 1)
+    gbtn.icon = gbtn:CreateTexture(nil, "ARTWORK")
+    gbtn.icon:SetTexture(C.TEX_SKULL)
+    gbtn.icon:SetPoint("TOPLEFT", 3, -3)
+    gbtn.icon:SetPoint("BOTTOMRIGHT", -3, 3)
+    local hl = gbtn:CreateTexture(nil, "HIGHLIGHT")
+    hl:SetColorTexture(1, 0.82, 0, 0.18)
+    hl:SetAllPoints()
+    gbtn:SetScript("OnClick", function(_, button)
+        if button == "RightButton" then ns.Chronicle.Open(false, "grudges") return end
+        local action, full, short = GrudgeAction()
+        if action == "add" then
+            ns.Dispatch("grudge")
+        elseif action == "held" then
+            Print(short .. " is already in your ledger. Right-click the skull to open it.")
+        else
+            Print("target a player to hold a grudge against them. Right-click the skull to open your ledger.")
+        end
+        GrudgeButtonRefresh()
+    end)
+    gbtn:SetScript("OnEnter", function(self)
+        local action, _, short = GrudgeAction()
+        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+        if action == "add" then
+            GameTooltip:AddLine("Hold a grudge against " .. short, 1, 0.3, 0.2)
+        elseif action == "held" then
+            GameTooltip:AddLine(short .. " is in your ledger", 1, 0.3, 0.2)
+        else
+            GameTooltip:AddLine("Grudges", 1, 0.82, 0)
+            GameTooltip:AddLine("Target a player, then click to hold a grudge.", 1, 1, 1)
+        end
+        GameTooltip:AddLine("Right-click: open your ledger", 0.8, 0.8, 0.8)
+        GameTooltip:Show()
+    end)
+    gbtn:SetScript("OnLeave", GameTooltip_Hide)
+    GrudgeButtonRefresh()
+end
+
+ns.GrudgeButtonRefresh = GrudgeButtonRefresh
 
 function UpdateHUD()
     Campaign.Save()
@@ -105,6 +186,7 @@ function UpdateHUD()
         S.hud.rows[4]:SetText("")
     end
     S.hud.rows[5]:SetText(("%.1f miles marched"):format(db.yards / 1760))
+    GrudgeButtonRefresh()
 end
 
 ---------------------------------------------------------------------------

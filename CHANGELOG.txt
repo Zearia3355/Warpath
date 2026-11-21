@@ -1,6 +1,28 @@
 Warpath changelog
 
 =====================================================================
+3.5.1
+=====================================================================
+
+- The chronicle's Campaigns and Grudges tabs stand on the book's top edge,
+  styled like the title plate, instead of hanging off its right side.
+- Page turning is a quiet "Earlier" / "Later" with the spellbook arrows at
+  the bottom corners. Share is a small button beside "Deeds and Losses".
+- The campaign write-up runs straight into its numbers and highlights (no
+  big gap), without the boxed initial. "Grudges and vengeance" is now
+  "Vengeance" so it no longer runs into the next line.
+- The login options are no longer repeated in the book (they're in the
+  options window, Chronicle tab).
+- Ledger: "Inscribe a name..." sits under the summary; "you · them" heads
+  the tallies; Waypoint and Forgive sit under the grudge's note.
+- New: a skull button on the war table. Click it to hold a grudge against
+  your target (or the player last offered in chat); right-click opens the
+  ledger. It replaces "Inscribe my target" in the book.
+- Your own realm name is no longer shown on every grudge.
+- The ornaments are small red diamonds (the star drew as a box).
+- Campaign write-ups no longer count a continent as a zone you rode through.
+
+=====================================================================
 3.5.0
 =====================================================================
 
