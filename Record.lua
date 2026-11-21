@@ -13,7 +13,7 @@ end)
 
 local roadSeen, fieldCache, fieldWarned = {}, {}, {}
 local hist = {}
-local sightSeen, grudgeWarned = {}, {}
+local sightSeen = {}
 local lastHostile, pendingAvenge = -1000, nil
 local lastShot, shotPending = -1000, nil
 
@@ -189,7 +189,7 @@ end
 local function See(unit)
     if S.inInstance or not S.ready then return end
     if Foes.Safe(UnitIsDeadOrGhost, unit) == true then return end
-    local full, short, _, hostile = Foes.Read(unit)
+    local full, short, class, hostile = Foes.Read(unit)
     local now = GetTime()
     if hostile == nil and Foes.Safe(UnitIsPlayer, unit) and not UnitInParty(unit) and not UnitInRaid(unit) then
         -- The game won't say whether this player is hostile. For "did a
@@ -202,11 +202,7 @@ local function See(unit)
     lastHostile = now
     if not full then return end
 
-    if gdb.kos[full] and (not grudgeWarned[full] or now - grudgeWarned[full] > C.GRUDGE_COOLDOWN) then
-        grudgeWarned[full] = now
-        Notice("Grudge sighted: " .. short, 1, 0.5, 0)
-        Sound("READY_CHECK", 8960)
-    end
+    ns.Grudge.OnSighted(full, short, class)
 
     if sightSeen[full] and now - sightSeen[full] < C.SIGHT_DEDUPE then return end
     sightSeen[full] = now
@@ -220,31 +216,6 @@ local function See(unit)
     recentSight[#recentSight + 1] = { mapID = mapID, x = x, y = y, t = time() }
     Share("S", mapID, x, y)
     S.dirty = true
-end
-
-local function ToggleGrudge(arg)
-    local full, short
-    if arg and arg ~= "" then
-        full = arg:find("-", 1, true) and arg or (arg .. "-" .. (GetNormalizedRealmName() or ""))
-        short = arg
-    else
-        if not UnitExists("target") or not UnitIsPlayer("target") then
-            Print("target a player, or use /warpath grudge Name-Realm.")
-            return
-        end
-        full, short = FullName("target")
-        if not full then Print("can't read that player's name right now.") return end
-    end
-    -- names typed by hand: match case-insensitively against existing entries
-    for name in pairs(gdb.kos) do
-        if name:lower() == full:lower() then
-            gdb.kos[name] = nil
-            Print("grudge against " .. name .. " settled.")
-            return
-        end
-    end
-    gdb.kos[full] = time()
-    Print("you now hold a grudge against " .. C.GOLD .. full .. "|r. You'll be told when you see them.")
 end
 
 ---------------------------------------------------------------------------
@@ -527,7 +498,8 @@ local function OnKill()
     end
     if session.streak >= 2 then text = text .. ("   x%d"):format(session.streak) end
 
-    local m, mapID, z = AddMark("kill", { n = short, c = class, f = full })
+    local info = full and Foes.info[full] or {}
+    local m, mapID, z = AddMark("kill", { n = short, c = class, f = full, lv = info.lv, ra = info.ra, gu = info.gu })
     if z then
         z.kills = z.kills + 1
         z.streak = (z.streak or 0) + 1
@@ -563,15 +535,16 @@ local function OnKill()
         name = short or "Enemy player", class = class, zone = mapID and MapName(mapID) or "",
         times = times, streak = session.streak, when = time(),
         avenged = avenged and p.mark.av or nil,
-        grudge = full and gdb.kos[full] and true or nil,
+        grudge = full and ns.Grudge.Get(full) and true or nil,
     }
     local tag = k.avenged and "avenged" or k.grudge and "grudge" or times == 1 and "first"
         or ((k.streak == 3 or k.streak == 5 or k.streak % 10 == 0) and "streak") or nil
     if m then
         m.tag, m.streak, m.times = tag, session.streak, times
         k.entry = ns.CampaignKill({ n = short, f = full, c = class, z = mapID, x = m[1], y = m[2],
-            t = m[3], tag = tag, st = session.streak, grudge = k.grudge })
+            t = m[3], tag = tag, st = session.streak, grudge = k.grudge, lv = info.lv, ra = info.ra, gu = info.gu })
     end
+    if k.grudge then ns.Grudge.OnKill(full, mapID) end
     if cfg.shot.on and m and (cfg.shot.mode == "all" or Notable(k))
         and GetTime() - lastShot >= C.SHOT_THROTTLE then
         lastShot = GetTime()
@@ -625,16 +598,20 @@ local function OnDeath()
     local recentFoe = Foes.last and GetTime() - Foes.last.at < C.PVP_WINDOW and Foes.last or nil
     local pvp = GetTime() - lastHostile < C.PVP_WINDOW or recentFoe or Foes.PlayerNearby()
     -- The killer: the enemy you were fighting (the game hides who landed the blow).
+    local killer = pvp and recentFoe or nil
+    local ki = killer and Foes.info[killer.full] or {}
     local m, mapID, z = AddMark("death", { pvp = pvp and true or nil,
-        kn = pvp and recentFoe and recentFoe.short or nil, kc = pvp and recentFoe and recentFoe.class or nil })
+        kn = killer and killer.short, kc = killer and killer.class, kf = killer and killer.full,
+        lv = ki.lv, ra = ki.ra, gu = ki.gu })
     if pvp then
         session.deaths = session.deaths + 1
         db.deaths = db.deaths + 1
         if session.streak >= 3 then
             Print(("your streak ends at %s%d|r."):format(C.GOLD, session.streak))
         end
-        ns.CampaignDeath({ n = m and m.kn, c = m and m.kc, z = mapID, x = m and m[1], y = m and m[2],
-            t = time() }, session.streak)
+        ns.CampaignDeath({ n = killer and killer.short, c = killer and killer.class, f = killer and killer.full,
+            lv = ki.lv, ra = ki.ra, gu = ki.gu, z = mapID, x = m and m[1], y = m and m[2], t = time() }, session.streak)
+        if killer then ns.Grudge.OnDeath(killer.full, killer.class, mapID) end
         session.streak = 0
         for _, zz in pairs(db.maps) do zz.streak = 0 end
         if m then
@@ -663,4 +640,3 @@ ns.OnDeath = OnDeath
 ns.Sample = Sample
 ns.See = See
 ns.TakeKillShot = TakeKillShot
-ns.ToggleGrudge = ToggleGrudge

@@ -1,5 +1,5 @@
 -- Warpath: Options
--- The options window, with tabs: General, Map, Screenshots, Chronicle & zones.
+-- The options window, with tabs: General, Map, Screenshots, Chronicle & zones, Grudges.
 -- Opens once after each install or update; /warpath options any time.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
@@ -11,19 +11,19 @@ ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction e
 local ShowSetup, MaybeShowSetup, setup
 do
 local NEW_IN = {
-    "A button on the world map (crossed swords, top right): left-click hides",
-    "    Warpath, right-click picks layers.",
-    "Roads gild gradually from silver to gold, and well-worn gold shines.",
-    "Smaller footsteps, vivid when fresh; the solid line covers 5 minutes and fades.",
-    "Corpse runs and flights: their own layer, distinct looks, 24 hours.",
-    "Flight routes you keep taking are remembered on the map.",
-    "The chronicle: /warpath chronicle opens your last 30 campaigns. Share one",
-    "    with the Share button. A /reload no longer splits a night in two.",
-    "Your record in a zone when you enter it, in chat and under the zone name.",
-    "Simpler commands: /warpath help (everything: /warpath help all).",
+    "Grudges: a ledger in the chronicle with tallies, notes and encounters;",
+    "    alerts that name the zone, named sightings on the map, a skull on",
+    "    nameplates and the target frame. Settings in the Grudges tab.",
+    "    A grudge only goes when you forgive it.",
+    "The chronicle is a book: campaigns written up as a page of prose,",
+    "    Earlier / Later buttons to turn the pages, grudges in their own section.",
+    "Days you don't play no longer fade your roads and flight routes.",
+    "Choose how long today's trail stays on the map (Map tab).",
 }
-local TABS = { "General", "Map", "Screenshots", "Chronicle & zones" }
-local HOURS = { { 1, "1 hour" }, { 6, "6 hours" }, { 24, "24 hours" }, { 48, "48 hours" } }
+local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
+local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
+local TRAIL = {}
+for i, h in ipairs(C.TRAIL_CHOICES) do TRAIL[i] = { h, h .. "h" } end
 
 local function MakeCheck(parent, label, hint)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
@@ -41,7 +41,7 @@ local function MakeCheck(parent, label, hint)
     return cb
 end
 
-local function MakeRadios(parent, label, options)
+local function MakeRadios(parent, label, options, labelWidth)
     local group = { buttons = {}, value = nil }
     group.label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     group.label:SetText(label)
@@ -55,7 +55,7 @@ local function MakeRadios(parent, label, options)
         if prev then
             rb:SetPoint("LEFT", prev.text2, "RIGHT", 14, 0)
         else
-            rb:SetPoint("LEFT", group.label, "LEFT", 130, 0)
+            rb:SetPoint("LEFT", group.label, "LEFT", labelWidth or 130, 0)
         end
         rb:SetScript("OnClick", function() group:Set(rb.value) end)
         group.buttons[i] = rb
@@ -64,6 +64,14 @@ local function MakeRadios(parent, label, options)
     function group:Set(v)
         self.value = v
         for _, b in ipairs(self.buttons) do b:SetChecked(b.value == v) end
+        if self.onChange then self.onChange(v) end
+    end
+    function group:SetEnabled(on)
+        for _, b in ipairs(self.buttons) do
+            if on then b:Enable() else b:Disable() end
+            b.text2:SetTextColor(on and 1 or 0.5, on and 1 or 0.5, on and 1 or 0.5)
+        end
+        self.label:SetTextColor(on and 1 or 0.5, on and 0.82 or 0.5, on and 0 or 0.5)
     end
     return group
 end
@@ -76,6 +84,7 @@ local function SetupLoad(s, c)
     s.shown:SetChecked(c.shown)
     for key, cb in pairs(s.layers) do cb:SetChecked(c.layers[key]) end
     s.shimmer:SetChecked(c.shimmer)
+    s.trailHours:Set(c.trailHours)
     s.runHours:Set(c.runHours)
     s.flightHours:Set(c.flightHours)
     s.shotOn:SetChecked(c.shot.on)
@@ -85,6 +94,13 @@ local function SetupLoad(s, c)
     s.zoneText:SetChecked(c.zoneText)
     s.chronLogin:SetChecked(c.chronLogin)
     s.chronOpen:SetChecked(c.chronOpen)
+    local g = c.grudge
+    s.gAlert:SetChecked(g.alert)
+    s.gAgain:Set(g.again)
+    s.gMap:SetChecked(g.map)
+    s.gPlates:SetChecked(g.plates)
+    s.gAfter:Set(g.after)
+    s.gAuto:Set(g.auto)
 end
 
 local function On(cb) return cb:GetChecked() and true or false end
@@ -97,6 +113,7 @@ local function SetupSave(s)
     cfg.shown = On(s.shown)
     for key, cb in pairs(s.layers) do cfg.layers[key] = On(cb) end
     cfg.shimmer = On(s.shimmer)
+    cfg.trailHours = s.trailHours.value or 7
     cfg.runHours = s.runHours.value or 24
     cfg.flightHours = s.flightHours.value or 24
     cfg.shot.on = On(s.shotOn)
@@ -106,6 +123,10 @@ local function SetupSave(s)
     cfg.zoneText = On(s.zoneText)
     cfg.chronLogin = On(s.chronLogin)
     cfg.chronOpen = On(s.chronOpen)
+    local g = cfg.grudge
+    g.alert, g.map, g.plates = On(s.gAlert), On(s.gMap), On(s.gPlates)
+    g.again, g.auto, g.after = s.gAgain.value or 1, s.gAuto.value or "off", s.gAfter.value or 3
+    ns.Grudge.RefreshMarks()
     if S.hud then S.hud:SetShown(cfg.hudShown and not S.inInstance) end
     UpdateHUD()
     S.dirty = true
@@ -117,6 +138,9 @@ local function DefaultsView()
     for _, name in ipairs(C.LAYERS) do view.layers[name] = true end
     for k, v in pairs(C.SHOT_DEFAULTS) do view.shot[k] = v end
     for k, v in pairs(C.CFG_DEFAULTS) do view[k] = v end
+    view.trailHours = 7
+    view.grudge = {}
+    for k, v in pairs(C.GRUDGE_DEFAULTS) do view.grudge[k] = v end
     return view
 end
 
@@ -222,7 +246,13 @@ local function BuildMap(s, panel)
     L.y = L.y + math.ceil(#C.LAYERS / 2) * 26 + 8
     s.shimmer = MakeCheck(panel, "Shimmer on well-worn gold roads")
     L.Place(s.shimmer, 0, 34)
-    L.Heading("HOW LONG RUNS STAY ON THE MAP")
+    L.Heading("HOW LONG THINGS STAY ON THE MAP")
+    s.trailHours = MakeRadios(panel, "Today's trail", TRAIL)
+    L.Radios(s.trailHours, 18)
+    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
+    hint:SetPoint("TOPLEFT", 28, -L.y)
+    hint:SetText("A stretch walked once. Paths you walk again and again stay longer.")
+    L.y = L.y + 20
     s.runHours = MakeRadios(panel, "Corpse runs", HOURS)
     L.Radios(s.runHours)
     s.flightHours = MakeRadios(panel, "Today's flights", HOURS)
@@ -264,6 +294,39 @@ local function BuildChronicle(s, panel)
     open:SetPoint("TOPLEFT", 0, -L.y)
     open:SetText("Open the chronicle")
     open:SetScript("OnClick", function() ns.Chronicle.Open() end)
+end
+
+local function BuildGrudges(s, panel)
+    local L = Layout(panel)
+    L.Heading("WHEN I SEE A GRUDGE")
+    s.gAlert = MakeCheck(panel, "Banner and sound")
+    L.Place(s.gAlert, 0, 26)
+    s.gAgain = MakeRadios(panel, "Remind me again after", { { 1, "1 min" }, { 5, "5 min" }, { 15, "15 min" } }, 150)
+    L.Radios(s.gAgain, 26)
+    s.gMap = MakeCheck(panel, "Show where on the map (their crest and name, for 15 minutes)")
+    L.Place(s.gMap)
+    s.gPlates = MakeCheck(panel, "Mark them with a skull on nameplates and the target frame")
+    L.Place(s.gPlates, 0, 34)
+    L.Heading("MAKING GRUDGES")
+    s.gAuto = MakeRadios(panel, "When a player kills me",
+        { { "off", "Do nothing" }, { "offer", "Offer one in chat" }, { "add", "Add one automatically" } }, 150)
+    L.Radios(s.gAuto, 24)
+    s.gAfter = MakeRadios(panel, "...after they kill me", { { 2, "2 times" }, { 3, "3 times" }, { 5, "5 times" } }, 150)
+    L.Radios(s.gAfter, 30)
+    s.gAuto.onChange = function(v) s.gAfter:SetEnabled(v ~= "off") end
+    L.Heading("SETTLING AND FORGIVING")
+    local note = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", 0, -L.y)
+    note:SetWidth(500)
+    note:SetJustifyH("LEFT")
+    note:SetText("Killing a grudge counts it as settled. A grudge only leaves your ledger when you forgive it, "
+        .. "in the chronicle or with /warpath grudge forgive.")
+    L.y = L.y + 34
+    local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    open:SetSize(170, 24)
+    open:SetPoint("TOPLEFT", 0, -L.y)
+    open:SetText("Open the ledger")
+    open:SetScript("OnClick", function() ns.Chronicle.Open(false, "grudges") end)
 end
 
 local function BuildSetup()
@@ -353,6 +416,7 @@ local function BuildSetup()
     BuildMap(s, s.panels[2])
     BuildShots(s, s.panels[3])
     BuildChronicle(s, s.panels[4])
+    BuildGrudges(s, s.panels[5])
     MakeTabs(s)
 
     local foot = s:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
@@ -381,7 +445,7 @@ end
 
 -- Title, then the "new in" box (updates) or a welcome line (first install),
 -- then the tabs, then the tab body, then the buttons.
-local BODY_H = 285
+local BODY_H = 330
 local function Arrange(s, showNew, showWelcome)
     local tabTop = 78
     if showNew then tabTop = tabTop + s.newH + 10

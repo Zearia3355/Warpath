@@ -79,6 +79,7 @@ local f = CreateFrame("Frame")
 for _, ev in ipairs({
     "ADDON_LOADED", "PLAYER_LOGIN", "PLAYER_ENTERING_WORLD", "PLAYER_DEAD", "PLAYER_PVP_KILLS_CHANGED",
     "ZONE_CHANGED_NEW_AREA", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED",
+    "NAME_PLATE_UNIT_REMOVED",
     "CHAT_MSG_ADDON", "PLAYER_REGEN_ENABLED", "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED",
     "PLAYER_ALIVE", "PLAYER_UNGHOST", "PVP_MATCH_ACTIVE", "PVP_MATCH_COMPLETE",
 }) do f:RegisterEvent(ev) end
@@ -115,8 +116,20 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             for _, name in ipairs(C.LAYERS) do
                 if cfg.layers[name] == nil then cfg.layers[name] = true end
             end
+            -- 3.5: today's trail length, from this character's old half-life.
+            if cfg.trailHours == nil then
+                local want, best = (db.recentHours or 3) * C.LOG2_5, 7
+                for _, h in ipairs(C.TRAIL_CHOICES) do
+                    if math.abs(h - want) < math.abs(best - want) then best = h end
+                end
+                cfg.trailHours = best
+            end
             for k, v in pairs(C.CFG_DEFAULTS) do
                 if cfg[k] == nil then cfg[k] = v end
+            end
+            cfg.grudge = cfg.grudge or {}
+            for k, v in pairs(C.GRUDGE_DEFAULTS) do
+                if cfg.grudge[k] == nil then cfg.grudge[k] = v end
             end
             cfg.shot = cfg.shot or {}
             for k, v in pairs(C.SHOT_DEFAULTS) do
@@ -129,6 +142,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             Migrate()
             if db.roadMin == nil or db.roadMin > 10 then db.roadMin = DEFAULTS.roadMin end
             if db.recentHours > 24 then db.recentHours = DEFAULTS.recentHours end
+            ns.Grudge.Upgrade()
         elseif arg1 == "Blizzard_WorldMap" and db then
             SetupMap()
         end
@@ -205,10 +219,14 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
     elseif event == "PLAYER_TARGET_CHANGED" then
         See("target")
         Foes.Track()
+        ns.Grudge.OnTarget()
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         See("mouseover")
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         See(arg1)
+        ns.Grudge.OnPlate(arg1, true)
+    elseif event == "NAME_PLATE_UNIT_REMOVED" then
+        ns.Grudge.OnPlate(arg1, false)
     elseif event == "CHAT_MSG_ADDON" then
         if db then OnComm(arg1, arg2, arg3, arg4) end
     elseif event == "PLAYER_REGEN_ENABLED" then

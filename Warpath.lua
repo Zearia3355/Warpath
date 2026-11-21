@@ -1,18 +1,19 @@
 
--- Warpath 3.4.1
+-- Warpath 3.5.0
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
 --   The map has two memories, both kept on the same grid of ground:
 --
 --   Long memory  builds one mark per DAY you use a piece of ground, and loses
---                half its strength every 14 days. Nothing is permanent.
+--                half its strength every 14 days you PLAY (days away don't
+--                count). Nothing is permanent.
 --     heat       places you linger (20+ seconds in one spot), in a soft haze.
 --     roads      stretches you travel THROUGH. A route used on two separate
 --                days turns silver, then gilds gradually towards gold; well
 --                worn gold is burnished and shines.
---   Short memory builds with every pass and loses half its strength every
---                3 hours, so it is today's log and is gone by tomorrow.
+--   Short memory builds with every pass and fades on real time: a stretch
+--                walked once stays about 7 hours (2 to 24 in options).
 --     trail      today's footsteps in your faction's colour, vivid when fresh,
 --                plus a solid line for your last 5 minutes that fades behind you.
 --     runs       corpse runs (dashed ice blue) and flights (long gold dashes),
@@ -65,6 +66,7 @@ local C = {
     HEAT_FULL       = 10,
     ROAD_FULL       = 12,
     LN2             = math.log(2),
+    LOG2_5          = math.log(5) / math.log(2), -- short memory 1 -> 0.2 (RECENT_MIN) takes this many half-lives
     SILVER_SHARE    = 0.6,     -- silver appears at this share of the gold threshold
     STEP_BUDGET     = 4000,
     SHOT_THROTTLE   = 1.5,     -- one screenshot per burst of kills
@@ -91,6 +93,10 @@ local C = {
     ROUTE_MATCH     = 0.03,    -- flight stretches this close at both ends are one route
     ROUTE_MIN       = 4,       -- long memory before a flight route shows: about five
                                -- separate days of flying it within a couple of weeks
+    ROUTE_OFF       = 2.5,     -- ...and it only goes again below this, fading on the way
+    TRAIL_CHOICES   = { 2, 4, 7, 12, 24 }, -- hours a stretch walked once stays
+    GRUDGE_SEEN     = 900,     -- a grudge sighting stays named on the map this long
+    GRUDGE_LOG      = 30,      -- encounters kept per grudge
     CAMPAIGN_GAP    = 7200,    -- back within 2 hours = the same campaign
     CAMPAIGN_KEEP   = 30,
     ZONE_REENTRY    = 1800,    -- zone stats again after 30 minutes away
@@ -117,6 +123,7 @@ local C = {
     CFG_DEFAULTS = { sound = true, hudShown = true, quiet = false, share = false, shown = true,
         zoneChat = true, zoneText = true, chronLogin = true, chronOpen = false, shimmer = true,
         runHours = 24, flightHours = 24 },
+    GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
     SHOT_DEFAULTS = { on = true, mode = "all", card = "text", delay = 0.5, combat = true },
 }
 C.PREFIX = C.GOLD .. "Warpath|r: "
@@ -140,7 +147,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.4.1"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.5.0"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -317,10 +324,36 @@ local function PointTime(s, i)
     return s.t + (ts[i] or ts[#ts] or 0)
 end
 
--- Current strength of a record's long and short memory.
-local function Long(e, now)
+-- The play clock: real time while you play, but a calendar day you don't
+-- play doesn't count. Built as (days played before today) + time of day, so
+-- it runs smoothly through a session and past midnight. Long memory decays
+-- on this clock, so time away costs nothing.
+local playAt, playCache = -1, 0
+local function SecondsToday(t)
+    local d = date("*t", t)
+    return d.hour * 3600 + d.min * 60 + d.sec
+end
+local function PlayNow()
+    local now = time()
+    if now == playAt then return playCache end
+    local p = db.play
+    if not p then
+        p = { days = 0, day = tonumber(date("%y%j", now)), base = now - SecondsToday(now) }
+        db.play = p
+    end
+    local today = tonumber(date("%y%j", now))
+    if p.day ~= today then
+        p.days, p.day = p.days + 1, today
+    end
+    playAt, playCache = now, p.base + p.days * C.DAY + SecondsToday(now)
+    return playCache
+end
+
+-- Current strength of a record's long and short memory. (Long ignores the
+-- time passed in: it always uses the play clock.)
+local function Long(e)
     if not e.l or e.l <= 0 then return 0 end
-    return e.l * math.exp(-C.LN2 * (now - e.tl) / (db.longDays * C.DAY))
+    return e.l * math.exp(-C.LN2 * (PlayNow() - e.tl) / (db.longDays * C.DAY))
 end
 
 -- Footstep look by time since you last walked there: alpha, size scale and
@@ -334,15 +367,18 @@ local function StepLook(e, now)
     return C.STEP_FLOOR + (0.95 - C.STEP_FLOOR) * k, 0.8 + 0.35 * k, vivid
 end
 
+-- Short memory's half-life from the trail setting: a stretch walked once
+-- fades from 1 to RECENT_MIN in cfg.trailHours.
 local function Recent(e, now)
     if not e.r or e.r <= 0 then return 0 end
-    return e.r * math.exp(-C.LN2 * (now - e.tr) / (db.recentHours * 3600))
+    local half = (cfg.trailHours or 7) * 3600 / C.LOG2_5
+    return e.r * math.exp(-C.LN2 * (now - e.tr) / half)
 end
 
--- One mark per calendar day, on top of whatever has not yet faded.
+-- One mark per calendar day you play, on top of whatever has not yet faded.
 local function Credit(e, now, today)
     if e.d == today then return end
-    e.l, e.tl, e.d = Long(e, now) + 1, now, today
+    e.l, e.tl, e.d = Long(e) + 1, PlayNow(), today
 end
 
 local function RunSeconds(kind)
@@ -513,8 +549,18 @@ local function MigrateToV5()
     db.v = 5
 end
 
+-- 3.5 (db.v 6): long memory moves to the play clock. The clock starts equal
+-- to real time, so every stored strength stays exactly as it was.
+local function MigrateToV6()
+    if not db.play then
+        local now = time()
+        db.play = { days = 0, day = tonumber(date("%y%j", now)), base = now - SecondsToday(now) }
+    end
+    db.v = 6
+end
+
 local function Migrate()
-    if db.v ~= 4 and db.v ~= 5 then MigrateToV4() end
+    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 then MigrateToV4() end
     if db.v == 4 then
         local ok, err = pcall(MigrateToV5)
         if not ok then
@@ -522,6 +568,7 @@ local function Migrate()
             db.v = 5
         end
     end
+    if db.v == 5 then MigrateToV6() end
     for _, z in pairs(db.maps) do ZoneFields(z) end
     db.campaigns = db.campaigns or {}
 end
@@ -539,6 +586,7 @@ ns.MapName = MapName
 ns.Migrate = Migrate
 ns.Miles = Miles
 ns.Notice = Notice
+ns.PlayNow = PlayNow
 ns.PlayerPos = PlayerPos
 ns.PointTime = PointTime
 ns.Print = Print

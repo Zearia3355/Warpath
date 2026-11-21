@@ -224,6 +224,86 @@ function Campaign.Highlights(s)
     return list
 end
 
+---------------------------------------------------------------------------
+-- The campaign as a short paragraph, for the book
+---------------------------------------------------------------------------
+
+local WORDS = { "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty" }
+local function Word(n) return WORDS[n] or tostring(n) end
+Campaign.Word = Word
+
+local function Times(n) return n == 1 and "once" or n == 2 and "twice" or (Word(n) .. " times") end
+
+local function Span(sec)
+    local mins = math.floor((sec or 0) / 60 + 0.5)
+    if mins < 50 then return Word(math.max(1, mins)) .. (mins == 1 and " minute" or " minutes") end
+    local hours = math.floor(mins / 60 + 0.5)
+    if hours <= 1 then return "an hour" end
+    return Word(hours) .. " hours"
+end
+
+function Campaign.Prose(s)
+    local c = s.c
+    local out = {}
+    -- where you went
+    local names = {}
+    local zones = {}
+    for mapID, e in pairs(c.zones or {}) do zones[#zones + 1] = { id = mapID, n = (e.k or 0) + (e.d or 0) } end
+    table.sort(zones, function(a, b) return a.n > b.n end)
+    for i, z in ipairs(zones) do if i <= 2 then names[#names + 1] = MapName(z.id) end end
+    local through = ""
+    if #zones == 1 then through = " through " .. names[1]
+    elseif #zones == 2 then through = " through " .. names[1] .. " and " .. names[2]
+    elseif #zones > 2 then through = (" through %s, %s and %s other zone%s"):format(names[1], names[2], Word(#zones - 2), #zones == 3 and "" or "s") end
+    local first = ("You rode out at %s"):format(date("%H:%M", c.start))
+    if s.miles >= 0.1 then
+        first = first .. (" and marched %.1f miles%s over %s"):format(s.miles, through, Span(s.played))
+    else
+        first = first .. (" and spent %s%s"):format(Span(s.played), through ~= "" and (" in" .. through:sub(9)) or "")
+    end
+    if s.sightings > 0 then
+        first = first .. (", watching %s pass"):format(s.sightings == 1 and "one enemy" or (Word(s.sightings) .. " enemies"))
+    end
+    out[#out + 1] = first .. "."
+    -- blood
+    local k, d = s.kills, s.deaths
+    local took = k == 1 and "one life" or (Word(k) .. " lives")
+    if k == 0 and d == 0 then
+        out[#out + 1] = "No blood was spilled."
+    elseif d == 0 then
+        out[#out + 1] = ("You took %s and gave none."):format(took)
+    else
+        local to = ""
+        if s.nemesis then
+            if d == 1 then to = ", to " .. s.nemesis
+            elseif s.nemesisN > 1 then to = ", most often to " .. s.nemesis end
+        end
+        if k == 0 then
+            out[#out + 1] = ("You took no lives and fell %s%s."):format(Times(d), to)
+        else
+            out[#out + 1] = ("You took %s and gave %s%s."):format(took, Word(d), to)
+        end
+    end
+    -- the streak
+    if s.best >= 3 then
+        if s.bestBy then
+            out[#out + 1] = ("Your best streak, %s, was ended by %s%s."):format(Word(s.best), s.bestBy,
+                s.bestZone and (" in " .. s.bestZone) or "")
+        elseif c.bestEnded then
+            out[#out + 1] = ("Your best streak was %s."):format(Word(s.best))
+        else
+            out[#out + 1] = ("Your streak of %s was never broken."):format(Word(s.best))
+        end
+    end
+    -- debts paid
+    local paid = {}
+    if s.grudges > 0 then paid[#paid + 1] = ("settled %s"):format(s.grudges == 1 and "a grudge" or (Word(s.grudges) .. " grudges")) end
+    if s.avenged > 0 then paid[#paid + 1] = ("avenged %s"):format(s.avenged == 1 and "a death" or (Word(s.avenged) .. " deaths")) end
+    if #paid > 0 then out[#out + 1] = "You " .. table.concat(paid, " and ") .. "." end
+    return table.concat(out, " ")
+end
+
 -- All campaigns for paging: the open one first, then the closed ones.
 function Campaign.List()
     Campaign.Save()

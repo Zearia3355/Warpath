@@ -12,6 +12,7 @@ end)
 -- player. Testing a hidden value is an error, so every read goes through
 -- Foes.Safe, which turns "hidden" into nil ("don't know").
 local Foes = { known = {}, last = nil, miss = nil,
+    info = {},                                       -- full -> { lv, ra, gu }: level, race, guild when last read
     win = { till = 0, names = {}, unnamed = false }, -- the current burst of kill credit
     counted = {},                                    -- victim -> when their kill was counted
     credits = 0, kills = 0,                          -- raw credits vs kills counted, this session
@@ -20,6 +21,31 @@ local Foes = { known = {}, last = nil, miss = nil,
 function Foes.Safe(fn, ...)
     local ok, v = pcall(fn, ...)
     if ok and not Secret(v) then return v end
+end
+
+-- Level, race and guild, whenever the game lets us read them. Mid-fight
+-- they may be hidden; the last values read are kept. Level -1 means the
+-- enemy is far above you ("??").
+function Foes.Note(unit, full)
+    local i = Foes.info[full]
+    if not i then i = {} Foes.info[full] = i end
+    local lv = Foes.Safe(UnitLevel, unit)
+    if type(lv) == "number" and lv ~= 0 then i.lv = lv end
+    local ok, race = pcall(UnitRace, unit)
+    if ok and type(race) == "string" and not Secret(race) then i.ra = race end
+    local gok, guild = pcall(GetGuildInfo, unit)
+    if gok and type(guild) == "string" and not Secret(guild) and guild ~= "" then i.gu = guild end
+end
+
+-- "60 Human Mage", "?? Orc Rogue", "Mage" (whatever is known), plus " <Guild>" when asked.
+function Foes.Describe(lv, ra, classToken, gu)
+    local parts = {}
+    if lv then parts[#parts + 1] = lv == -1 and "??" or tostring(lv) end
+    if ra then parts[#parts + 1] = ra end
+    if classToken then parts[#parts + 1] = ns.ClassName(classToken) end
+    local text = table.concat(parts, " ")
+    if gu then text = text .. (text ~= "" and " " or "") .. "<" .. gu .. ">" end
+    return text
 end
 
 -- full, short, class, hostile (true, false, or nil when hidden).
@@ -33,6 +59,7 @@ function Foes.Read(unit)
     local class
     local ok, _, c = pcall(UnitClass, unit)
     if ok and type(c) == "string" and not Secret(c) then class = c end
+    Foes.Note(unit, full)
     local hostile = Foes.Safe(UnitCanAttack, "player", unit)
     if hostile == true then
         Foes.known[full] = class or Foes.known[full] or true

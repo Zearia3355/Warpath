@@ -5,7 +5,7 @@ local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local MapName, PlayerPos, Print, Secret, VERSION, Waypoint = ns.MapName, ns.PlayerPos, ns.Print, ns.Secret, ns.VERSION, ns.Waypoint
 local cur, outQ, shared, Foes, FlushShare, Share = ns.cur, ns.outQ, ns.shared, ns.Foes, ns.FlushShare, ns.Share
-local shareStats, TakeKillShot, ToggleGrudge = ns.shareStats, ns.TakeKillShot, ns.ToggleGrudge
+local shareStats, TakeKillShot, Grudge, FullName = ns.shareStats, ns.TakeKillShot, ns.Grudge, ns.FullName
 local Redraw, StartReplay, StopReplay, replay = ns.Redraw, ns.StartReplay, ns.StopReplay, ns.replay
 local Stats, UpdateHUD, ShowSetup = ns.Stats, ns.UpdateHUD, ns.ShowSetup
 local Campaign, Zone, Chronicle = ns.Campaign, ns.Zone, ns.Chronicle
@@ -123,12 +123,58 @@ function H.table(arg)
     Print("war table " .. State(v) .. ".")
 end
 
-function H.grudge(arg) ToggleGrudge(arg) end
-function H.grudges()
-    local names = {}
-    for name in pairs(gdb.kos) do names[#names + 1] = name end
-    table.sort(names)
-    Print(#names == 0 and "you hold no grudges." or ("grudges: " .. table.concat(names, ", ")))
+-- A typed name: "Name" (your realm) or "Name-Realm".
+local function TypedName(word)
+    if not word or word == "" then return end
+    return word:find("-", 1, true) and word or (word .. "-" .. (GetNormalizedRealmName() or ""))
+end
+
+-- The target, if it's another player: full, class.
+local function TargetPlayer()
+    if not (UnitExists("target") and UnitIsPlayer("target")) then return end
+    local full, short = FullName("target")
+    if not full or short == myName then return end
+    local _, class = UnitClass("target")
+    return full, class
+end
+
+function H.grudge(arg)
+    local sub, rest = arg:match("^(%S*)%s*(.-)$")
+    if sub:lower() == "forgive" then
+        local full = TypedName(rest) or TargetPlayer()
+        if not full then Print("usage: /warpath grudge forgive <name> (or target them)") return end
+        Grudge.Forgive(full)
+        return
+    end
+    if arg ~= "" then
+        Grudge.Add(TypedName(arg))
+        return
+    end
+    local full, class = TargetPlayer()
+    if full then
+        if Grudge.Get(full) then
+            Print(Grudge.Short(full) .. " is already in your ledger. /warpath grudge forgive to strike them out.")
+        else
+            Grudge.Add(full, class)
+        end
+        return
+    end
+    local offer = Grudge.Pending()
+    if offer then Grudge.Add(offer.full, offer.class) return end
+    Print("target a player, or use /warpath grudge <name>.")
+end
+
+function H.grudges(arg)
+    if arg:lower() ~= "chat" then Chronicle.Open(false, "grudges") return end
+    local list = Grudge.List()
+    if #list == 0 then Print("you hold no grudges.") return end
+    table.sort(list, function(a, b) return a.full < b.full end)
+    for _, g in ipairs(list) do
+        local hist = Grudge.History(g.r)
+        Print(("%s%s|r: you %d, them %d%s%s"):format(C.GOLD, Grudge.Short(g.full), g.r.kills, g.r.deaths,
+            g.r.seen and (", last seen " .. MapName(g.r.seen.z) .. " " .. ns.Ago(g.r.seen.t)) or "",
+            g.r.note and (". \"" .. g.r.note .. "\"") or ""))
+    end
 end
 
 function H.shot(arg)
@@ -216,13 +262,13 @@ end
 function H.memory(arg)
     local hours, days = arg:match("^(%S+)%s+(%S+)$")
     hours, days = tonumber(hours), tonumber(days)
-    if hours and days and hours >= 0.5 and hours <= 24 and days >= 2 and days <= 90 then
-        db.recentHours, db.longDays = hours, days
-        Print(("short memory now halves every %g hours, long memory every %g days."):format(hours, days))
+    if hours and days and hours >= 1 and hours <= 48 and days >= 2 and days <= 90 then
+        cfg.trailHours, db.longDays = hours, days
+        Print(("today's trail now stays about %g hours; long memory halves every %g days you play."):format(hours, days))
         Redraw()
     else
-        Print(("short memory halves every %g hours, long memory every %g days. Usage: /warpath memory <hours 0.5-24> <days 2-90>")
-            :format(db.recentHours, db.longDays))
+        Print(("today's trail stays about %g hours; long memory halves every %g days you play. Usage: /warpath memory <trail hours 1-48> <days 2-90>")
+            :format(cfg.trailHours, db.longDays))
     end
 end
 
@@ -309,8 +355,9 @@ local LIST = {
     { "replay",    "replay [hours]",                "replay your recent march (up to 24)", "Map", false, H.replay },
     { "waypoint",  "waypoint death|kill",           "waypoint to your last death or kill", "Map", false, H.waypoint },
     { "table",     "table [on|off]",                "the war table",                      "Map", false, H.table },
-    { "grudge",    "grudge [name]",                 "add or remove a grudge (default: your target)", "Grudges", true, H.grudge },
-    { "grudges",   "grudges",                       "list your grudges",                  "Grudges", false, H.grudges },
+    { "grudge",    "grudge [name]",                 "hold a grudge (default: your target)", "Grudges", true, H.grudge },
+    { nil,         "grudge forgive [name]",         "strike a grudge from your ledger",   "Grudges" },
+    { "grudges",   "grudges [chat]",                "your ledger of grudges (book, or chat)", "Grudges", false, H.grudges },
     { "shot",      "shot [on|off]",                 "take kill screenshots",              "Kill screenshots", false, H.shot },
     { nil,         "shot all|notable",              "every kill, or notable kills only",  "Kill screenshots" },
     { nil,         "shot caption text|strip|none",  "the caption in the picture",         "Kill screenshots" },
@@ -321,7 +368,7 @@ local LIST = {
     { "sound",     "sound [on|off]",                "sounds only",                        "Alerts", false, H.sound },
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },
     { "options",   "options",                       "all settings",                       "Settings", true, H.options },
-    { "memory",    "memory <hours> <days>",         "how fast short and long memory fade", "Settings", false, H.memory },
+    { "memory",    "memory <hours> <days>",         "how long today's trail stays; how fast long memory fades", "Settings", false, H.memory },
     { "roads",     "roads <days>",                  "days of use before a road turns gold", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },

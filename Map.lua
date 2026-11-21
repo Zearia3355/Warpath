@@ -187,6 +187,8 @@ local function PinEnter(self)
             GameTooltip:AddLine("You fell here", 1, 0.25, 0.2)
             if d.kn then
                 GameTooltip:AddLine("Fighting " .. d.kn, ClassColor(d.kc))
+                local who = ns.Foes.Describe(d.lv, d.ra, d.kc, d.gu)
+                if who ~= "" then GameTooltip:AddLine(who, 0.8, 0.8, 0.8) end
             end
             if d.av then
                 GameTooltip:AddLine(("Avenged %d sec later (a kill nearby)"):format(d.av), 1, 0.82, 0)
@@ -200,6 +202,8 @@ local function PinEnter(self)
         GameTooltip:AddLine("Honorable kill", 1, 0.82, 0)
         if d.n then
             GameTooltip:AddLine(d.n, ClassColor(d.c))
+            local who = ns.Foes.Describe(d.lv, d.ra, d.c, d.gu)
+            if who ~= "" then GameTooltip:AddLine(who, 0.8, 0.8, 0.8) end
             local n = d.f and db.victims[d.f]
             if n and n > 1 then GameTooltip:AddLine(("Slain by you %d times"):format(n), 0.8, 0.8, 0.8) end
         end
@@ -212,6 +216,13 @@ local function PinEnter(self)
             GameTooltip:AddLine(("Screenshot #%d"):format(d.shot), 1, 1, 1)
             if d.file then GameTooltip:AddLine(d.file, 0.62, 0.83, 1) end
         end
+    elseif self.kind == "grudge" then
+        local r = ns.Grudge.Get(d.full)
+        GameTooltip:AddLine("Grudge: " .. d.short, 1, 0.3, 0.2)
+        GameTooltip:AddLine("Seen here " .. Ago(d.t), 0.8, 0.8, 0.8)
+        local hist = r and ns.Grudge.History(r) or ""
+        if hist ~= "" then GameTooltip:AddLine(hist, 1, 0.62, 0.16) end
+        if r and r.note then GameTooltip:AddLine('"' .. r.note .. '"', 1, 1, 1, true) end
     elseif self.kind == "sight" then
         GameTooltip:AddLine("Enemy sighted", foe.r, foe.g, foe.b)
         GameTooltip:AddLine((d.from and ("Reported by " .. d.from .. ", ") or "By you, ") .. Ago(d.t), 0.8, 0.8, 0.8)
@@ -231,15 +242,26 @@ local function PinClick(self, button)
     local d = self.d
     Waypoint(self.mapID, d[1] or d.x, d[2] or d.y,
         self.kind == "death" and "where you fell" or self.kind == "kill" and "your kill"
-        or self.kind == "sight" and "enemy sighting" or self.kind == "skill" and "an ally's kill" or "a fallen ally")
+        or self.kind == "sight" and "enemy sighting" or self.kind == "skill" and "an ally's kill"
+        or self.kind == "grudge" and ("where you saw " .. (d.short or "a grudge")) or "a fallen ally")
 end
 
 local function GetPin(i)
     local f = pins[i]
     if not f then
         f = CreateFrame("Frame", nil, overlay)
+        f.halo = f:CreateTexture(nil, "ARTWORK")
+        f.halo:SetTexture(C.TEX_DOT)
+        f.halo:SetBlendMode("ADD")
+        f.halo:SetVertexColor(1, 0.1, 0.05)
+        f.halo:SetPoint("CENTER")
+        f.halo:Hide()
         f.tex = f:CreateTexture(nil, "OVERLAY")
         f.tex:SetAllPoints()
+        f.label = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        f.label:SetPoint("LEFT", f, "RIGHT", 2, 0)
+        f.label:SetTextColor(1, 0.35, 0.25)
+        f.label:Hide()
         f:EnableMouse(true)
         f:SetScript("OnEnter", PinEnter)
         f:SetScript("OnLeave", GameTooltip_Hide)
@@ -519,11 +541,14 @@ local function DrawRuns(D, scene)
         local f = RUN_LOOK.f
         for _, r in ipairs(z.routes) do
             local long = Long(r, now)
-            if long >= bar then
-                -- Quiet on purpose: short, sparse, muted dashes that ease in over a
-                -- day of use past the bar and stay well under roads and today's flights.
+            -- A route appears at ROUTE_MIN but only goes below ROUTE_OFF, fading
+            -- out in between, so a few days away never makes it blink out.
+            if long >= bar then r.on = true elseif long < C.ROUTE_OFF then r.on = nil end
+            if r.on then
+                -- Quiet on purpose: short, sparse, muted dashes that stay well
+                -- under roads and today's flights.
                 local use = Clamp((long - bar) / (C.ROAD_FULL - bar))
-                local a = (0.14 + 0.26 * use) * Clamp(long - bar)
+                local a = (0.14 + 0.26 * use) * Clamp((long - C.ROUTE_OFF) / (bar - C.ROUTE_OFF))
                 local phase = 0
                 for i = 1, #r / 2 - 1 do
                     phase = Dashes(D, 3, thin * (0.8 + 0.5 * use), 0.86, 0.74, 0.50, a,
@@ -604,7 +629,16 @@ local function DrawMarks(D, scene, from, upTo)
         local f = GetPin(D.np)
         f.kind, f.d, f.mapID = kind, d, p.mapID
         f.tex:SetTexture(tex)
-        if kind == "sight" then f.tex:SetTexCoord(0, 0.62, 0, 0.62) else f.tex:SetTexCoord(0, 1, 0, 1) end
+        if kind == "sight" or kind == "grudge" then f.tex:SetTexCoord(0, 0.62, 0, 0.62) else f.tex:SetTexCoord(0, 1, 0, 1) end
+        if kind == "grudge" then
+            f.halo:SetSize(size * 1.9, size * 1.9)
+            f.halo:Show()
+            f.label:SetText(d.short)
+            f.label:Show()
+        else
+            f.halo:Hide()
+            f.label:Hide()
+        end
         f.tex:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
         f:SetSize(size, size)
         At(f, p, x, y, w, h)
@@ -634,6 +668,12 @@ local function DrawMarks(D, scene, from, upTo)
             if p and now - s.t <= C.SIGHT_LIVE then
                 Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 1 - 0.6 * (now - s.t) / C.SIGHT_LIVE)
             end
+        end
+    end
+    if cfg.grudge.map then
+        for _, g in ipairs(ns.Grudge.Live()) do
+            local p = Proj(scene, g.mapID)
+            if p then Pin("grudge", g, p, g.x, g.y, foe.crest, base * 1.3, 1, 1, 1, 1 - 0.5 * (now - g.t) / C.GRUDGE_SEEN) end
         end
     end
     if L.shared then

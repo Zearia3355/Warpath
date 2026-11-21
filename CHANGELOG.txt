@@ -1,6 +1,52 @@
 Warpath changelog
 
 =====================================================================
+3.5.0
+=====================================================================
+
+Grudges
+- A ledger of grudges in the chronicle: everyone you hold a grudge against,
+  with kills each way, where you last saw them, level, race, class and guild
+  when the game shows them, your own note, and a dated list of encounters.
+  Waypoint to their last sighting from there.
+- Add one with /warpath grudge (your target), /warpath grudge <name>, or
+  "Inscribe my target" / "Inscribe a name..." in the book.
+- A grudge only leaves the ledger when you forgive it (the Forgive button,
+  or /warpath grudge forgive <name>). Killing one counts it as settled.
+- Seeing a grudge: a banner naming the zone and your history ("killed you 4
+  times, settled once"), their crest and name on the map for 15 minutes,
+  and a skull on their nameplate and the target frame.
+- Optional, off by default: when a player has killed you 2, 3 or 5 times,
+  offer a grudge in chat (then /warpath grudge takes it) or add one
+  automatically.
+- New Grudges tab in the options window. /warpath grudges opens the ledger;
+  /warpath grudges chat lists it in chat.
+
+The chronicle is a book
+- An open book on a leather cover: Campaigns and Grudges are tabs on its
+  right edge.
+- Each campaign is written up as a short paragraph ("You rode out at 08:32
+  and marched 75.8 miles through Mount Hyjal..."), with its numbers and
+  highlights beneath and the night's deeds and losses on the facing page.
+- "Earlier campaign" and "Later campaign" buttons turn the pages.
+- Share is the wax seal. Hover a deed for the enemy's level, race and guild.
+
+The map
+- Long-term memory (roads, lingering haze, flight routes) only fades on
+  days you play. A weekend or a holiday away costs nothing.
+- Flight routes appear after about five days of flying them, and fade out
+  slowly instead of vanishing the moment they dip below that.
+- Choose how long today's trail stays on the map: 2, 4, 7 (as before), 12
+  or 24 hours for a stretch walked once (Map tab, or /warpath memory).
+
+Also
+- Kills and deaths record the enemy's level, race and guild when the game
+  shows them (on map pins, in the chronicle and on grudges). Enemies far
+  above you show as "??".
+- Deaths store the killer's full name, so they can be matched to grudges.
+- The options window has a fifth tab and is a little taller.
+
+=====================================================================
 3.4.1
 =====================================================================
 
