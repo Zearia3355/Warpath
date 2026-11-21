@@ -1,0 +1,141 @@
+Warpath changelog
+
+=====================================================================
+EVERYTHING SINCE 3.2 (the 3.3 series, up to 3.3.5)
+=====================================================================
+
+Kill screenshots (replaces the PvPKillShot addon)
+- Every kill in the open world gets a screenshot, or only notable kills:
+  first kill of a player, grudges, avenged deaths, streaks of 3, 5 and every
+  10, anyone you've killed 5+ times.
+- A small caption in the shot: floating text (default), a one-line caption
+  strip, or none. Banners and sounds wait until after the picture.
+- Hover a blade on the map to see its screenshot number and file name.
+- /warpath shot (settings, test). /killshot and /pks still work once
+  PvPKillShot is removed; Warpath warns you if both are installed.
+
+Kills and deaths
+- One enemy death is one kill, however many honorable-kill credits the game
+  gives for it. One death is one death, even if the game reports it twice.
+- Kills only count if you were in combat (or left it in the last 3 seconds),
+  so a groupmate's kill while you stood by isn't yours.
+- Victims are named reliably in combat: Warpath reads what the game still
+  allows, remembers players it has seen as enemies, and falls back to the
+  last enemy you targeted in the past 15 seconds.
+- PvP deaths are recognised in combat: an enemy you targeted recently, or a
+  non-group player on a nameplate when you fall.
+
+The map
+- Silver roads: a route you've used on two separate days. Gold from about
+  the third day, thicker with use. Both fade over weeks if abandoned.
+- Roads have a dark outline so they show on light and dark zones.
+- Today's trail is footsteps that start bright and fade over 30 minutes to a
+  faint floor, held until the day's memory expires. A comet tail follows you.
+- The solid line now covers only your last 2 minutes (corpse runs and flights
+  keep 20).
+
+Guild sharing
+- Shares your kills as well as sightings and PvP deaths.
+- Allies' kills and deaths in your zone print a chat line; sightings are
+  map-only.
+- Kills, deaths and test pings go out first, and the queue drains every second.
+- /warpath share test sends a test ping; /warpath share status shows sent,
+  refused and received counts.
+
+Battlegrounds and arenas
+- Warpath is completely off inside: no recording, banners, sounds,
+  screenshots, guild messages, war table or map drawing. Detection uses several
+  signals and re-checks every 5 seconds. Everything returns when you leave.
+
+Setup and settings
+- A setup window opens once after each install or update with the key
+  settings; /warpath setup reopens it. Escape doesn't count as seen; if it
+  fails to open, the error is printed in chat.
+- These settings are shared by all your characters.
+- /warpath debug shows what Warpath can and can't see.
+
+=====================================================================
+VERSION BY VERSION
+=====================================================================
+
+3.3.5
+- Footsteps fade by time since you last walked there: bright and slightly
+  larger at first, easing to a faint floor over 30 minutes, then held until
+  the day's memory expires. Walking a stretch again makes it bright again.
+- The solid line covers your last 2 minutes (was 20). Corpse runs and
+  flights, which leave no footsteps, keep 20 minutes.
+- The setup window lists everything new since 3.2.
+
+3.3.4
+- Battlegrounds and arenas: Warpath now checks several signals (instance
+  type, battleground and arena state, zone PvP type, PvP match events) and
+  re-checks every 5 seconds. Inside, it records nothing, shows no banners or
+  caption, plays no sounds, takes no screenshots, sends and receives nothing
+  from the guild, hides the war table, draws nothing on the map, and holds the
+  setup window until you leave.
+- The same victim is now ignored for 10 seconds after a kill (was 30), so a
+  player rezzed and killed again counts twice.
+- /warpath debug says whether Warpath thinks you're in a battleground.
+
+3.3.3
+- Kills are counted per enemy death, not per honorable-kill credit. Credits
+  arriving within two seconds are one kill unless they name a different dead
+  enemy, and the same victim is never counted twice within 30 seconds (10 from 3.3.4). This
+  feeds everything downstream: kill marks, streaks, screenshots, nemesis
+  counts, shared kills.
+- Deaths are counted once per death even if the game reports it twice.
+- /warpath debug shows credits received vs kills counted this session.
+
+3.3.2
+- Shared sightings no longer print a chat line; they show on the map only.
+  Allies' kills and deaths in your zone still do.
+
+3.3.1
+- Kill captions now name the victim. In combat the game hides whether your
+  target is hostile or dead, and that check used to give up; Warpath now
+  works with what it can read, remembers players it has seen as enemies, and
+  falls back to the last enemy you targeted (within 15 seconds).
+- PvP deaths are recognised in combat too: an enemy you targeted recently, or
+  a non-group player on a nameplate when you die, now counts.
+- Guild sharing now includes your kills (crossed blades on allies' maps for
+  two hours). Kills and deaths always get a chat line for allies in the same
+  zone; sightings stay at most one a minute.
+- Kills, deaths and test pings jump the send queue, and it drains every second.
+- /warpath share test sends a test ping; /warpath share status shows messages
+  sent, refused and received this session.
+- /warpath debug shows what Warpath can and can't see.
+- The setup window: pressing Escape no longer counts as having seen it, and
+  if it fails to open the error is printed in chat.
+- Same message format as 3.3.0, so guildmates on 3.3.0 still get your
+  sightings and deaths (they need 3.3.1 to see kills and test pings).
+
+3.3.0
+- Kill screenshots, folded in from PvPKillShot. Every honorable kill in the open
+  world by default, or notable kills only (first kill of a player, grudges,
+  avenged deaths, streaks of 3, 5 and every 10, anyone killed 5+ times).
+- A small caption in the shot: floating text (default) or a one-line caption
+  strip, or none. Banners and sounds wait until after the picture.
+- Hover a blade on the map to see its screenshot number and file name.
+- Kills now only count if you were in combat (or left it in the last 3
+  seconds), so a groupmate's kill while you stood by no longer counts as yours.
+- Silver roads: a route you have used on two separate days. Gold from about
+  the third day, as before.
+- Roads are outlined so they show on light and dark zones; today's trail is
+  now footsteps instead of a solid line.
+- A setup window opens once after each install or update. /warpath setup
+  reopens it. Its settings are shared by all your characters.
+- /killshot and /pks still work (unless PvPKillShot is still installed).
+  Warpath warns you if PvPKillShot is running: delete it to avoid two
+  screenshots per kill.
+
+3.2.0
+- Two memories: short memory fades within the day, long memory builds one
+  mark per day and fades over weeks.
+- Lingering haze, roads only from travel, /warpath memory and /warpath roads.
+
+3.1.0
+- Etched gold roads, soft heat texture.
+
+3.0.0
+- Heat map, enemy sightings, shared war map, grudges, avenged, zone standing,
+  chronicle, replay.

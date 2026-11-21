@@ -1,0 +1,9 @@
+## Interface: 16001
+## Title: |cffffd100Warpath|r
+## Notes: Your war, inked on the map. Silver and gold roads for the routes you repeat, today's footsteps, kill screenshots with a caption, skulls and blades, killing fields, enemy sightings, grudges, a shared guild war map, and a replay of the campaign.
+## Author: Joe + Claude
+## Version: 3.3.5
+## SavedVariables: WarpathGlobal
+## SavedVariablesPerCharacter: WarpathDB
+
+Warpath.lua
