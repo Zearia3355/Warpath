@@ -1,6 +1,24 @@
 Warpath changelog
 
 =====================================================================
+3.4.1
+=====================================================================
+
+- Chronicle: names in class colours are darkened so every class reads on
+  the parchment (priest white, rogue yellow and mage blue all but vanished).
+  Empty highlights and the date line are darker; the date line fits on one
+  line. Zone names like Mount Hyjal stay whole in headlines.
+- Flight routes need about five days of flying within a couple of weeks
+  before they show (was two), and are much fainter: short, sparse, muted
+  dashes that ease in.
+- Today's flights are thinner and softer: 45% at most (was 80%).
+- Options window: tabs are drawn by Warpath along the top (the client's tab
+  style was missing, which left red buttons), the background is solid, the
+  footer no longer runs under the buttons, and the layout is tighter.
+- The options window now opens by itself only for feature releases (3.4,
+  3.5...), not fix releases like this one.
+
+=====================================================================
 3.4.0
 =====================================================================
 

@@ -417,9 +417,13 @@ function ShowSetup(isUpdate, tab)
     s:Show()
 end
 
--- Once per account per version, never in combat.
+-- "3.4" from "3.4.1": the window opens by itself for new features, not fix releases.
+local function Minor(v) return type(v) == "string" and v:match("^(%d+%.%d+)") or nil end
+
+-- Once per account per feature release (3.4, 3.5...), never in combat.
 function MaybeShowSetup()
     if gdb.seenVersion == VERSION then return end
+    if gdb.seenVersion and Minor(gdb.seenVersion) == Minor(VERSION) then return end
     if S.inInstance then S.setupWaiting = true return end
     if InCombatLockdown() or UnitAffectingCombat("player") then
         S.setupWaiting = true
