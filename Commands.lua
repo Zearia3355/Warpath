@@ -26,7 +26,7 @@ end
 local function State(v) return v and "|cff40ff40on|r" or "|cffff4030off|r" end
 
 -- Typed layer names to saved keys.
-local LAYER_KEYS = { heat = "heat", roads = "roads", trail = "recent", recent = "recent", runs = "runs",
+local LAYER_KEYS = { battle = "battle", heat = "battle", haze = "battle", roads = "roads", trail = "recent", recent = "recent", runs = "runs",
     marks = "marks", sightings = "sightings", guild = "shared", shared = "shared" }
 
 ---------------------------------------------------------------------------
@@ -351,7 +351,7 @@ local LIST = {
     { "chronicle", "chronicle [chat]",              "your campaigns (window, or chat)",   "Stats", true, H.chronicle },
     { nil,         "chronicle share [guild|party|say|whisper <name>]", "share a campaign", "Stats" },
     { "map",       "map [on|off]",                  "show / hide everything Warpath draws", "Map", true, H.map },
-    { "layer",     "layer <name> [on|off]",         "heat, roads, trail, runs, marks, sightings, guild", "Map", false, H.layer },
+    { "layer",     "layer <name> [on|off]",         "battle, roads, trail, runs, marks, sightings, guild", "Map", false, H.layer },
     { "replay",    "replay [hours]",                "replay your recent march (up to 24)", "Map", false, H.replay },
     { "waypoint",  "waypoint death|kill",           "waypoint to your last death or kill", "Map", false, H.waypoint },
     { "table",     "table [on|off]",                "the war table",                      "Map", false, H.table },

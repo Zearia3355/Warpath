@@ -131,7 +131,7 @@ local function GetDot(i)
     if not d then
         d = overlay:CreateTexture(nil, "BACKGROUND")
         d:SetTexture(C.TEX_DOT)
-        d:SetBlendMode("ADD")
+        d:SetBlendMode("BLEND")
         dots[i] = d
     end
     return d
@@ -303,42 +303,29 @@ end
 -- pooled object are in use.
 ---------------------------------------------------------------------------
 
+-- The battle haze: soft patches of one blood red where fighting happens,
+-- drawn with normal blending (never additive, so it can't wash to white),
+-- deepening from a faint rust to dark red as fights pile up.
 local function DrawHaze(D, scene)
-    local L, w, now = cfg.layers, D.w, D.now
+    if not cfg.layers.battle then return end
+    local w, h = D.w, D.h
+    local span = C.BATTLE_FULL - C.BATTLE_MIN
     for _, e in ipairs(scene.zones) do
         local z, p = e.z, e.p
-        if L.heat then
-            local size = math.max(3, p.sx * w / C.GW * 3.2)
-            for c, rec in pairs(z.heat) do
-                local v = Long(rec, now)
-                if v >= C.HEAT_MIN then
-                    if D.nd >= C.DOT_BUDGET then break end
-                    D.nd = D.nd + 1
-                    local d = GetDot(D.nd)
-                    local x, y = z.cx[c], z.cy[c]
-                    if not x then x, y = CellXY(c, C.GW, C.GH) end
-                    d:SetVertexColor(faction.r, faction.g, faction.b)
-                    d:SetAlpha(0.06 + 0.22 * math.min(1, (v - C.HEAT_MIN) / (C.HEAT_FULL - C.HEAT_MIN)))
-                    d:SetSize(size, size)
-                    At(d, p, x, y, w, D.h)
-                    d:Show()
-                end
-            end
-        end
-        if L.sightings then
-            local vmax = 5
-            for _, v in pairs(z.sight) do if v > vmax then vmax = v end end
-            local size = math.max(4, p.sx * w / C.SW * 2.4)
-            local denom = math.log(1 + vmax)
-            for c, v in pairs(z.sight) do
+        local cell = p.sx * w / C.SW
+        for c, rec in pairs(z.battle) do
+            local v = Long(rec)
+            if v >= C.BATTLE_MIN then
                 if D.nd >= C.DOT_BUDGET then break end
+                local t = Clamp((v - C.BATTLE_MIN) / span)
                 D.nd = D.nd + 1
                 local d = GetDot(D.nd)
                 local x, y = CellXY(c, C.SW, C.SH)
-                d:SetVertexColor(foe.r, foe.g, foe.b)
-                d:SetAlpha(0.06 + 0.28 * math.log(1 + v) / denom)
+                d:SetVertexColor(Lerp(0.62, 0.42, t), Lerp(0.20, 0.03, t), Lerp(0.09, 0.02, t))
+                d:SetAlpha(0.07 + 0.25 * t)
+                local size = math.max(6, cell * (2.8 + 1.4 * t))
                 d:SetSize(size, size)
-                At(d, p, x, y, w, D.h)
+                At(d, p, x, y, w, h)
                 d:Show()
             end
         end
@@ -609,19 +596,6 @@ end
 
 local function DrawMarks(D, scene, from, upTo)
     local L, w, h, now = cfg.layers, D.w, D.h, D.now
-    if L.marks then
-        for _, e in ipairs(scene.zones) do
-            for _, fld in ipairs(Fields(e.p.mapID)) do
-                D.ng = D.ng + 1
-                local g = GetGlow(D.ng)
-                local size = w * (e.p.far and 0.03 or 0.07) * math.min(2, 0.8 + fld.n * 0.15)
-                g:SetSize(size, size)
-                g:SetAlpha(math.min(1, 0.45 + fld.n * 0.1))
-                At(g, e.p, fld.x, fld.y, w, h)
-                g:Show()
-            end
-        end
-    end
     local base = math.max(14, w * 0.018)
     local function Pin(kind, d, p, x, y, tex, size, r, g, b, a)
         if D.np >= C.MARK_BUDGET then return end

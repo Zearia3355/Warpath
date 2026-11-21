@@ -113,6 +113,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             -- 3.4: the map on/off switch is shared by all characters.
             if cfg.shown == nil and db.shown ~= nil then cfg.shown = db.shown end
             cfg.layers = cfg.layers or {}
+            cfg.layers.heat = nil -- 3.6: the lingering haze became the battle haze
             for _, name in ipairs(C.LAYERS) do
                 if cfg.layers[name] == nil then cfg.layers[name] = true end
             end

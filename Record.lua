@@ -112,17 +112,7 @@ local function Visit(mapID, x, y, mode)
     local now, today = time(), tonumber(date("%y%j"))
 
     local key = mapID * 10000 + c
-    if key == cur.cell then
-        -- Lingering: 20 seconds in one cell marks it as a haunt for today.
-        cur.dwell = (cur.dwell or 0) + 1
-        if cur.dwell == C.DWELL_SAMPLES then
-            local e = z.heat[c]
-            if not e then e = { l = 0, tl = now } z.heat[c] = e end
-            Credit(e, now, today)
-            S.dirty = true
-        end
-        return
-    end
+    if key == cur.cell then return end
 
     local prev = cur.rc
     if prev and cur.cell and math.floor(cur.cell / 10000) == mapID then
@@ -211,6 +201,7 @@ local function See(unit)
     local z = ZoneData(mapID)
     local c = Cell(x, y, C.SW, C.SH)
     z.sight[c] = (z.sight[c] or 0) + 1
+    ns.AddBattle(mapID, x, y, C.BATTLE_W.sight)
     session.sightings = session.sightings + 1
     if #recentSight >= 100 then table.remove(recentSight, 1) end
     recentSight[#recentSight + 1] = { mapID = mapID, x = x, y = y, t = time() }
@@ -505,7 +496,10 @@ local function OnKill()
         z.streak = (z.streak or 0) + 1
         if z.streak > (z.bestStreak or 0) then z.bestStreak = z.streak end
     end
-    if m then Share("K", mapID, m[1], m[2]) end
+    if m then
+        Share("K", mapID, m[1], m[2])
+        ns.AddBattle(mapID, m[1], m[2], C.BATTLE_W.kill)
+    end
 
     -- Avenged: a kill near your own fresh skull.
     local avenged = false
@@ -617,6 +611,7 @@ local function OnDeath()
         if m then
             z.pdeaths = z.pdeaths + 1
             fieldCache[mapID] = nil
+            ns.AddBattle(mapID, m[1], m[2], C.BATTLE_W.death)
             pendingAvenge = { mapID = mapID, mark = m, at = GetTime() }
             Share("D", mapID, m[1], m[2])
         end

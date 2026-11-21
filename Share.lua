@@ -87,6 +87,7 @@ local function OnComm(prefix, text, _, sender)
         expire = time() + (kind == "S" and C.SIGHT_LIVE or C.SHARED_DEATH),
     }
     S.dirty = true
+    if kind == "K" or kind == "D" then ns.AddBattle(mapID, x, y, C.BATTLE_W.shared) end
     -- Kills and deaths get a chat line in your zone; sightings are map-only.
     if kind ~= "S" and mapID == C_Map.GetBestMapForUnit("player") then
         Print(("%s %s in %s."):format(from, kind == "K" and "scored a kill" or "was killed", MapName(mapID)))

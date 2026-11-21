@@ -11,14 +11,12 @@ ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction e
 local ShowSetup, MaybeShowSetup, setup
 do
 local NEW_IN = {
-    "Grudges: a ledger in the chronicle with tallies, notes and encounters;",
-    "    alerts that name the zone, named sightings on the map, a skull on",
-    "    nameplates and the target frame. Settings in the Grudges tab.",
-    "    A grudge only goes when you forgive it.",
-    "The chronicle is a book: campaigns written up as a page of prose,",
-    "    Earlier / Later buttons to turn the pages, grudges in their own section.",
-    "Days you don't play no longer fade your roads and flight routes.",
-    "Choose how long today's trail stays on the map (Map tab).",
+    "Battle haze: the map now hazes where fighting happens (your kills and",
+    "    deaths, guildmates' fights, enemy sightings) in one red that deepens",
+    "    with use. It replaces the lingering haze, the sighting dots and the",
+    "    killing-field glows. Your past kills, deaths and sightings are already in it.",
+    "Since 3.4: grudges, the chronicle as a book, the war table's skull button,",
+    "    days away no longer fade the map, and today's trail length (Map tab).",
 }
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
@@ -391,7 +389,7 @@ local function BuildSetup()
     s.newBox:SetHeight(newH)
     local nh = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     nh:SetPoint("TOPLEFT", 10, -8)
-    nh:SetText("NEW IN 3.4")
+    nh:SetText("NEW IN " .. (VERSION:match("^(%d+%.%d+)") or VERSION))
     local prevLine = nh
     for _, line in ipairs(NEW_IN) do
         local fs = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")

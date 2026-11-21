@@ -1,5 +1,5 @@
 
--- Warpath 3.5.1
+-- Warpath 3.6.0
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -8,7 +8,8 @@
 --   Long memory  builds one mark per DAY you use a piece of ground, and loses
 --                half its strength every 14 days you PLAY (days away don't
 --                count). Nothing is permanent.
---     heat       places you linger (20+ seconds in one spot), in a soft haze.
+--     battle     where fighting happens: your kills and PvP deaths, guildmates'
+--                shared fights, enemy sightings. One red that deepens with use.
 --     roads      stretches you travel THROUGH. A route used on two separate
 --                days turns silver, then gilds gradually towards gold; well
 --                worn gold is burnished and shines.
@@ -97,6 +98,9 @@ local C = {
     TRAIL_CHOICES   = { 2, 4, 7, 12, 24 }, -- hours a stretch walked once stays
     GRUDGE_SEEN     = 900,     -- a grudge sighting stays named on the map this long
     GRUDGE_LOG      = 30,      -- encounters kept per grudge
+    BATTLE_MIN      = 0.5,     -- battle heat below this isn't drawn
+    BATTLE_FULL     = 6,       -- ...and is darkest from here
+    BATTLE_W        = { kill = 1, death = 1, shared = 0.5, sight = 0.25 }, -- heat each event adds
     CAMPAIGN_GAP    = 7200,    -- back within 2 hours = the same campaign
     CAMPAIGN_KEEP   = 30,
     ZONE_REENTRY    = 1800,    -- zone stats again after 30 minutes away
@@ -114,12 +118,12 @@ local C = {
         Neutral  = { r = 1.00, g = 0.82, b = 0.00, cry = "Victory!",          crest = "Interface\\TargetingFrame\\UI-PVP-FFA",      foe = "Neutral" },
     },
     -- Saved layer keys. "recent" and "shared" are typed as "trail" and "guild".
-    LAYERS = { "heat", "roads", "recent", "runs", "marks", "sightings", "shared" },
-    LAYER_NAMES = { heat = "heat", roads = "roads", recent = "trail", runs = "runs",
+    LAYERS = { "battle", "roads", "recent", "runs", "marks", "sightings", "shared" },
+    LAYER_NAMES = { battle = "battle", roads = "roads", recent = "trail", runs = "runs",
         marks = "marks", sightings = "sightings", shared = "guild" },
-    LAYER_LABELS = { heat = "Places I linger (haze)", roads = "Silver and gold roads",
-        recent = "Today's trail", runs = "Corpse runs and flights", marks = "Kills, deaths and killing fields",
-        sightings = "Enemy sightings", shared = "Guild sharing" },
+    LAYER_LABELS = { battle = "Battle haze", roads = "Silver and gold roads",
+        recent = "Today's trail", runs = "Corpse runs and flights", marks = "Kills and deaths",
+        sightings = "Recent enemy sightings", shared = "Guild sharing" },
     CFG_DEFAULTS = { sound = true, hudShown = true, quiet = false, share = false, shown = true,
         zoneChat = true, zoneText = true, chronLogin = true, chronOpen = false, shimmer = true,
         runHours = 24, flightHours = 24 },
@@ -147,7 +151,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.5.1"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.6.0"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -257,10 +261,11 @@ local function Miles(yards) return (yards or 0) / 1760 end
 local function ZoneFields(z)
     z.strokes, z.marks, z.heat, z.road = z.strokes or {}, z.marks or {}, z.heat or {}, z.road or {}
     z.cx, z.cy, z.sight = z.cx or {}, z.cy or {}, z.sight or {}
-    z.runs, z.routes = z.runs or {}, z.routes or {}
+    z.runs, z.routes, z.battle = z.runs or {}, z.routes or {}, z.battle or {}
     z.yards, z.kills, z.pdeaths = z.yards or 0, z.kills or 0, z.pdeaths or 0
     z.streak, z.bestStreak, z.avenged = z.streak or 0, z.bestStreak or 0, z.avenged or 0
     z.hours = nil -- 3.4: enemy busy hours are no longer recorded
+    z.heat = nil  -- 3.6: where you lingered is no longer recorded
     return z
 end
 
@@ -381,6 +386,17 @@ local function Credit(e, now, today)
     e.l, e.tl, e.d = Long(e) + 1, PlayNow(), today
 end
 
+-- Battle heat: each fight adds to its spot; fades on the play clock like roads.
+local function AddBattle(mapID, x, y, w)
+    if not mapID or not x or not y then return end
+    local z = ZoneData(mapID)
+    local c = Cell(x, y, C.SW, C.SH)
+    local e = z.battle[c]
+    if not e then e = { l = 0, tl = PlayNow() } z.battle[c] = e end
+    e.l, e.tl = Long(e) + w, PlayNow()
+    S.dirty = true
+end
+
 local function RunSeconds(kind)
     return (kind == "f" and cfg.flightHours or cfg.runHours) * 3600
 end
@@ -408,8 +424,8 @@ local function Prune()
         for edge, e in pairs(z.road) do
             if Long(e, now) < 0.05 and Recent(e, now) < 0.05 then z.road[edge] = nil end
         end
-        for c, e in pairs(z.heat) do
-            if Long(e, now) < 0.05 then z.heat[c] = nil end
+        for c, e in pairs(z.battle) do
+            if Long(e) < 0.05 then z.battle[c] = nil end
         end
     end
     for i = #shared, 1, -1 do
@@ -559,8 +575,35 @@ local function MigrateToV6()
     db.v = 6
 end
 
+-- 3.6 (db.v 7): the battle haze, back-filled from your kill and death marks
+-- (each faded by its age) and your sighting counts (no times: counted as
+-- about a month old). The lingering haze goes.
+local function MigrateToV7()
+    local now, half = time(), db.longDays * C.DAY
+    local W = C.BATTLE_W
+    for _, z in pairs(db.maps) do
+        local heat = {}
+        for _, m in ipairs(z.marks or {}) do
+            if m[4] == "kill" or m.pvp then
+                local c = Cell(m[1], m[2], C.SW, C.SH)
+                local age = math.max(0, now - (m[3] or now))
+                heat[c] = (heat[c] or 0) + W.kill * 2 ^ (-age / half)
+            end
+        end
+        for c, n in pairs(z.sight or {}) do
+            heat[c] = (heat[c] or 0) + W.sight * n * 0.25
+        end
+        z.battle = {}
+        for c, l in pairs(heat) do
+            if l >= 0.05 then z.battle[c] = { l = l, tl = PlayNow() } end
+        end
+        z.heat = nil
+    end
+    db.v = 7
+end
+
 local function Migrate()
-    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 then MigrateToV4() end
+    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 then MigrateToV4() end
     if db.v == 4 then
         local ok, err = pcall(MigrateToV5)
         if not ok then
@@ -569,11 +612,16 @@ local function Migrate()
         end
     end
     if db.v == 5 then MigrateToV6() end
+    if db.v == 6 then
+        local ok, err = pcall(MigrateToV7)
+        if not ok then Print("the 3.6 upgrade hit an error, so the battle haze starts empty: " .. tostring(err)) db.v = 7 end
+    end
     for _, z in pairs(db.maps) do ZoneFields(z) end
     db.campaigns = db.campaigns or {}
 end
 
 -- Shared with the other files.
+ns.AddBattle = AddBattle
 ns.Ago = Ago
 ns.Cell = Cell
 ns.CellXY = CellXY

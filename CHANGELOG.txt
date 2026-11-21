@@ -1,6 +1,23 @@
 Warpath changelog
 
 =====================================================================
+3.6.0
+=====================================================================
+
+- Battle haze: the map hazes where fighting happens, in one red that
+  deepens as fights pile up. Your kills and PvP deaths count fully, a
+  guildmate's shared kill or death half, an enemy sighting a quarter. It
+  fades over 14 days you play, like roads, and is drawn so it can't wash
+  out to white. One skirmish leaves a faint smudge; a warzone a clear patch.
+- It replaces three things: the lingering haze (where you stood about is no
+  longer recorded), the sighting dots, and the killing-field glows. The
+  "you've died here N times" warning, skulls, blades, live sighting crests
+  and grudge pins are unchanged.
+- Your existing kills, deaths and sightings are already in it on first load.
+- Layer names: "battle" (old name "heat" still works), "sightings" now
+  means the live crests of recent sightings.
+
+=====================================================================
 3.5.1
 =====================================================================
 
