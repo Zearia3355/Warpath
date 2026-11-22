@@ -1,5 +1,5 @@
 
--- Warpath 3.7.4
+-- Warpath 3.7.5
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -18,7 +18,7 @@
 --                walked once stays about 7 hours (2 to 24 in options).
 --     trail      today's footsteps in your faction's colour, vivid when fresh,
 --                deepening after an hour and fading slowly over the trail
---                length, plus a solid line for your last 5 minutes.
+--                length, plus a line for your last 15 minutes (full for 5, then fading).
 --     runs       corpse runs (dashed ice blue) and flights (long gold dashes),
 --                fading along their length over 24 hours, plus the flight
 --                routes you keep taking.
@@ -61,10 +61,24 @@ local C = {
     DWELL_SAMPLES   = 40,      -- samples (20 s) in one cell = lingering there
     HIST            = 60,      -- samples (30 s) of position history
     TRAVEL_CELLS    = 3,       -- net cells moved in that time = travelling
-    FRESH_SECONDS   = 300,     -- the solid line covers your last five minutes
+    FRESH_SECONDS   = 900,     -- the solid line covers your last 15 minutes (3.7.5; was 5)...
+    LINE_SOLID      = 300,     -- ...full strength for the first 5, then fading out
+    STEP_GAP_MIN    = 5,       -- footsteps start (as the line fades) this close together...
+    STEP_GAP_MAX    = 16,      -- ...and spread to this far apart by the end of the trail
     STEP_FADE       = 1800,    -- footsteps shrink from fresh size over 30 minutes (opacity: StepLook)
     STEP_VIVID      = 600,     -- ...and are vivid, with a dark rim, for the first 10
-    STEP_DEEP       = 3600,    -- ...and deepen to the darker faction colour between 1 and 2 hours
+    STEP_DEEP       = 3600,    -- (3.6.3-3.7.4: deepened between 1 and 2 hours)
+    -- 3.7.5: footsteps come in two flat tones, not a gradient: the last hour
+    -- in full faction colour, earlier in one lighter, deeper tone; the trail
+    -- fades out over its last hour. Mixed ages then read as "recent" and
+    -- "earlier today" instead of random speckle.
+    STEP_RECENT     = 3600,
+    STEP_RECENT_A   = 0.9,
+    STEP_EARLIER_A  = 0.5,
+    STEP_BIN        = 24,      -- at most STEP_BIN_CAP footsteps in each 24 x 24 px square
+    STEP_BIN_CAP    = 3,       --    once over an hour old (6 before), newest kept, so a spot
+                               --    you circled is a light scatter
+    TEX_RAID   = "Interface\\TargetingFrame\\UI-RaidTargetingIcons",
     RECENT_CAP      = 30,      -- short memory saturates here
     RECENT_MIN      = 0.2,     -- short memory below this is not drawn
     HEAT_MIN        = 1.5,     -- long-memory strength before heat shows
@@ -185,7 +199,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.4"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.5"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -452,22 +466,20 @@ end
 -- 3.6.3: steps fade slowly over the whole trail length instead of dropping
 -- to a faint floor within 30 minutes. With a 24-hour trail: 90% at 1 hour,
 -- 75% at 6, 55% at 12, 35% at 18, gone at 24. Shorter trails scale the same.
-local STEP_CURVE = { { 0, 0.95 }, { 0.04, 0.90 }, { 0.25, 0.75 }, { 0.50, 0.55 }, { 0.75, 0.35 }, { 1, 0 } }
 local function StepLook(e, now)
     local age = now - (e.tp or e.tr or now)
     local vivid = 0
     if age < C.STEP_VIVID then vivid = 0.5 * (1 + math.cos(math.pi * age / C.STEP_VIVID)) end
-    local f = age / ((cfg.trailHours or 7) * 3600)
-    local alpha = 0
-    if f < 1 then
-        for i = 2, #STEP_CURVE do
-            local a, b = STEP_CURVE[i - 1], STEP_CURVE[i]
-            if f <= b[1] then alpha = a[2] + (b[2] - a[2]) * (f - a[1]) / (b[1] - a[1]) break end
-        end
-    end
+    local life = (cfg.trailHours or 7) * 3600
+    if age >= life then return 0, 1, 0, 1, age end
+    -- two stages, with a 5-minute blend so nothing pops
+    local d = math.max(0, math.min(1, (age - C.STEP_RECENT) / 300))
+    local alpha = C.STEP_RECENT_A + (C.STEP_EARLIER_A - C.STEP_RECENT_A) * d
+    -- the trail's end fades out over its last hour (a quarter, for short trails)
+    local tail = math.min(3600, life * 0.25)
+    if age > life - tail then alpha = alpha * (life - age) / tail end
     local k = age < C.STEP_FADE and 0.5 * (1 + math.cos(math.pi * age / C.STEP_FADE)) or 0
-    local d = math.max(0, math.min(1, (age - C.STEP_DEEP) / C.STEP_DEEP))
-    return alpha, 0.9 + 0.25 * k, vivid, d * d * (3 - 2 * d)
+    return alpha, 0.9 + 0.25 * k, vivid, d, age
 end
 
 -- Short memory's half-life from the trail setting: a stretch walked once

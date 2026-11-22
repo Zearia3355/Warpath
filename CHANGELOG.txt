@@ -1,6 +1,40 @@
 Warpath changelog
 
 =====================================================================
+3.7.5
+=====================================================================
+
+Today's trail, cleaned up
+- The line now covers your last 15 minutes: full strength for 5, then
+  fading evenly and thinning to nothing by 15 (was 5 minutes).
+- Footsteps start where the line begins to fade, close together at
+  first and spreading further apart as they age (about 5 to 16 pixels
+  apart over the trail's length).
+- Two tones instead of a gradient: the last hour in full faction colour,
+  earlier in one darker, lighter tone, with the last hour of the trail
+  fading out. Mixed ages read as "recent" and "earlier today" instead of
+  speckle.
+- No footsteps on silver or gold roads once 10 minutes old (the road
+  already shows you've been there).
+- Ground you circled no longer fills in: each small square of the map
+  takes only a few footsteps, newest kept.
+- On your Felwood trail at 2:22 PM: 93 footsteps instead of 366.
+
+Pins
+- Mob and fall deaths have their own icon, a small grey cross, instead of
+  a grey skull, at full strength (still gone within a day).
+- Show all history now shows every pin at full strength, mob and fall
+  deaths included.
+
+Fixed
+- /warpath debug haze no longer errors in a zone where a guildmate has
+  battle haze and you have none.
+
+- Your saved data: everything is kept. Nothing about your data changes;
+  this release only changes how the trail and pins are drawn.
+- Includes 3.7.0 to 3.7.4.
+
+=====================================================================
 3.7.4
 =====================================================================
 

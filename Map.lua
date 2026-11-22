@@ -182,7 +182,7 @@ local TAGS = { first = "First blood on this player", grudge = "Grudge settled", 
 local function PinEnter(self)
     local d = self.d
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    if self.kind == "death" then
+    if self.kind == "death" or self.kind == "mob" then
         if d.pvp then
             GameTooltip:AddLine("You fell here", 1, 0.25, 0.2)
             if d.kn then
@@ -195,7 +195,7 @@ local function PinEnter(self)
             end
         else
             GameTooltip:AddLine("You died here", 0.7, 0.7, 0.7)
-            GameTooltip:AddLine("No enemy player seen; not counted", 0.6, 0.6, 0.6)
+            GameTooltip:AddLine("No enemy player seen (a mob or a fall); not counted", 0.6, 0.6, 0.6)
         end
         GameTooltip:AddLine(date("%b %d, %H:%M", d[3]), 0.8, 0.8, 0.8)
     elseif self.kind == "kill" then
@@ -241,12 +241,12 @@ local function PinClick(self, button)
     if button ~= "LeftButton" then return end
     local d = self.d
     Waypoint(self.mapID, d[1] or d.x, d[2] or d.y,
-        self.kind == "death" and "where you fell" or self.kind == "kill" and "your kill"
+        (self.kind == "death" or self.kind == "mob") and "where you fell" or self.kind == "kill" and "your kill"
         or self.kind == "sight" and "enemy sighting" or self.kind == "skill" and "an ally's kill"
         or self.kind == "grudge" and ("where you saw " .. (d.short or "a grudge")) or "a fallen ally")
 end
 
-local PIN_LEVEL = { sight = 1, kill = 3, death = 3, skill = 4, sdeath = 4, grudge = 6 }
+local PIN_LEVEL = { sight = 1, mob = 2, kill = 3, death = 3, skill = 4, sdeath = 4, grudge = 6 }
 
 -- Pins hold a steady size on screen (3.7): sized in interface pixels and
 -- divided by how much the map is scaled and zoomed, so a bigger map
@@ -391,9 +391,9 @@ local function DrawGround(D, scene)
         local z, p = e.z, e.p
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
         local thin = p.far and w * 0.0011 or w * 0.0020
-        local spacing = math.max(5, thin * 4.5)
+        local spacing = math.max(4, thin * 2.5) -- dense; older steps are thinned out below
         local dot = math.max(2, thin * 1.5)
-        local candidates = {}
+        local candidates, feet = {}, {}
         for edge, rec in pairs(z.road) do
             local long = L.roads and Long(rec, now) or 0
             local recent = L.recent and Recent(rec, now) or 0
@@ -419,37 +419,81 @@ local function DrawGround(D, scene)
                     end
                 end
                 if recent >= C.RECENT_MIN then
-                    -- Footsteps: vivid faction colour with a dark rim when fresh.
-                    local alpha, scale, vivid, deep = StepLook(rec, now)
-                    local r, g, b = Lerp(fr, deR, deep), Lerp(fg, deG, deep), Lerp(fb, deB, deep)
-                    r, g, b = Lerp(r, vr, vivid), Lerp(g, vg, vivid), Lerp(b, vb, vivid)
-                    alpha = alpha + (1 - alpha) * vivid
-                    local size = dot * scale
-                    local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
-                    local n = math.max(1, math.floor(len / spacing + 0.5))
-                    for k = 0, n - 1 do
-                        if D.ns >= C.STEP_BUDGET then break end
-                        local t = (k + 0.5) / n
-                        local px, py = x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
-                        D.ns = D.ns + 1
-                        local d = GetStep(steps, D.ns, 6)
-                        d:SetVertexColor(r, g, b)
-                        d:SetAlpha(alpha)
-                        d:SetSize(size, size)
-                        d:ClearAllPoints()
-                        d:SetPoint("CENTER", overlay, "TOPLEFT", px, py)
-                        d:Show()
-                        if vivid > 0.02 and D.nr < C.STEP_BUDGET then
-                            D.nr = D.nr + 1
-                            local rim = GetStep(rims, D.nr, 5)
-                            rim:SetVertexColor(0.03, 0.02, 0.02)
-                            rim:SetAlpha(0.7 * vivid)
-                            rim:SetSize(size + 2, size + 2)
-                            rim:ClearAllPoints()
-                            rim:SetPoint("CENTER", overlay, "TOPLEFT", px, py)
-                            rim:Show()
+                    -- Footsteps (3.7.5): vivid with a dark rim when fresh, then
+                    -- full colour for the last hour, then one lighter, deeper
+                    -- tone. Not on a silver or gold road once 10 minutes old
+                    -- (the road already says you've been there), and not
+                    -- under the solid line.
+                    local alpha, scale, vivid, deep, age = StepLook(rec, now)
+                    local onRoad = L.roads and long >= silver
+                    local underLine = L.recent and age < C.LINE_SOLID -- the line's full-strength part
+                    if alpha > 0.01 and not underLine and not (onRoad and age >= C.STEP_VIVID) then
+                        local r, g, b = Lerp(fr, deR, deep), Lerp(fg, deG, deep), Lerp(fb, deB, deep)
+                        r, g, b = Lerp(r, vr, vivid), Lerp(g, vg, vivid), Lerp(b, vb, vivid)
+                        alpha = alpha + (1 - alpha) * vivid
+                        local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+                        local n = math.max(1, math.floor(len / spacing + 0.5))
+                        for k = 0, n - 1 do
+                            local t = (k + 0.5) / n
+                            feet[#feet + 1] = { x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, age,
+                                r, g, b, alpha, dot * scale, vivid }
                         end
                     end
+                end
+            end
+        end
+        -- Place footsteps newest first: fresh ones (first 10 minutes) all go
+        -- in; older ones keep a minimum gap, and each small square of the
+        -- screen takes only a few, so ground you circled doesn't fill in.
+        -- The gap grows with age: close together where the line hands over,
+        -- spreading out toward the end of the trail.
+        table.sort(feet, function(a, b) return a[3] < b[3] end)
+        local fine, coarse = {}, {}
+        local G, B = C.STEP_GAP_MAX, C.STEP_BIN
+        local life = (cfg.trailHours or 7) * 3600
+        for _, f in ipairs(feet) do
+            if D.ns >= C.STEP_BUDGET then break end
+            local px, py, vivid = f[1], f[2], f[9]
+            local u = Clamp((f[3] - C.LINE_SOLID) / math.max(1, life - C.LINE_SOLID))
+            local gap = C.STEP_GAP_MIN + (C.STEP_GAP_MAX - C.STEP_GAP_MIN) * math.sqrt(u)
+            local fx, fy = math.floor(px / G), math.floor(py / G)
+            local ok = true
+            for dx = -1, 1 do
+                for dy = -1, 1 do
+                    local cell = fine[(fx + dx) .. ":" .. (fy + dy)]
+                    if cell then
+                        for _, q in ipairs(cell) do
+                            if (q[1] - px) ^ 2 + (q[2] - py) ^ 2 < gap * gap then ok = false break end
+                        end
+                    end
+                end
+            end
+            local key = math.floor(px / B) .. ":" .. math.floor(py / B)
+            local cap = f[3] < C.STEP_RECENT and C.STEP_BIN_CAP * 2 or C.STEP_BIN_CAP
+            if ok and (coarse[key] or 0) >= cap then ok = false end
+            if ok then
+                coarse[key] = (coarse[key] or 0) + 1
+                local ck = fx .. ":" .. fy
+                fine[ck] = fine[ck] or {}
+                table.insert(fine[ck], f)
+                D.ns = D.ns + 1
+                local size = f[8]
+                local d = GetStep(steps, D.ns, 6)
+                d:SetVertexColor(f[4], f[5], f[6])
+                d:SetAlpha(f[7])
+                d:SetSize(size, size)
+                d:ClearAllPoints()
+                d:SetPoint("CENTER", overlay, "TOPLEFT", px, py)
+                d:Show()
+                if vivid > 0.02 and D.nr < C.STEP_BUDGET then
+                    D.nr = D.nr + 1
+                    local rim = GetStep(rims, D.nr, 5)
+                    rim:SetVertexColor(0.03, 0.02, 0.02)
+                    rim:SetAlpha(0.7 * vivid)
+                    rim:SetSize(size + 2, size + 2)
+                    rim:ClearAllPoints()
+                    rim:SetPoint("CENTER", overlay, "TOPLEFT", px, py)
+                    rim:Show()
                 end
             end
         end
@@ -479,7 +523,7 @@ local function DrawGround(D, scene)
     end
 end
 
--- The solid line: your last five minutes, each piece shaded by its own age.
+-- The line: your last 15 minutes, full for the first 5, then fading out (3.7.5).
 -- Trail recorded before 3.4 has no point times and shows as footsteps only.
 local function DrawWalkLine(D, scene)
     local w, h, now = D.w, D.h, D.now
@@ -498,13 +542,16 @@ local function DrawWalkLine(D, scene)
                     if t2 < cutoff or D.nl >= C.LINE_BUDGET then break end
                     local t1 = PointTime(s, i)
                     local ax, ay, bx, by = s[2 * i - 1], s[2 * i], s[2 * i + 1], s[2 * i + 2]
-                    if t1 < cutoff and t2 > t1 then -- trim the piece that is older than five minutes
+                    if t1 < cutoff and t2 > t1 then -- trim the piece older than the line
                         local k = (cutoff - t1) / (t2 - t1)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
                     end
-                    local age = Clamp((now - (t1 + t2) / 2) / C.FRESH_SECONDS)
+                    -- full for the first 5 minutes, then fading evenly (and thinning)
+                    -- to nothing at the line's far end
+                    local age = now - (t1 + t2) / 2
+                    local k = 1 - Clamp((age - C.LINE_SOLID) / (C.FRESH_SECONDS - C.LINE_SOLID))
                     D.nl = D.nl + 1
-                    PutLine(D.nl, 7, "BLEND", thick, faction.r, faction.g, faction.b, 0.95 - 0.55 * age,
+                    PutLine(D.nl, 7, "BLEND", thick * (0.55 + 0.45 * k), faction.r, faction.g, faction.b, 0.95 * k,
                         ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy))
                 end
             end
@@ -631,7 +678,10 @@ local function DrawMarks(D, scene, from, upTo)
         local f = GetPin(D.np)
         f.kind, f.d, f.mapID = kind, d, p.mapID
         f.tex:SetTexture(tex)
-        if kind == "sight" or kind == "grudge" then f.tex:SetTexCoord(0, 0.62, 0, 0.62) else f.tex:SetTexCoord(0, 1, 0, 1) end
+        if kind == "sight" or kind == "grudge" then f.tex:SetTexCoord(0, 0.62, 0, 0.62)
+        elseif kind == "mob" then f.tex:SetTexCoord(0.5, 0.75, 0.25, 0.5) -- the cross on the raid-marker sheet
+        else f.tex:SetTexCoord(0, 1, 0, 1) end
+        f.tex:SetDesaturated(kind == "mob")
         f.px = size * 100 / (cfg.iconScale or 100) -- at 100%, for RescalePins
         if kind == "grudge" then
             f.halo:SetSize(size * 1.9 / k, size * 1.9 / k)
@@ -658,8 +708,8 @@ local function DrawMarks(D, scene, from, upTo)
                 if f >= 0.03 and m[3] >= from and m[3] <= upTo then
                     if m[4] == "kill" then
                         Pin("kill", m, e.p, m[1], m[2], C.TEX_BLADES, base, 1, 1, 1, f)
-                    elseif not m.pvp then
-                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base * 0.7, 0.6, 0.6, 0.6, 0.5 * f)
+                    elseif not m.pvp then -- mobs and falls: a small grey cross, not a skull (3.7.5)
+                        Pin("mob", m, e.p, m[1], m[2], C.TEX_RAID, base * 0.7, 0.72, 0.72, 0.72, f)
                     elseif m.av then
                         Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base, 1, 0.82, 0.2, f)
                     else

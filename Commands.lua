@@ -390,7 +390,7 @@ local function DebugHaze()
     for c, v in pairs(field) do
         stored = stored + 1
         if v >= C.BATTLE_MIN then drawn = drawn + 1 end
-        list[#list + 1] = { c = c, v = v, own = ns.Long(z.battle[c]) }
+        list[#list + 1] = { c = c, v = v, own = z.battle[c] and ns.Long(z.battle[c]) or 0 }
     end
     table.sort(list, function(a, b) return a.v > b.v end)
     local towns = 0
