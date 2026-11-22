@@ -87,9 +87,14 @@ end
 
 local header
 
+-- The lowest line of the game's zone text that's on screen now. IsVisible,
+-- not IsShown: once the zone name fades, its parent frame hides but the
+-- text keeps its own "shown" flag (and the old name), which until 3.7.3
+-- made Warpath's line appear under a zone name that wasn't there.
 local function Anchor()
-    for _, fs in ipairs({ PVPInfoTextString, SubZoneTextString, ZoneTextString }) do
-        if fs and fs.IsShown and fs:IsShown() and (fs:GetText() or "") ~= "" then return fs end
+    for _, name in ipairs({ "PVPInfoTextString", "SubZoneTextString", "ZoneTextString" }) do
+        local fs = _G[name]
+        if fs and fs.IsVisible and fs:IsVisible() and (fs:GetText() or "") ~= "" then return fs end
     end
 end
 
@@ -111,7 +116,13 @@ local function HeaderUpdate(self, elapsed)
     if a <= 0 and self.t > 0.5 then self:Hide() end
 end
 
-local function ShowHeader(text)
+-- The line belongs under the game's big zone name. When the game isn't
+-- showing one (at login, after a /reload) there's nothing to sit under, so
+-- only the chat line is printed. Until 3.7.3 it showed anyway, alone in the
+-- middle of the screen. test: /warpath zone test shows it regardless.
+local function ShowHeader(text, test)
+    local anchor = Anchor()
+    if not anchor and not test then return end
     if not header then
         header = CreateFrame("Frame", "WarpathZoneHeader", UIParent)
         header:SetSize(900, 28)
@@ -127,7 +138,6 @@ local function ShowHeader(text)
         header:SetScript("OnUpdate", HeaderUpdate)
     end
     header:ClearAllPoints()
-    local anchor = Anchor()
     if anchor then
         header:SetPoint("TOP", anchor, "BOTTOM", 0, -6)
     else
@@ -167,7 +177,7 @@ function Zone.Enter(test)
     if cfg.zoneChat or test then
         Print(MapName(mapID) .. ": " .. Zone.ChatText(st) .. ".")
     end
-    if (cfg.zoneText or test) and not cfg.quiet then ShowHeader(Zone.HeaderText(st)) end
+    if (cfg.zoneText or test) and not cfg.quiet then ShowHeader(Zone.HeaderText(st), test) end
 end
 
 -- /warpath zone: the same stats plus the extras.

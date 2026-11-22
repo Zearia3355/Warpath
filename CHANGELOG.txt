@@ -1,6 +1,20 @@
 Warpath changelog
 
 =====================================================================
+3.7.3
+=====================================================================
+
+- The zone stats line ("1 kill · 2 deaths · 80.2 mi") only shows while
+  the game's big zone name is on screen, as a line beneath it. Warpath
+  was checking a "shown" flag the zone name keeps even after it fades, so
+  at login, after a /reload, or when the name had already faded, the line
+  appeared on its own near the middle of the screen. Now only the chat
+  line prints then. (This dates from 3.4.) /warpath zone test still shows
+  it any time.
+- Your saved data: everything is kept. Nothing about your data changes.
+- Includes 3.7.0 to 3.7.2.
+
+=====================================================================
 3.7.2
 =====================================================================
 
