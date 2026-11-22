@@ -1,5 +1,5 @@
 
--- Warpath 3.6.2
+-- Warpath 3.6.3
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -16,7 +16,8 @@
 --   Short memory builds with every pass and fades on real time: a stretch
 --                walked once stays about 7 hours (2 to 24 in options).
 --     trail      today's footsteps in your faction's colour, vivid when fresh,
---                plus a solid line for your last 5 minutes that fades behind you.
+--                deepening after an hour and fading slowly over the trail
+--                length, plus a solid line for your last 5 minutes.
 --     runs       corpse runs (dashed ice blue) and flights (long gold dashes),
 --                fading along their length over 24 hours, plus the flight
 --                routes you keep taking.
@@ -58,9 +59,9 @@ local C = {
     HIST            = 60,      -- samples (30 s) of position history
     TRAVEL_CELLS    = 3,       -- net cells moved in that time = travelling
     FRESH_SECONDS   = 300,     -- the solid line covers your last five minutes
-    STEP_FADE       = 1800,    -- footsteps fade from bright to faint over 30 minutes
+    STEP_FADE       = 1800,    -- footsteps shrink from fresh size over 30 minutes (opacity: StepLook)
     STEP_VIVID      = 600,     -- ...and are vivid, with a dark rim, for the first 10
-    STEP_FLOOR      = 0.18,    -- ...then hold this faint until today's memory expires
+    STEP_DEEP       = 3600,    -- ...and deepen to the darker faction colour between 1 and 2 hours
     RECENT_CAP      = 30,      -- short memory saturates here
     RECENT_MIN      = 0.2,     -- short memory below this is not drawn
     HEAT_MIN        = 1.5,     -- long-memory strength before heat shows
@@ -113,9 +114,9 @@ local C = {
     TEX_DOT    = "Interface\\AddOns\\" .. ADDON .. "\\glow",  -- soft radial glow shipped with the addon
     TEX_SWORDS = "Interface\\Icons\\Ability_DualWield",
     FACTION = {
-        Horde    = { r = 1.00, g = 0.16, b = 0.10, cry = "Lok'tar ogar!",     crest = "Interface\\TargetingFrame\\UI-PVP-Horde",    foe = "Alliance" },
-        Alliance = { r = 0.25, g = 0.55, b = 1.00, cry = "For the Alliance!", crest = "Interface\\TargetingFrame\\UI-PVP-Alliance", foe = "Horde" },
-        Neutral  = { r = 1.00, g = 0.82, b = 0.00, cry = "Victory!",          crest = "Interface\\TargetingFrame\\UI-PVP-FFA",      foe = "Neutral" },
+        Horde    = { r = 1.00, g = 0.16, b = 0.10, deep = { 0.65, 0.03, 0.13 }, cry = "Lok'tar ogar!",     crest = "Interface\\TargetingFrame\\UI-PVP-Horde",    foe = "Alliance" },
+        Alliance = { r = 0.25, g = 0.55, b = 1.00, deep = { 0.10, 0.22, 0.72 }, cry = "For the Alliance!", crest = "Interface\\TargetingFrame\\UI-PVP-Alliance", foe = "Horde" },
+        Neutral  = { r = 1.00, g = 0.82, b = 0.00, deep = { 0.70, 0.50, 0.00 }, cry = "Victory!",          crest = "Interface\\TargetingFrame\\UI-PVP-FFA",      foe = "Neutral" },
     },
     -- Saved layer keys. "recent" and "shared" are typed as "trail" and "guild".
     LAYERS = { "battle", "roads", "recent", "runs", "marks", "sightings", "shared" },
@@ -151,7 +152,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.6.2"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.6.3"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -361,15 +362,28 @@ local function Long(e)
     return e.l * math.exp(-C.LN2 * (PlayNow() - e.tl) / (db.longDays * C.DAY))
 end
 
--- Footstep look by time since you last walked there: alpha, size scale and
--- vividness (1 = just walked: pure faction colour with a dark rim).
+-- Footstep look by time since you last walked there: alpha, size scale,
+-- vividness (1 = just walked: pure faction colour with a dark rim) and
+-- depth (1 = the deep, darker faction colour of older steps).
+-- 3.6.3: steps fade slowly over the whole trail length instead of dropping
+-- to a faint floor within 30 minutes. With a 24-hour trail: 90% at 1 hour,
+-- 75% at 6, 55% at 12, 35% at 18, gone at 24. Shorter trails scale the same.
+local STEP_CURVE = { { 0, 0.95 }, { 0.04, 0.90 }, { 0.25, 0.75 }, { 0.50, 0.55 }, { 0.75, 0.35 }, { 1, 0 } }
 local function StepLook(e, now)
     local age = now - (e.tp or e.tr or now)
     local vivid = 0
     if age < C.STEP_VIVID then vivid = 0.5 * (1 + math.cos(math.pi * age / C.STEP_VIVID)) end
-    if age >= C.STEP_FADE then return C.STEP_FLOOR, 0.8, 0 end
-    local k = 0.5 * (1 + math.cos(math.pi * age / C.STEP_FADE))
-    return C.STEP_FLOOR + (0.95 - C.STEP_FLOOR) * k, 0.8 + 0.35 * k, vivid
+    local f = age / ((cfg.trailHours or 7) * 3600)
+    local alpha = 0
+    if f < 1 then
+        for i = 2, #STEP_CURVE do
+            local a, b = STEP_CURVE[i - 1], STEP_CURVE[i]
+            if f <= b[1] then alpha = a[2] + (b[2] - a[2]) * (f - a[1]) / (b[1] - a[1]) break end
+        end
+    end
+    local k = age < C.STEP_FADE and 0.5 * (1 + math.cos(math.pi * age / C.STEP_FADE)) or 0
+    local d = math.max(0, math.min(1, (age - C.STEP_DEEP) / C.STEP_DEEP))
+    return alpha, 0.9 + 0.25 * k, vivid, d * d * (3 - 2 * d)
 end
 
 -- Short memory's half-life from the trail setting: a stretch walked once

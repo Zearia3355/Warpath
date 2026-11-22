@@ -1,6 +1,22 @@
 Warpath changelog
 
 =====================================================================
+3.6.3
+=====================================================================
+
+- Today's trail stays readable. Footsteps used to fade to a faint 18%
+  within half an hour and sit there, almost invisible, for the rest of the
+  trail's life. Now they fade slowly over the whole trail length: with a
+  24-hour trail, 90% after an hour, 75% at 6 hours, 55% at 12, 35% at 18,
+  gone at 24. Shorter trails fade the same way, compressed.
+- Older footsteps deepen to a darker faction colour (crimson for Horde,
+  deep blue for Alliance) between 1 and 2 hours, so they don't wash out to
+  pink or pale blue on light ground. Every step is still drawn.
+- Unchanged: the solid line for your last 5 minutes, and the vivid
+  footsteps with a dark rim for the first 10.
+- Includes everything from 3.6.1 and 3.6.2.
+
+=====================================================================
 3.6.2
 =====================================================================
 

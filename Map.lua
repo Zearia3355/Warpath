@@ -362,6 +362,8 @@ local function DrawGround(D, scene)
     local roadCap = C.LINE_BUDGET - C.ROAD_RESERVE - 3
     local fr, fg, fb = faction.r, faction.g, faction.b
     local vr, vg, vb = Saturate(fr, fg, fb)
+    local deepC = faction.deep or { fr * 0.65, fg * 0.2, fb * 0.7 }
+    local deR, deG, deB = deepC[1], deepC[2], deepC[3]
     local shine = cfg.shimmer
     for _, e in ipairs(scene.zones) do
         local z, p = e.z, e.p
@@ -396,8 +398,9 @@ local function DrawGround(D, scene)
                 end
                 if recent >= C.RECENT_MIN then
                     -- Footsteps: vivid faction colour with a dark rim when fresh.
-                    local alpha, scale, vivid = StepLook(rec, now)
-                    local r, g, b = Lerp(fr, vr, vivid), Lerp(fg, vg, vivid), Lerp(fb, vb, vivid)
+                    local alpha, scale, vivid, deep = StepLook(rec, now)
+                    local r, g, b = Lerp(fr, deR, deep), Lerp(fg, deG, deep), Lerp(fb, deB, deep)
+                    r, g, b = Lerp(r, vr, vivid), Lerp(g, vg, vivid), Lerp(b, vb, vivid)
                     alpha = alpha + (1 - alpha) * vivid
                     local size = dot * scale
                     local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
