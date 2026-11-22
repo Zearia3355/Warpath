@@ -60,20 +60,6 @@ local function FlushShare()
     end
 end
 
--- The zone a map belongs to: a cave, town or other sub-map counts as its
--- zone, so "in your zone" holds when one of you is in a sub-map.
-local function ZoneOf(mapID)
-    local zoneType = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
-    for _ = 1, 5 do
-        if not mapID or Secret(mapID) then return nil end
-        local info = C_Map.GetMapInfo(mapID)
-        if not info or not info.mapType or info.mapType <= zoneType
-            or not info.parentMapID or info.parentMapID == 0 then return mapID end
-        mapID = info.parentMapID
-    end
-    return mapID
-end
-
 local function OnComm(prefix, text, _, sender)
     if prefix ~= C.COMM or not cfg.share or S.inInstance then return end
     if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then return end
@@ -127,9 +113,11 @@ local function OnComm(prefix, text, _, sender)
     }
     S.dirty = true
     if kind == "K" or kind == "D" then ns.AddBattle(mapID, x, y, C.BATTLE_W.shared) end
-    -- Kills and deaths get a chat line in your zone; sightings are map-only.
-    if kind ~= "S" and ZoneOf(mapID) == ZoneOf(C_Map.GetBestMapForUnit("player")) then
+    -- Kills and deaths get a chat line wherever they happen; sightings are
+    -- map-only. (Until 3.6.2 only kills and deaths in your own zone did.)
+    if kind ~= "S" then
         Print(("%s %s in %s."):format(from, kind == "K" and "scored a kill" or "was killed", MapName(mapID)))
+        shareStats.lastEvent = ("%s %s in %s, %s"):format(from, kind == "K" and "kill" or "death", MapName(mapID), date("%H:%M"))
     end
 end
 

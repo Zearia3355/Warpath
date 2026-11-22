@@ -225,6 +225,7 @@ function H.share(arg)
         Print(("this session: %d sent, %d refused by the game, %d received.%s")
             :format(shareStats.sent, shareStats.refused, shareStats.got,
                 shareStats.lastRefusal and (" Last refusal: " .. shareStats.lastRefusal) or ""))
+        if shareStats.lastEvent then Print("last guild kill or death received: " .. shareStats.lastEvent .. ".") end
         return
     end
     local v = OnOff(arg, cfg.share)

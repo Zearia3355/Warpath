@@ -1,6 +1,16 @@
 Warpath changelog
 
 =====================================================================
+3.6.2
+=====================================================================
+
+- Guildmates' kills and deaths print a chat line wherever they happen
+  ("Bob scored a kill in Felwood."), not only in your zone. Sightings
+  stay map-only.
+- /warpath share status shows the last guild kill or death received.
+- Both of you need 3.6.2: the chat line is decided on the receiving end.
+
+=====================================================================
 3.6.1
 =====================================================================
 
