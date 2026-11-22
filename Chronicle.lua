@@ -315,7 +315,7 @@ local function BuildCampaignPages(f)
     end
 
     c.high = {}
-    for i = 1, 6 do
+    for i = 1, 7 do
         local lab = Font(L, QuestFontNormalSmall, GameFontNormalSmall, RUBRIC)
         lab:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -12 - (i - 1) * 21)
         lab:SetWidth(128)
@@ -421,6 +421,14 @@ local function DeedText(item)
     if item.kill then
         local tag = e.tag and TAG_TEXT[e.tag]
         if e.tag == "streak" and e.st then tag = "a streak of " .. e.st end
+        -- 3.7: the multi-kill and the feat it earned
+        local extra = {}
+        if e.mk and e.mk >= 2 then extra[#extra + 1] = Campaign.Burst(e.mk):lower() end
+        local feat = e.ft and ns.Phrases.FEATS[e.ft]
+        if feat and not (e.ft == "grudge" and e.tag == "grudge") and not (e.ft == "avenged" and e.tag == "avenged") then
+            extra[#extra + 1] = feat[1]:lower()
+        end
+        if #extra > 0 then tag = (tag and (tag .. ", ") or "") .. table.concat(extra, ", ") end
         local lv = e.lv and ("|cff6a5030 " .. (e.lv == -1 and "??" or e.lv) .. "|r") or ""
         return "Slew " .. Colored(e.n or "an enemy", e.c) .. lv .. where .. "." ..
             (tag and (" |cff7a1f0f" .. tag:sub(1, 1):upper() .. tag:sub(2) .. ".|r") or "")

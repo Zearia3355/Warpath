@@ -1,6 +1,113 @@
 Warpath changelog
 
 =====================================================================
+3.7.0
+=====================================================================
+
+After updating, restart the game: 3.7 adds new files, and a /reload
+won't load them.
+
+Multi-kills, streaks and feats
+- Kills within 2 minutes of each other make a chain: Double Kill, Triple
+  Kill, Quad Kill, then Bloodbath (5 or more). The same enemy twice within
+  10 seconds is still one kill.
+- Streaks have names: Bloodthirsty (3 without dying), Rampage (5),
+  Warmonger (10), Unstoppable (15), Legend of the Warpath (20, then every
+  10).
+- Feats: Grudge settled, Nemesis down (who killed you most tonight),
+  Payback (who last killed you, within 10 minutes), Guardian (the enemy
+  who killed a guildmate in the last 2 minutes), Clutch (under 15%
+  health), Outnumbered, Underdog (3+ levels above you, or ??), Comeback
+  (after 3+ deaths in a row), Back from the dead (within a minute of
+  coming back), Death avenged, Old rival (your 10th, 25th, 50th, 100th
+  kill of a player), Ground taken (a kill on your dangerous ground) and
+  Flawless (at full health).
+- One line per kill, for you and your guildmates: the tier, plus the best
+  feat or streak milestone it earned ("Bob scored a triple kill in
+  Felwood! Bloodthirsty: 3 without dying."). The separate "5 kills
+  without dying" line is folded in. The wording varies so chat isn't the
+  same line over and over, with a "Blood and thunder!" or "For the
+  Alliance!" now and then on streaks of 10 or more.
+- Big text on screen for your own multi-kills and streaks, just under the
+  kill caption, so the screenshot catches it. A new kill while it shows
+  upgrades it in place. General tab: on/off and small, medium or large;
+  /warpath overlay [on|off|test]. Quiet mode turns it into chat lines.
+- When a streak of 3 or more ends: "Streak ended at 7 by Aldric", small
+  and grey.
+- Every feat and multi-kill makes the kill notable for screenshots, goes
+  on the kill mark, and shows in the chronicle's Deeds list. New
+  chronicle highlight: Best burst.
+- Guildmates still on 3.6 see one plain line per kill, as before.
+
+Counting kills
+- Kills are counted from the game's honorable-kill counter, and an enemy
+  seen dying nearby can name a kill. Two kills in one burst are no longer
+  lost when you never targeted the second victim.
+- Guarded, because it isn't known yet whether this client ever credits
+  one death twice: a credit with no name, within 2 seconds of a counted
+  kill and with no second death seen, isn't counted.
+- /warpath debug kills lists the last credits and what was counted. A
+  night of play there shows whether double credits ever happen.
+
+Dangerous ground (replaces killing fields)
+- Your PvP deaths are kept on the battle-haze grid, spreading and fading
+  the same way. Walk onto ground where they add up and Warpath says what
+  that ground has been for you:
+  Dangerous ground (red, warning sound): "you've died here 7 times and
+  won once."
+  Contested ground (amber, softer sound): "20 kills, 20 deaths here."
+  Your hunting ground (gold, no warning sound): "12 kills, 3 deaths here."
+  Guildmates' deaths there are added on when they count.
+- Out of combat only, never in neutral towns, once per area per session,
+  and never on top of a kill's big text.
+- General tab: ground warnings on screen, in chat, and warn after 1, 2 or
+  3 deaths (2 by default). If killing-field warnings were off, these
+  start off. /warpath fields on|off still turns both on or off.
+- The war table says "Dangerous ground nearby" or "Contested ground
+  nearby"; /warpath zone counts dangerous-ground spots.
+
+Guild-wide battle haze
+- Guildmates running 3.7 share their battle history: at login Warpath
+  asks, and guildmates whisper back what changed since they last sent
+  you theirs, a little at a time behind kills and deaths. Their live
+  kills and deaths add to it too.
+- Each guildmate's history is kept separately and capped: three quarters
+  of the strongest guildmate's heat on a spot, plus a little of everyone
+  else's, never quite full. Your own fights always read darkest.
+- Enemy sightings no longer add to the haze, yours or anyone's: it's
+  kills and deaths only. Sightings still show as crests and count in zone
+  stats.
+- Map tab: "Battle haze" (the whole layer) and "Guildmates' battle haze";
+  both also in the map button's right-click menu. General tab: "Share my
+  battle history". /warpath share history [on|off]; /warpath share sync
+  asks guildmates for everything again; /warpath share status shows it.
+- Guild sharing now includes the enemy's name on kill and death lines
+  (the kill lines and Guardian need it). Still never your trail.
+
+Map icons
+- Kill, death, sighting, guild and grudge pins keep their size on screen
+  when the map is enlarged (Leatrix Maps) or zoomed, instead of growing
+  with it. Lines, footsteps and the haze still scale with the map.
+- Map icon size, 25% to 200%: Map tab, or /warpath icons <25-200>.
+
+Minimap button
+- Left-click: the chronicle. Right-click: settings. Drag it around the
+  minimap's edge. Greyed out in battlegrounds. Button bags (MBB) and
+  Titan Panel pick it up. On by default; General tab or /warpath minimap.
+
+Your saved data: everything is kept. Dangerous ground is built from your
+existing death marks; nothing is removed or converted. Your battle haze
+so far has old sightings and guildmates' shared fights mixed in that
+can't be separated out: it stays as it is and fades with play as always.
+
+Includes 3.6.4 (built, never installed): the battle haze actually shows,
+fighting adds up across an area, neutral towns hidden instead of wiped,
+/warpath setup as the options command, killing-field warnings on/off,
+/warpath debug haze. 3.7.0 changes two of those: guildmates' fights
+count three quarters (now capped), and killing-field warnings became
+dangerous ground.
+
+=====================================================================
 3.6.4
 =====================================================================
 

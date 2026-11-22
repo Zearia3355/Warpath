@@ -226,6 +226,15 @@ function H.share(arg)
             :format(shareStats.sent, shareStats.refused, shareStats.got,
                 shareStats.lastRefusal and (" Last refusal: " .. shareStats.lastRefusal) or ""))
         if shareStats.lastEvent then Print("last guild kill or death received: " .. shareStats.lastEvent .. ".") end
+        if cfg.share then ns.Sync.Status() end
+        return
+    end
+    if arg == "sync" then ns.Sync.Request() return end
+    if arg == "history" or arg:match("^history ") then
+        local v = OnOff(arg:match("^history%s*(.-)$"), cfg.shareHistory)
+        if v == nil then Print("usage: /warpath share history [on|off]") return end
+        cfg.shareHistory = v
+        Print("sharing your battle history with guildmates " .. State(v) .. ".")
         return
     end
     local v = OnOff(arg, cfg.share)
@@ -255,11 +264,44 @@ function H.sound(arg)
     Print("sounds " .. State(v) .. ".")
 end
 
+-- Dangerous-ground warnings, on screen and in chat (3.7: replaces killing fields).
 function H.fields(arg)
-    local v = OnOff(arg, cfg.fieldAlert)
+    local v = OnOff(arg, cfg.groundScreen or cfg.groundChat)
     if v == nil then Print("usage: /warpath fields [on|off]") return end
-    cfg.fieldAlert = v
-    Print("killing-field warnings " .. State(v) .. ".")
+    cfg.groundScreen, cfg.groundChat, cfg.fieldAlert = v, v, v
+    Print("dangerous-ground warnings " .. State(v) .. ".")
+end
+
+function H.icons(arg)
+    local n = tonumber(arg)
+    if n and n >= 25 and n <= 200 then
+        cfg.iconScale = math.floor(n / 5 + 0.5) * 5
+        ns.RescalePins()
+        Print(("map icons at %d%%."):format(cfg.iconScale))
+    else
+        Print(("map icons at %d%%. Usage: /warpath icons <25-200>"):format(cfg.iconScale or 100))
+    end
+end
+
+function H.minimap(arg)
+    local v = OnOff(arg, ns.Minimap.Shown())
+    if v == nil then Print("usage: /warpath minimap [on|off]") return end
+    ns.Minimap.SetShown(v)
+    Print("minimap button " .. State(v) .. ".")
+end
+
+function H.overlay(arg)
+    arg = arg:lower()
+    if arg == "test" then
+        local fac = ns.faction
+        ns.Overlay.Show({ title = "TRIPLE KILL", sub = "Ilyssa  \194\183  Bloodthirsty: 3 without dying",
+            r = fac.r, g = fac.g, b = fac.b, sound = "triple" })
+        return
+    end
+    local v = OnOff(arg, cfg.overlay)
+    if v == nil then Print("usage: /warpath overlay [on|off|test]") return end
+    cfg.overlay = v
+    Print("big text for multi-kills and streaks " .. State(v) .. ".")
 end
 
 function H.setup()
@@ -303,6 +345,7 @@ function H.clear(arg)
         end
         clearAsked = -1000
         db.maps, db.yards, db.victims = {}, 0, {}
+        db.syncSent = nil
         db.kills, db.deaths, db.bestStreak = 0, 0, 0
         db.lastDeath, db.lastKill = nil, nil
         cur.stroke, cur.cell, cur.rc = nil, nil, nil
@@ -356,8 +399,22 @@ local function DebugHaze()
     end
 end
 
+-- /warpath debug kills: the last honorable-kill credits and what was counted.
+local function DebugKills()
+    Print(("this session: %d credit events, %d kills counted | the game's counter: %s%s")
+        :format(Foes.credits, Foes.kills, tostring(Foes.ReadHK() or "not readable"),
+            Foes.counterWorks and " (seen moving)" or ""))
+    if #Foes.log == 0 then Print("  no kill credits yet this session.") return end
+    for i = math.max(1, #Foes.log - 11), #Foes.log do
+        local e = Foes.log[i]
+        local hk = (e.before or e.after) and (" HKs %s>%s"):format(tostring(e.before or "?"), tostring(e.after or "?")) or ""
+        Print(("  %s%s  %s"):format(date("%H:%M:%S", e.t), hk, e.text))
+    end
+end
+
 function H.debug(arg)
     if (arg or ""):lower():match("^%s*haze") then DebugHaze() return end
+    if (arg or ""):lower():match("^%s*kill") then DebugKills() return end
     Print(("in a battleground or instance: %s"):format(S.inInstance and "yes, Warpath is resting" or "no"))
     Print(("in a neutral town: %s (zone PvP type %s, subzone \"%s\")"):format(
         ns.InNeutralTown() and "yes, sightings aren't recorded" or "no",
@@ -368,7 +425,8 @@ function H.debug(arg)
     Print(("sharing %s | %d sent, %d refused, %d received%s")
         :format(cfg.share and "on" or "off", shareStats.sent, shareStats.refused, shareStats.got,
             shareStats.lastRefusal and (" | last refusal " .. shareStats.lastRefusal) or ""))
-    Print(("this session: %d honorable-kill credits, counted as %d kills"):format(Foes.credits, Foes.kills))
+    Print(("this session: %d honorable-kill credits, counted as %d kills (/warpath debug kills for the log)")
+        :format(Foes.credits, Foes.kills))
     local last = Foes.last
     local known = 0
     for _ in pairs(Foes.known) do known = known + 1 end
@@ -397,6 +455,8 @@ local LIST = {
     { "replay",    "replay [hours]",                "replay your recent march (up to 24)", "Map", false, H.replay },
     { "waypoint",  "waypoint death|kill",           "waypoint to your last death or kill", "Map", false, H.waypoint },
     { "table",     "table [on|off]",                "the war table",                      "Map", false, H.table },
+    { "minimap",   "minimap [on|off]",              "the minimap button",                 "Map", false, H.minimap },
+    { "icons",     "icons <25-200>",                "map icon size, in percent",          "Map", false, H.icons },
     { "grudge",    "grudge [name]",                 "hold a grudge (default: your target)", "Grudges", true, H.grudge },
     { nil,         "grudge forgive [name]",         "strike a grudge from your ledger",   "Grudges" },
     { "grudges",   "grudges [chat]",                "your ledger of grudges (book, or chat)", "Grudges", false, H.grudges },
@@ -406,16 +466,19 @@ local LIST = {
     { nil,         "shot test",                     "take a test screenshot",             "Kill screenshots" },
     { "share",     "share [on|off]",                "share sightings, kills and deaths with your guild", "Guild sharing", false, H.share },
     { nil,         "share test",                    "send a test ping",                   "Guild sharing" },
+    { nil,         "share history [on|off]",        "share your battle haze with guildmates", "Guild sharing" },
+    { nil,         "share sync",                    "ask guildmates for their battle history again", "Guild sharing" },
     { "quiet",     "quiet [on|off]",                "banners become chat lines, no sounds", "Alerts", false, H.quiet },
     { "sound",     "sound [on|off]",                "sounds only",                        "Alerts", false, H.sound },
-    { "fields",    "fields [on|off]",               "killing-field warnings (\"you have died here N times\")", "Alerts", false, H.fields },
+    { "overlay",   "overlay [on|off|test]",         "big text for your multi-kills and streaks", "Alerts", false, H.overlay },
+    { "fields",    "fields [on|off]",               "dangerous-ground warnings", "Alerts", false, H.fields },
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },
     { "setup",     "setup",                         "all settings",                       "Settings", true, H.setup },
     { "memory",    "memory <hours> <days>",         "how long today's trail stays; how fast long memory fades", "Settings", false, H.memory },
     { "roads",     "roads <days>",                  "days of use before a road turns gold", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },
-    { "debug",     "debug [haze]",                  "what Warpath can and can't see (haze: this zone's battle haze)", "Troubleshooting", false, H.debug },
+    { "debug",     "debug [haze|kills]",            "what Warpath can and can't see (haze: this zone's haze; kills: the kill-credit log)", "Troubleshooting", false, H.debug },
     { nil,         "share status",                  "guild messages sent, refused, received", "Troubleshooting" },
 }
 local GROUPS = { "Stats", "Map", "Grudges", "Kill screenshots", "Guild sharing", "Alerts", "Settings", "Data", "Troubleshooting" }

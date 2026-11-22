@@ -1,5 +1,5 @@
 
--- Warpath 3.6.4
+-- Warpath 3.7.0
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -8,8 +8,9 @@
 --   Long memory  builds one mark per DAY you use a piece of ground, and loses
 --                half its strength every 14 days you PLAY (days away don't
 --                count). Nothing is permanent.
---     battle     where fighting happens: your kills and PvP deaths, guildmates'
---                shared fights, enemy sightings. One red that deepens with use.
+--     battle     where fighting happens: your kills and PvP deaths, plus your
+--                guildmates' (theirs count for less, and never more than
+--                yours). One red that deepens with use. Sightings don't count.
 --     roads      stretches you travel THROUGH. A route used on two separate
 --                days turns silver, then gilds gradually towards gold; well
 --                worn gold is burnished and shines.
@@ -30,7 +31,9 @@
 --   * What killed you. A death counts as PvP if you saw a hostile player in
 --     the 20 seconds before it. The killer is the enemy you were fighting.
 --   * Where an enemy is. A sighting is recorded at YOUR position.
---   * Who you killed. Read from your target, or the last enemy you targeted.
+--   * Who you killed. Read from your target, the last enemy you targeted, or
+--     an enemy seen dying nearby. The game's honorable-kill counter says how
+--     many died.
 --
 -- Other addons can hook kills:  Warpath.RegisterKillCallback(function(ctx) end)
 --   ctx = { mapID, zone, x, y, time, streak, victim, victimFull, timesKilled }
@@ -105,7 +108,16 @@ local C = {
     BATTLE_SPREAD   = 1.2,     -- each fight also warms the cells around it (Gaussian,
     BATTLE_REACH    = 2,       -- this many cells each way), so a running fight adds up
     BATTLE_ALPHA    = { 0.16, 0.42 }, -- faintest and darkest drawn patch (was 0.07-0.32)
-    BATTLE_W        = { kill = 1, death = 1, shared = 0.75, sight = 0.25 }, -- heat each event adds
+    BATTLE_W        = { kill = 1, death = 1 }, -- heat each of your fights adds (3.7: sightings don't)
+    -- Guildmates' haze (3.7): 3/4 of the strongest guildmate's heat on a spot,
+    -- plus a little of everyone else's, never above this, so your own fights
+    -- always read darkest at equal size.
+    GUILD_TOP       = 0.75,
+    GUILD_REST      = 0.15,
+    GUILD_CAP       = 3.6,
+    CHAIN           = 120,     -- kills within 2 minutes of the one before make a chain (double, triple...)
+    SAME_VICTIM     = 10,      -- the same victim twice within this is one kill
+    GROUND_GUILD    = 0.5,     -- a guildmate's death counts half of yours on dangerous ground
     CAMPAIGN_GAP    = 7200,    -- back within 2 hours = the same campaign
     CAMPAIGN_KEEP   = 30,
     ZONE_REENTRY    = 1800,    -- zone stats again after 30 minutes away
@@ -131,7 +143,10 @@ local C = {
         sightings = "Recent enemy sightings", shared = "Guild sharing" },
     CFG_DEFAULTS = { sound = true, hudShown = true, quiet = false, share = false, shown = true,
         zoneChat = true, zoneText = true, chronLogin = true, chronOpen = false, shimmer = true,
-        runHours = 24, flightHours = 24, fieldAlert = true },
+        runHours = 24, flightHours = 24, fieldAlert = true,
+        iconScale = 100, overlay = true, overlaySize = "medium",
+        groundScreen = true, groundChat = true, groundAfter = 2,
+        guildHaze = true, shareHistory = true },
     GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
     SHOT_DEFAULTS = { on = true, mode = "all", card = "text", delay = 0.5, combat = true },
 }
@@ -156,7 +171,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.6.4"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.0"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -267,6 +282,7 @@ local function ZoneFields(z)
     z.strokes, z.marks, z.heat, z.road = z.strokes or {}, z.marks or {}, z.heat or {}, z.road or {}
     z.cx, z.cy, z.sight = z.cx or {}, z.cy or {}, z.sight or {}
     z.runs, z.routes, z.battle = z.runs or {}, z.routes or {}, z.battle or {}
+    z.deaths = z.deaths or {}
     z.yards, z.kills, z.pdeaths = z.yards or 0, z.kills or 0, z.pdeaths or 0
     z.streak, z.bestStreak, z.avenged = z.streak or 0, z.bestStreak or 0, z.avenged or 0
     z.hours = nil -- 3.4: enemy busy hours are no longer recorded
@@ -405,28 +421,61 @@ local function Credit(e, now, today)
 end
 
 -- Battle heat: each fight adds to its spot; fades on the play clock like roads.
-local function AddBattle(mapID, x, y, w)
-    if not mapID or not x or not y then return end
-    local z = ZoneData(mapID)
-    local c = Cell(x, y, C.SW, C.SH)
-    local e = z.battle[c]
-    if not e then e = { l = 0, tl = PlayNow() } z.battle[c] = e end
-    e.l, e.tl = Long(e) + w, PlayNow()
+-- e.ts: when it last changed (real time), so a guild sync sends only what's new.
+local function AddHeat(layer, c, w)
+    local e = layer[c]
+    if not e then e = { l = 0, tl = PlayNow() } layer[c] = e end
+    e.l, e.tl, e.ts = Long(e) + w, PlayNow(), time()
     S.dirty = true
 end
 
--- The haze as drawn: each cell's heat plus its neighbours', weighted by
--- distance (3.6.4). Stored heat stays per cell; the spreading happens here,
--- so existing history gets it too. Only cells with heat of their own are
--- returned, so the haze never reaches ground where nothing happened.
--- Neutral-town ground (z.town) is left out: seeing the enemy there is
--- expected, so it doesn't haze the map. Its heat stays saved.
-local function BattleField(z)
-    local raw, out, town = {}, {}, z.town or {}
-    for c, e in pairs(z.battle) do
-        local v = not town[c] and Long(e) or 0
-        if v > 0 then raw[c] = v end
+local function AddBattle(mapID, x, y, w)
+    if not mapID or not x or not y then return end
+    AddHeat(ZoneData(mapID).battle, Cell(x, y, C.SW, C.SH), w)
+end
+
+-- Your PvP deaths on the same grid (3.7): what dangerous ground is made of.
+local function AddDeathHeat(mapID, x, y, w)
+    if not mapID or not x or not y then return end
+    AddHeat(ZoneData(mapID).deaths, Cell(x, y, C.SW, C.SH), w)
+end
+
+-- A guildmate's layer, from their live kills and deaths and their synced
+-- history: z.guildBattle[sender] / z.guildDeaths[sender], cell -> { l, tl }.
+local function GuildLayer(mapID, key, sender)
+    local z = ZoneData(mapID)
+    z[key] = z[key] or {}
+    local t = z[key][sender]
+    if not t then t = {} z[key][sender] = t end
+    return t
+end
+
+-- The guild part of a spot: 3/4 of the strongest guildmate, 0.15 of the rest, capped.
+local function GuildPart(layers, out, town)
+    if not layers then return end
+    local top, sum = {}, {}
+    for _, cells in pairs(layers) do
+        for c, e in pairs(cells) do
+            if not town[c] then
+                local v = Long(e)
+                if v > 0 then
+                    sum[c] = (sum[c] or 0) + v
+                    if v > (top[c] or 0) then top[c] = v end
+                end
+            end
+        end
     end
+    for c, t in pairs(top) do
+        local g = math.min(C.GUILD_CAP, C.GUILD_TOP * t + C.GUILD_REST * (sum[c] - t))
+        if g > 0 then out[c] = (out[c] or 0) + g end
+    end
+end
+
+-- Spread raw cell values over their neighbours (3.6.4). Only cells with a
+-- value of their own are returned, so the haze never reaches ground where
+-- nothing happened.
+local function Spread(raw)
+    local out = {}
     local R, k = C.BATTLE_REACH, -1 / (2 * C.BATTLE_SPREAD * C.BATTLE_SPREAD)
     for c in pairs(raw) do
         local cx, cy = c % C.SW, math.floor(c / C.SW)
@@ -444,6 +493,37 @@ local function BattleField(z)
         out[c] = v
     end
     return out
+end
+
+-- One layer of heat, faded, with neutral-town ground (z.town) left out:
+-- seeing the enemy there is expected, so it doesn't haze the map. Its heat
+-- stays saved.
+local function Own(layer, town, w)
+    local raw = {}
+    for c, e in pairs(layer or {}) do
+        local v = not town[c] and Long(e) or 0
+        if v > 0 then raw[c] = v * (w or 1) end
+    end
+    return raw
+end
+
+-- The haze as drawn: your heat plus the guild part (when shown), spread.
+-- guild: nil = follow the setting, false = yours only.
+local function BattleField(z, guild)
+    local town = z.town or {}
+    local raw = Own(z.battle, town)
+    if guild ~= false and cfg.guildHaze then GuildPart(z.guildBattle, raw, town) end
+    return Spread(raw)
+end
+
+-- Your deaths, and guildmates' deaths (half weight, capped like the haze), spread.
+local function DeathField(z)
+    local town = z.town or {}
+    local mine = Spread(Own(z.deaths, town))
+    local graw = {}
+    GuildPart(z.guildDeaths, graw, town)
+    for c, v in pairs(graw) do graw[c] = v / C.GUILD_TOP * C.GROUND_GUILD end
+    return mine, Spread(graw)
 end
 
 local function RunSeconds(kind)
@@ -475,6 +555,17 @@ local function Prune()
         end
         for c, e in pairs(z.battle) do
             if Long(e) < 0.05 then z.battle[c] = nil end
+        end
+        for c, e in pairs(z.deaths) do
+            if Long(e) < 0.05 then z.deaths[c] = nil end
+        end
+        for _, key in ipairs({ "guildBattle", "guildDeaths" }) do
+            for sender, cells in pairs(z[key] or {}) do
+                for c, e in pairs(cells) do
+                    if Long(e) < 0.05 then cells[c] = nil end
+                end
+                if next(cells) == nil then z[key][sender] = nil end
+            end
         end
     end
     for i = #shared, 1, -1 do
@@ -640,7 +731,7 @@ local function MigrateToV7()
             end
         end
         for c, n in pairs(z.sight or {}) do
-            heat[c] = (heat[c] or 0) + W.sight * n * 0.25
+            heat[c] = (heat[c] or 0) + 0.25 * n * 0.25 -- 3.6 counted sightings a quarter
         end
         z.battle = {}
         for c, l in pairs(heat) do
@@ -651,8 +742,29 @@ local function MigrateToV7()
     db.v = 7
 end
 
+-- 3.7 (db.v 8): dangerous ground, back-filled from your PvP death marks
+-- (each faded by its age). Nothing is removed or converted.
+local function MigrateToV8()
+    local now, half = time(), db.longDays * C.DAY
+    for _, z in pairs(db.maps) do
+        local heat = {}
+        for _, m in ipairs(z.marks or {}) do
+            if m[4] == "death" and m.pvp then
+                local c = Cell(m[1], m[2], C.SW, C.SH)
+                local age = math.max(0, now - (m[3] or now))
+                heat[c] = (heat[c] or 0) + 2 ^ (-age / half)
+            end
+        end
+        z.deaths = {}
+        for c, l in pairs(heat) do
+            if l >= 0.05 then z.deaths[c] = { l = l, tl = PlayNow() } end
+        end
+    end
+    db.v = 8
+end
+
 local function Migrate()
-    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 then MigrateToV4() end
+    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 and db.v ~= 8 then MigrateToV4() end
     if db.v == 4 then
         local ok, err = pcall(MigrateToV5)
         if not ok then
@@ -665,13 +777,22 @@ local function Migrate()
         local ok, err = pcall(MigrateToV7)
         if not ok then Print("the 3.6 upgrade hit an error, so the battle haze starts empty: " .. tostring(err)) db.v = 7 end
     end
+    if db.v == 7 then
+        local ok, err = pcall(MigrateToV8)
+        if not ok then Print("the 3.7 upgrade hit an error, so dangerous ground starts empty: " .. tostring(err)) db.v = 8 end
+    end
     for _, z in pairs(db.maps) do ZoneFields(z) end
     db.campaigns = db.campaigns or {}
 end
 
 -- Shared with the other files.
 ns.AddBattle = AddBattle
+ns.AddDeathHeat = AddDeathHeat
+ns.AddHeat = AddHeat
 ns.BattleField = BattleField
+ns.DeathField = DeathField
+ns.GuildLayer = GuildLayer
+ns.Spread = Spread
 ns.Ago = Ago
 ns.Cell = Cell
 ns.CellXY = CellXY

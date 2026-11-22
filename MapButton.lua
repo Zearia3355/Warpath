@@ -88,6 +88,9 @@ local function LayerMenu(owner)
             checked = function() return cfg.layers[key] end,
             func = function() SetLayer(key, not cfg.layers[key]) end }
     end
+    table.insert(items, 2, { text = "Guildmates' battle haze",
+        checked = function() return cfg.guildHaze end,
+        func = function() cfg.guildHaze = not cfg.guildHaze S.dirty = true ns.Redraw() end })
     if not Menu(owner, "Warpath layers", items) then Print("layers: /warpath layer <name> [on|off]") end
 end
 

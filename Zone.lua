@@ -4,7 +4,6 @@
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Long, MapName, Miles, Print, Recent, Secret = ns.Long, ns.MapName, ns.Miles, ns.Print, ns.Recent, ns.Secret
-local Fields = ns.Fields
 
 local db, gdb, cfg
 ns.OnBind(function() db, gdb, cfg = ns.db, ns.gdb, ns.cfg end)
@@ -186,8 +185,8 @@ function Zone.Report()
         elseif long >= db.roadMin * C.SILVER_SHARE then silverN = silverN + 1 end
         if Recent(e, now) >= C.RECENT_MIN then recent = recent + 1 end
     end
-    Print(("Ground remembered: %d stretches of gold road, %d of silver, %d with today's footsteps. Killing fields: %d.")
-        :format(goldN, silverN, recent, #Fields(mapID)))
+    Print(("Ground remembered: %d stretches of gold road, %d of silver, %d with today's footsteps. Dangerous ground: %d spot%s.")
+        :format(goldN, silverN, recent, ns.Ground.Spots(mapID), ns.Ground.Spots(mapID) == 1 and "" or "s"))
     local victims, names = {}, {}
     for _, m in ipairs(z.marks) do
         if m[4] == "kill" and m.n then

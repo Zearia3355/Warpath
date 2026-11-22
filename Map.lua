@@ -248,6 +248,27 @@ end
 
 local PIN_LEVEL = { sight = 1, kill = 3, death = 3, skill = 4, sdeath = 4, grudge = 6 }
 
+-- Pins hold a steady size on screen (3.7): sized in interface pixels and
+-- divided by how much the map is scaled and zoomed, so a bigger map
+-- (Leatrix Maps) or zooming in no longer blows them up. Times the icon size
+-- setting (25% to 200%). Lines, footsteps and the haze still scale with the map.
+local PIN_PX = 18
+local activePins = 0
+local function MapScale()
+    local k = overlay and overlay:GetEffectiveScale() / UIParent:GetEffectiveScale() or 1
+    return (k and k > 0.01) and k or 1
+end
+local function RescalePins()
+    local k = MapScale() / ((cfg.iconScale or 100) / 100)
+    for i = 1, activePins do
+        local f = pins[i]
+        if f and f.px then
+            f:SetSize(f.px / k, f.px / k)
+            f.halo:SetSize(f.px * 1.9 / k, f.px * 1.9 / k)
+        end
+    end
+end
+
 local function GetPin(i)
     local f = pins[i]
     if not f then
@@ -602,7 +623,8 @@ end
 
 local function DrawMarks(D, scene, from, upTo)
     local L, w, h, now = cfg.layers, D.w, D.h, D.now
-    local base = math.max(14, w * 0.018)
+    local base = PIN_PX * (cfg.iconScale or 100) / 100   -- interface pixels
+    local k = MapScale()
     local function Pin(kind, d, p, x, y, tex, size, r, g, b, a)
         if D.np >= C.MARK_BUDGET then return end
         D.np = D.np + 1
@@ -610,8 +632,9 @@ local function DrawMarks(D, scene, from, upTo)
         f.kind, f.d, f.mapID = kind, d, p.mapID
         f.tex:SetTexture(tex)
         if kind == "sight" or kind == "grudge" then f.tex:SetTexCoord(0, 0.62, 0, 0.62) else f.tex:SetTexCoord(0, 1, 0, 1) end
+        f.px = size * 100 / (cfg.iconScale or 100) -- at 100%, for RescalePins
         if kind == "grudge" then
-            f.halo:SetSize(size * 1.9, size * 1.9)
+            f.halo:SetSize(size * 1.9 / k, size * 1.9 / k)
             f.halo:Show()
             f.label:SetText(d.short)
             f.label:Show()
@@ -623,7 +646,7 @@ local function DrawMarks(D, scene, from, upTo)
         -- Stack by kind, not draw order: sightings at the bottom, kills and
         -- deaths above them, grudges on top.
         f:SetFrameLevel(overlay:GetFrameLevel() + (PIN_LEVEL[kind] or 2))
-        f:SetSize(size, size)
+        f:SetSize(size / k, size / k)
         At(f, p, x, y, w, h)
         f:Show()
     end
@@ -740,6 +763,7 @@ local function Draw(scene, limit)
     for i = D.nd + 1, #dots do dots[i]:Hide() end
     for i = D.ng + 1, #glows do glows[i]:Hide() end
     for i = D.np + 1, #pins do pins[i]:Hide() end
+    activePins = D.np
     for i = D.nb + 1, #labels do labels[i]:Hide() end
     for i = D.ns + 1, #steps do steps[i]:Hide() end
     for i = D.nr + 1, #rims do rims[i]:Hide() end
@@ -840,6 +864,16 @@ local function SetupMap()
     head:SetBlendMode("ADD")
     head:SetVertexColor(1, 0.9, 0.5)
     head:Hide()
+    -- keep pins steady while the map zooms or is rescaled
+    local watcher = CreateFrame("Frame", nil, overlay)
+    watcher.acc, watcher.k = 0, 0
+    watcher:SetScript("OnUpdate", function(self, elapsed)
+        self.acc = self.acc + elapsed
+        if self.acc < 0.05 then return end
+        self.acc = 0
+        local k = MapScale()
+        if math.abs(k - self.k) > 0.001 then self.k = k RescalePins() end
+    end)
     WorldMapFrame:HookScript("OnShow", Redraw)
     hooksecurefunc(WorldMapFrame, "OnMapChanged", Redraw)
     if ns.SetupMapButton then ns.SetupMapButton() end
@@ -847,6 +881,7 @@ end
 
 -- Shared with the other files.
 ns.Redraw = Redraw
+ns.RescalePins = RescalePins
 ns.SetupMap = SetupMap
 ns.StartReplay = StartReplay
 ns.StopReplay = StopReplay

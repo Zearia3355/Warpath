@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Long, MapName, Print, Recent, Secret, Waypoint = ns.Long, ns.MapName, ns.Print, ns.Recent, ns.Secret, ns.Waypoint
-local recentSight, session, Fields, Campaign = ns.recentSight, ns.session, ns.Fields, ns.Campaign
+local recentSight, session, Campaign = ns.recentSight, ns.session, ns.Campaign
 
 local db, gdb, cfg, faction, foe, myName, myFull
 ns.OnBind(function()
@@ -173,11 +173,14 @@ function UpdateHUD()
         for _, s in ipairs(recentSight) do
             if s.mapID == mapID and now - s.t <= 300 then seen = seen + 1 end
         end
-        local fields = #Fields(mapID)
+        local _, px, py = ns.PlayerPos()
+        local ground = px and ns.Ground.Nearby(mapID, px, py)
         if seen > 0 then
             S.hud.rows[4]:SetText(("|cffff8000%d enem%s seen (5 min)|r"):format(seen, seen == 1 and "y" or "ies"))
-        elseif fields > 0 then
-            S.hud.rows[4]:SetText(("|cffff4030%d killing field%s here|r"):format(fields, fields == 1 and "" or "s"))
+        elseif ground == "danger" then
+            S.hud.rows[4]:SetText("|cffff4030Dangerous ground nearby|r")
+        elseif ground == "contested" then
+            S.hud.rows[4]:SetText("|cffff9f29Contested ground nearby|r")
         else
             S.hud.rows[4]:SetText("|cff808080No enemies seen lately|r")
         end

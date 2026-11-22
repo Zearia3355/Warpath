@@ -11,13 +11,17 @@ end)
 local shareSeen, senderSeen, dupSeen, lastSweep = {}, {}, {}, 0
 
 ---------------------------------------------------------------------------
--- Sharing (opt in). Sends only: an enemy was seen here / I died to PvP here.
--- Never your trail, never anyone's name.
+-- Sharing (opt in). Sends: an enemy was seen here; I scored a kill or died
+-- here (from 3.7 with the victim's or killer's name, the multi-kill tier and
+-- feat, for the kill line); and, when asked, your battle haze (Sync.lua).
+-- Never your trail.
 ---------------------------------------------------------------------------
 
 local shareStats = { sent = 0, refused = 0, got = 0, lastRefusal = nil }
 
-local function Share(kind, mapID, x, y, force)
+-- extra: fields appended after the position (3.7 kill and death details).
+-- Older versions read the first five fields and ignore the rest.
+local function Share(kind, mapID, x, y, force, extra)
     if not cfg.share then return end
     -- Sightings: at most one per map cell a minute. Kills and deaths are
     -- always sent (until 3.6.1 a second kill or death in the same spot
@@ -29,6 +33,8 @@ local function Share(kind, mapID, x, y, force)
         shareSeen[key] = now
     end
     local msg = ("%s|%s|%d|%.4f|%.4f"):format(C.PROTO, kind, mapID, x, y)
+    if extra and extra ~= "" then msg = msg .. "|" .. extra end
+    if #msg > 250 then msg = msg:sub(1, 250) end
     if kind == "S" then
         if #outQ < 10 then outQ[#outQ + 1] = msg end
     else
@@ -50,7 +56,11 @@ local function SendOne(msg, channel)
 end
 
 local function FlushShare()
-    if not cfg.share or #outQ == 0 or S.inInstance then return end
+    if not cfg.share or S.inInstance then return end
+    if #outQ == 0 then -- nothing urgent: a piece of battle history, if any is waiting
+        if ns.Sync then ns.Sync.FlushOne() end
+        return
+    end
     local msg = table.remove(outQ, 1)
     if IsInGuild() then SendOne(msg, "GUILD") end
     if IsInRaid() then
@@ -60,10 +70,22 @@ local function FlushShare()
     end
 end
 
-local function OnComm(prefix, text, _, sender)
+-- "Name-Realm" for a sender (same-realm senders can arrive without the realm).
+local function FullSender(sender)
+    if sender:find("-", 1, true) then return sender end
+    return sender .. "-" .. (GetNormalizedRealmName() or "")
+end
+
+local function OnComm(prefix, text, channel, sender)
     if prefix ~= C.COMM or not cfg.share or S.inInstance then return end
     if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then return end
     if sender == myFull or Ambiguate(sender, "short") == myName then return end
+    -- battle-haze sync (3.7): hellos and history
+    local head = text:sub(1, 4)
+    if head == C.PROTO .. "|H|" or head == C.PROTO .. "|B|" then
+        if ns.Sync then ns.Sync.OnMessage(text, FullSender(sender), channel) end
+        return
+    end
     local now = GetTime()
     -- The same message arrives twice from a guildmate who is also in your
     -- group (GUILD and PARTY/RAID): keep the first copy.
@@ -72,7 +94,7 @@ local function OnComm(prefix, text, _, sender)
     dupSeen[key] = now
 
     local sep = text:find(";", 1, true) and ";" or "|" -- 3.3.0 used "|"
-    local ver, kind, mapID, x, y = strsplit(sep, text)
+    local ver, kind, mapID, x, y, f1, f2, f3, f4, f5, f6, f7, f8, f9 = strsplit(sep, text)
     -- Flood guard for sightings only: at most 6 per sender per 10 seconds.
     -- Kills, deaths and test pings always get through (the sender already
     -- limits them). Until 3.6.1 a 3-second limit on every message dropped
@@ -106,18 +128,32 @@ local function OnComm(prefix, text, _, sender)
         return
     end
 
+    local full = FullSender(sender)
     if #shared >= 200 then table.remove(shared, 1) end
     shared[#shared + 1] = {
         kind = kind, mapID = mapID, x = x, y = y, t = time(), from = from,
         expire = time() + (kind == "S" and C.SIGHT_LIVE or C.SHARED_DEATH),
     }
     S.dirty = true
-    if kind == "K" or kind == "D" then ns.AddBattle(mapID, x, y, C.BATTLE_W.shared) end
-    -- Kills and deaths get a chat line wherever they happen; sightings are
-    -- map-only. (Until 3.6.2 only kills and deaths in your own zone did.)
+    -- A guildmate's kills and deaths go into their own layer of the haze
+    -- (3.7), never into yours; deaths also into their dangerous ground.
+    local c = Cell(x, y, C.SW, C.SH)
+    if kind == "K" or kind == "D" then
+        ns.AddHeat(ns.GuildLayer(mapID, "guildBattle", full), c, 1)
+        if kind == "D" then ns.AddHeat(ns.GuildLayer(mapID, "guildDeaths", full), c, 1) end
+        if ns.Ground then ns.Ground.Forget(mapID) end
+    end
+    -- Kills and deaths get one chat line wherever they happen; sightings are
+    -- map-only. A 3.7 sender's line carries the tier and feat.
+    local zone = MapName(mapID)
+    if kind == "K" then
+        Print(ns.Feats.GuildKillLine(from, zone, f1, f2, f3, f4, f5, f6, f7, f8, f9))
+    elseif kind == "D" then
+        if f1 and f1 ~= "" then ns.Feats.GuildDeath(f1, from) end
+        Print(ns.Feats.GuildDeathLine(from, zone, f1, f2, f3, f4 or ""))
+    end
     if kind ~= "S" then
-        Print(("%s %s in %s."):format(from, kind == "K" and "scored a kill" or "was killed", MapName(mapID)))
-        shareStats.lastEvent = ("%s %s in %s, %s"):format(from, kind == "K" and "kill" or "death", MapName(mapID), date("%H:%M"))
+        shareStats.lastEvent = ("%s %s in %s, %s"):format(from, kind == "K" and "kill" or "death", zone, date("%H:%M"))
     end
 end
 

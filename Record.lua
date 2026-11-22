@@ -11,7 +11,7 @@ ns.OnBind(function()
     db, gdb, cfg, faction, foe, myName, myFull = ns.db, ns.gdb, ns.cfg, ns.faction, ns.foe, ns.myName, ns.myFull
 end)
 
-local roadSeen, fieldCache, fieldWarned = {}, {}, {}
+local roadSeen = {}
 local hist = {}
 local sightSeen = {}
 local lastHostile, pendingAvenge = -1000, nil
@@ -243,59 +243,12 @@ local function See(unit)
     if not mapID then return end
     local z = ZoneData(mapID)
     local c = Cell(x, y, C.SW, C.SH)
-    z.sight[c] = (z.sight[c] or 0) + 1
-    ns.AddBattle(mapID, x, y, C.BATTLE_W.sight)
+    z.sight[c] = (z.sight[c] or 0) + 1 -- 3.7: sightings no longer add to the battle haze
     session.sightings = session.sightings + 1
     if #recentSight >= 100 then table.remove(recentSight, 1) end
     recentSight[#recentSight + 1] = { mapID = mapID, x = x, y = y, t = time() }
     Share("S", mapID, x, y)
     S.dirty = true
-end
-
----------------------------------------------------------------------------
--- Killing fields: places you keep dying to players
----------------------------------------------------------------------------
-
-local function Fields(mapID)
-    local list = fieldCache[mapID]
-    if list then return list end
-    list = {}
-    local z = db.maps[mapID]
-    if z then
-        local cells, cutoff = {}, time() - C.FIELD_DAYS * C.DAY
-        for _, m in ipairs(z.marks) do
-            if m[4] == "death" and m.pvp and m[3] >= cutoff then
-                local key = math.floor(m[1] / C.CELL) * 1000 + math.floor(m[2] / C.CELL)
-                local c = cells[key]
-                if not c then c = { key = key, n = 0, x = 0, y = 0 } cells[key] = c end
-                c.n, c.x, c.y = c.n + 1, c.x + m[1], c.y + m[2]
-            end
-        end
-        for _, c in pairs(cells) do
-            if c.n >= 2 then
-                list[#list + 1] = { key = mapID .. ":" .. c.key, n = c.n, x = c.x / c.n, y = c.y / c.n }
-            end
-        end
-    end
-    fieldCache[mapID] = list
-    return list
-end
-
-local function CheckFields()
-    if not cfg.fieldAlert then return end
-    if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
-    local mapID, x, y = PlayerPos()
-    if not mapID then return end
-    local now = GetTime()
-    for _, fld in ipairs(Fields(mapID)) do
-        local dx, dy = x - fld.x, y - fld.y
-        if dx * dx + dy * dy < C.FIELD_RADIUS * C.FIELD_RADIUS
-            and (not fieldWarned[fld.key] or now - fieldWarned[fld.key] > C.FIELD_COOLDOWN) then
-            fieldWarned[fld.key] = now
-            Notice(("Killing field: you have died here %d times"):format(fld.n), 1, 0.25, 0.2)
-            Sound("RAID_WARNING", 8959)
-        end
-    end
 end
 
 ---------------------------------------------------------------------------
@@ -452,6 +405,22 @@ local function ShowStripCard(k)
     return f
 end
 
+-- The bottom edge of the kill caption showing now, as an offset from the
+-- top of the screen (the overlay's lane sits under it), or nil.
+function ns.CaptionBottom()
+    for _, f in ipairs({ cardText, cardStrip }) do
+        if f and f:IsShown() then
+            local b, top = f:GetBottom(), UIParent:GetTop()
+            if b and top then
+                local k = f:GetEffectiveScale() / UIParent:GetEffectiveScale()
+                if f == cardText then b = (f.info:GetBottom() or b) end
+                return b * k - top
+            end
+        end
+    end
+end
+ns.CardTop = CardTop
+
 local function HideCards()
     if cardText then cardText:Hide() end
     if cardStrip then cardStrip:Hide() end
@@ -509,29 +478,28 @@ end
 function Notable(k)
     return k.times == 1 or k.grudge or k.avenged or (k.times and k.times >= 5)
         or k.streak == 3 or k.streak == 5 or (k.streak and k.streak >= 10 and k.streak % 10 == 0)
+        or k.feat or (k.chain and k.chain >= 2)
 end
 
 end
 
-local function OnKill()
-    if S.inInstance then return end
-    if not RecentlyInCombat() then return end -- a groupmate's kill while you stood by
+local Feats, P = ns.Feats, ns.Phrases
+
+-- One counted kill. full/short/class: the victim when known.
+local function OnKill(full, short, class)
     session.kills = session.kills + 1
     session.streak = session.streak + 1
     if session.streak > session.best then session.best = session.streak end
     db.kills = db.kills + 1
     if session.streak > db.bestStreak then db.bestStreak = session.streak end
+    local first = session.kills == 1 -- first blood of the campaign
+    local n = Feats.Chain()
 
-    local full, short, class = Victim()
-    local text = "Honorable kill"
     local times
     if full then
         db.victims[full] = (db.victims[full] or 0) + 1
         times = db.victims[full]
-        text = text .. ": " .. short
-        if times > 1 then text = text .. (" (%d times now)"):format(times) end
     end
-    if session.streak >= 2 then text = text .. ("   x%d"):format(session.streak) end
 
     local info = full and Foes.info[full] or {}
     local m, mapID, z = AddMark("kill", { n = short, c = class, f = full, lv = info.lv, ra = info.ra, gu = info.gu })
@@ -540,10 +508,7 @@ local function OnKill()
         z.streak = (z.streak or 0) + 1
         if z.streak > (z.bestStreak or 0) then z.bestStreak = z.streak end
     end
-    if m then
-        Share("K", mapID, m[1], m[2])
-        ns.AddBattle(mapID, m[1], m[2], C.BATTLE_W.kill)
-    end
+    if m then ns.AddBattle(mapID, m[1], m[2], C.BATTLE_W.kill) end
 
     -- Avenged: a kill near your own fresh skull.
     local avenged = false
@@ -559,30 +524,62 @@ local function OnKill()
         end
     end
 
+    local k = {
+        name = short or "Enemy player", full = full, short = short, class = class, lv = info.lv,
+        zone = mapID and MapName(mapID) or "", mapID = mapID, x = m and m[1], y = m and m[2],
+        times = times, streak = session.streak, when = time(), chain = n, first = first,
+        avenged = avenged and p.mark.av or nil,
+        grudge = full and ns.Grudge.Get(full) and true or nil,
+    }
+    local feats = Feats.Collect(k)
+    local top = feats[1]
+    k.feat = top and top.key ~= "streak" and top.key or nil
+    Feats.OnKilled(short)
+
+    local tag = k.avenged and "avenged" or k.grudge and "grudge" or times == 1 and "first"
+        or (P.StreakPool(k.streak) and "streak") or nil
+    if m then
+        m.tag, m.streak, m.times = tag, session.streak, times
+        m.mk = n >= 2 and n or nil
+        m.ft = k.feat
+        k.entry = ns.CampaignKill({ n = short, f = full, c = class, z = mapID, x = m[1], y = m[2],
+            t = m[3], tag = tag, st = session.streak, grudge = k.grudge, lv = info.lv, ra = info.ra, gu = info.gu,
+            mk = m.mk, ft = k.feat })
+        Share("K", mapID, m[1], m[2], nil, Feats.KillFields(n, k, feats))
+    end
+    if k.grudge then ns.Grudge.OnKill(full, mapID, true) end
+
+    -- One line per kill: the overlay for multi-kills and streak milestones,
+    -- else the banner; in quiet mode one chat line. Sounds after the picture.
+    local big = cfg.overlay and not cfg.quiet and Feats.OverlayFor(n, k, feats)
+    if big then ns.Overlay.Show(big) end
     local function Announce()
+        if big then return end
+        if cfg.quiet or not cfg.overlay or n >= 2 or P.StreakPool(k.streak) then
+            if cfg.quiet then
+                ns.Print(Feats.OwnLine(n, k, feats))
+            else
+                ns.Notice(Feats.OwnLine(n, k, feats), faction.r, faction.g, faction.b)
+                Sound("PVP_THROUGH_QUEUE", 8459)
+            end
+            return
+        end
+        local text = "Honorable kill"
+        if short then
+            text = text .. ": " .. short
+            if times > 1 then text = text .. (" (%d times now)"):format(times) end
+        end
+        if session.streak >= 2 then text = text .. ("   x%d"):format(session.streak) end
+        local extra = Feats.OwnExtra(top)
         if avenged then
-            Notice("Avenged.  " .. text, 1, 0.82, 0)
+            Notice("Avenged.  " .. text .. (extra and extra ~= "Death avenged." and ("  " .. extra) or ""), 1, 0.82, 0)
             Sound("READY_CHECK", 8960)
         else
-            Notice(text, faction.r, faction.g, faction.b)
+            Notice(text .. (extra and ("  " .. extra) or ""), faction.r, faction.g, faction.b)
             Sound("PVP_THROUGH_QUEUE", 8459)
         end
     end
 
-    local k = {
-        name = short or "Enemy player", class = class, zone = mapID and MapName(mapID) or "",
-        times = times, streak = session.streak, when = time(),
-        avenged = avenged and p.mark.av or nil,
-        grudge = full and ns.Grudge.Get(full) and true or nil,
-    }
-    local tag = k.avenged and "avenged" or k.grudge and "grudge" or times == 1 and "first"
-        or ((k.streak == 3 or k.streak == 5 or k.streak % 10 == 0) and "streak") or nil
-    if m then
-        m.tag, m.streak, m.times = tag, session.streak, times
-        k.entry = ns.CampaignKill({ n = short, f = full, c = class, z = mapID, x = m[1], y = m[2],
-            t = m[3], tag = tag, st = session.streak, grudge = k.grudge, lv = info.lv, ra = info.ra, gu = info.gu })
-    end
-    if k.grudge then ns.Grudge.OnKill(full, mapID) end
     if cfg.shot.on and m and (cfg.shot.mode == "all" or Notable(k))
         and GetTime() - lastShot >= C.SHOT_THROTTLE then
         lastShot = GetTime()
@@ -590,45 +587,90 @@ local function OnKill()
     else
         Announce()
     end
-    if session.streak == 3 or session.streak == 5 or session.streak % 10 == 0 then
-        Print(("%s%s|r %d kills without dying."):format(C.GOLD, faction.cry, session.streak))
-    end
 
     if m then
         local ctx = {
             mapID = mapID, zone = MapName(mapID), x = m[1], y = m[2], time = m[3],
             streak = session.streak, victim = short, victimFull = full, timesKilled = times,
+            chain = n, feat = k.feat,
         }
         for _, fn in ipairs(killCallbacks) do pcall(fn, ctx) end
     end
     ns.UpdateHUD()
 end
 
--- The game can hand out more than one honorable-kill credit for a single
--- enemy death. Credits that arrive within two seconds are one kill unless they
--- name a different dead enemy, and the same victim is never counted twice
--- within 10 seconds. Two enemies dying at once with only one of them targeted
--- counts as one kill: undercounting beats counting phantoms.
-function Foes.OnCredit()
-    Foes.credits = Foes.credits + 1
-    if S.inInstance or not RecentlyInCombat() then return end
+---------------------------------------------------------------------------
+-- Counting kills (3.7). The game's honorable-kill counter says how many
+-- enemies died; names come from your target, the last enemy you targeted,
+-- or an enemy seen dying. Guarded, because it isn't known yet whether this
+-- client ever credits one death twice:
+--   * the same victim twice within 10 seconds is one kill;
+--   * a credit with no name, within 2 seconds of a counted kill, only
+--     counts if a second death was seen (that is, it has a name of its own);
+--   * a name within 2 seconds after an unnamed kill is that same kill.
+-- Undercounting beats counting phantoms. /warpath debug kills shows the log.
+---------------------------------------------------------------------------
+
+local function Skip(full)
+    return Foes.counted[full] and GetTime() - Foes.counted[full] < C.SAME_VICTIM
+end
+
+-- One credit. cand: the victim picked when the credit arrived, if any.
+local function CountCredit(cand)
     local now = GetTime()
-    local w = Foes.win
-    if now > w.till then
-        w.till, w.names, w.unnamed = now + 2, {}, false
+    local full, short, class, src
+    if cand and not Skip(cand.full) then
+        full, short, class, src = cand.full, cand.short, cand.class, cand.src
+    else
+        full, short, class, src = Foes.Pick(Skip)
     end
-    local full = Victim()
     if full then
-        if w.names[full] or w.unnamed then return end
-        if Foes.counted[full] and now - Foes.counted[full] < 10 then return end
-        w.names[full] = true
+        if Foes.unnamedAt and now - Foes.unnamedAt <= 2 then
+            return "named " .. short .. " right after an unnamed kill: taken as the same kill"
+        end
         Foes.counted[full] = now
     else
-        if next(w.names) or w.unnamed then return end
-        w.unnamed = true
+        if now - (Foes.lastCountAt or -1000) <= 2 then
+            return "no name, 2 s after a kill, no second death seen: not counted"
+        end
+        Foes.unnamedAt = now
     end
+    Foes.lastCountAt = now
     Foes.kills = Foes.kills + 1
-    OnKill()
+    OnKill(full, short, class)
+    return full and ("counted: " .. short .. " (" .. (src or "target") .. ")") or "counted, no name"
+end
+
+local function Settle(cand, tries)
+    local hk, before = Foes.ReadHK(), Foes.hk
+    if hk and before and hk > before then
+        Foes.counterWorks, Foes.hk = true, hk
+        for i = 1, hk - before do
+            Foes.Log(("credit %d of %d: %s"):format(i, hk - before, CountCredit(i == 1 and cand or nil)),
+                before + i - 1, before + i)
+        end
+        return
+    end
+    if hk and before and hk == before and Foes.counterWorks then
+        if tries < 2 then return C_Timer.After(1.2, function() Settle(cand, tries + 1) end) end
+        Foes.Log("+0: a repeat event, ignored", before, hk)
+        return
+    end
+    if hk then Foes.hk = hk end
+    -- no counter this client will show (or it hasn't moved yet): one credit, guarded
+    Foes.Log("no counter change seen: one credit, " .. CountCredit(cand), before, hk)
+end
+
+function Foes.OnCredit()
+    Foes.credits = Foes.credits + 1
+    if S.inInstance or not RecentlyInCombat() then
+        Foes.Log("credit while out of combat: a groupmate's kill, not counted", Foes.hk, Foes.ReadHK())
+        Foes.hk = Foes.ReadHK() or Foes.hk
+        return
+    end
+    local full, short, class, src = Foes.Pick(Skip)
+    local cand = full and { full = full, short = short, class = class, src = src } or nil
+    C_Timer.After(0.3, function() Settle(cand, 0) end)
 end
 
 local function OnDeath()
@@ -642,38 +684,50 @@ local function OnDeath()
         kn = killer and killer.short, kc = killer and killer.class, kf = killer and killer.full,
         lv = ki.lv, ra = ki.ra, gu = ki.gu })
     if pvp then
+        local streak = session.streak
         session.deaths = session.deaths + 1
         db.deaths = db.deaths + 1
-        if session.streak >= 3 then
-            Print(("your streak ends at %s%d|r."):format(C.GOLD, session.streak))
+        if streak >= 3 then
+            local by = killer and killer.short
+            if cfg.quiet or not cfg.overlay then
+                Print(("Streak ended at %s%d|r%s."):format(C.GOLD, streak, by and (" by " .. by) or ""))
+            else
+                ns.Overlay.Show({ title = ("Streak ended at %d"):format(streak), sub = by and ("by " .. by) or "",
+                    r = 0.72, g = 0.72, b = 0.72, sr = 0.8, sg = 0.8, sb = 0.8, small = true })
+            end
         end
         ns.CampaignDeath({ n = killer and killer.short, c = killer and killer.class, f = killer and killer.full,
-            lv = ki.lv, ra = ki.ra, gu = ki.gu, z = mapID, x = m and m[1], y = m and m[2], t = time() }, session.streak)
+            lv = ki.lv, ra = ki.ra, gu = ki.gu, z = mapID, x = m and m[1], y = m and m[2], t = time() }, streak)
         if killer then ns.Grudge.OnDeath(killer.full, killer.class, mapID) end
+        local fields = Feats.DeathFields(killer and killer.full, streak)
+        Feats.OnDied(true, killer)
         session.streak = 0
         for _, zz in pairs(db.maps) do zz.streak = 0 end
         if m then
             z.pdeaths = z.pdeaths + 1
-            fieldCache[mapID] = nil
             ns.AddBattle(mapID, m[1], m[2], C.BATTLE_W.death)
+            ns.AddDeathHeat(mapID, m[1], m[2], 1)
+            ns.Ground.Forget(mapID)
             pendingAvenge = { mapID = mapID, mark = m, at = GetTime() }
-            Share("D", mapID, m[1], m[2])
+            Share("D", mapID, m[1], m[2], nil, fields)
         end
+    else
+        Feats.OnDied(false)
     end
     ns.UpdateHUD()
 end
 
 -- Forget recording state (/warpath clear).
 function ns.ResetRecording()
-    fieldCache, roadSeen, pendingAvenge = {}, {}, nil
+    roadSeen, pendingAvenge = {}, nil
+    ns.Ground.Forget()
+    ns.Ground.Reset()
 end
-function ns.ForgetFields(mapID) fieldCache[mapID] = nil end
+function ns.ForgetFields(mapID) ns.Ground.Forget(mapID) end
 
 -- Shared with the other files.
 ns.AddFlightRoute = AddFlightRoute
-ns.CheckFields = CheckFields
 ns.CloseStroke = CloseStroke
-ns.Fields = Fields
 ns.FinishShot = FinishShot
 ns.OnDeath = OnDeath
 ns.Sample = Sample

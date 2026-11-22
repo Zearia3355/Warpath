@@ -148,13 +148,16 @@ function Grudge.OnSighted(full, short, class)
     end
 end
 
-function Grudge.OnKill(full, mapID)
+-- silent: the kill's own line already says so (3.7: one line per kill).
+function Grudge.OnKill(full, mapID, silent)
     local key, r = Find(full)
     if not r then return end
     r.kills, r.settled = r.kills + 1, r.settled + 1
     Log(r, "k", mapID)
-    Print(("grudge against %s settled%s."):format(Short(key),
-        r.settled > 1 and (" (" .. r.settled .. " times now)") or ""))
+    if not silent then
+        Print(("grudge against %s settled%s."):format(Short(key),
+            r.settled > 1 and (" (" .. r.settled .. " times now)") or ""))
+    end
     Grudge.Changed()
 end
 

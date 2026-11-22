@@ -11,12 +11,12 @@ ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction e
 local ShowSetup, MaybeShowSetup, setup
 do
 local NEW_IN = {
-    "Battle haze: the map now hazes where fighting happens (your kills and",
-    "    deaths, guildmates' fights, enemy sightings) in one red that deepens",
-    "    with use. It replaces the lingering haze, the sighting dots and the",
-    "    killing-field glows. Your past kills, deaths and sightings are already in it.",
-    "Since 3.4: grudges, the chronicle as a book, the war table's skull button,",
-    "    days away no longer fade the map, and today's trail length (Map tab).",
+    "Multi-kills and feats: double kill up to Bloodbath (kills within 2 minutes),",
+    "    streak names, Payback, Clutch, Underdog and more, one line per kill,",
+    "    shared with your guild. Your own get big text on screen (General tab).",
+    "Dangerous ground replaces killing fields: dangerous, contested or your hunting ground.",
+    "Guild-wide battle haze: guildmates' fights show on your map (Map tab).",
+    "A minimap button, and map icons that keep their size (Map tab).",
 }
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
@@ -77,11 +77,19 @@ end
 local function SetupLoad(s, c)
     s.banners:SetChecked(not c.quiet)
     s.sound:SetChecked(c.sound)
-    s.fields:SetChecked(c.fieldAlert)
+    s.overlay:SetChecked(c.overlay)
+    s.overlaySize:Set(c.overlaySize)
+    s.groundScreen:SetChecked(c.groundScreen)
+    s.groundChat:SetChecked(c.groundChat)
+    s.groundAfter:Set(c.groundAfter)
     s.hud:SetChecked(c.hudShown)
+    s.minimap:SetChecked(not (c.minimap and c.minimap.hide))
     s.share:SetChecked(c.share)
+    s.shareHistory:SetChecked(c.shareHistory)
     s.shown:SetChecked(c.shown)
     for key, cb in pairs(s.layers) do cb:SetChecked(c.layers[key]) end
+    s.guildHaze:SetChecked(c.guildHaze)
+    s.iconScale.Set(c.iconScale or 100)
     s.shimmer:SetChecked(c.shimmer)
     s.trailHours:Set(c.trailHours)
     s.runHours:Set(c.runHours)
@@ -107,11 +115,20 @@ local function On(cb) return cb:GetChecked() and true or false end
 local function SetupSave(s)
     cfg.quiet = not s.banners:GetChecked()
     cfg.sound = On(s.sound)
-    cfg.fieldAlert = On(s.fields)
+    cfg.overlay = On(s.overlay)
+    cfg.overlaySize = s.overlaySize.value or "medium"
+    cfg.groundScreen, cfg.groundChat = On(s.groundScreen), On(s.groundChat)
+    cfg.groundAfter = s.groundAfter.value or 2
+    cfg.fieldAlert = cfg.groundScreen or cfg.groundChat
+    if ns.Ground then ns.Ground.Forget() end
     cfg.hudShown = On(s.hud)
+    ns.Minimap.SetShown(On(s.minimap))
     cfg.share = On(s.share)
+    cfg.shareHistory = On(s.shareHistory)
     cfg.shown = On(s.shown)
     for key, cb in pairs(s.layers) do cfg.layers[key] = On(cb) end
+    cfg.guildHaze = On(s.guildHaze)
+    cfg.iconScale = s.iconScale.value or 100
     cfg.shimmer = On(s.shimmer)
     cfg.trailHours = s.trailHours.value or 7
     cfg.runHours = s.runHours.value or 24
@@ -139,6 +156,7 @@ local function DefaultsView()
     for k, v in pairs(C.SHOT_DEFAULTS) do view.shot[k] = v end
     for k, v in pairs(C.CFG_DEFAULTS) do view[k] = v end
     view.trailHours = 7
+    view.minimap = { hide = false }
     view.grudge = {}
     for k, v in pairs(C.GRUDGE_DEFAULTS) do view.grudge[k] = v end
     return view
@@ -218,19 +236,85 @@ end
 local function BuildGeneral(s, panel)
     local L = Layout(panel)
     L.Heading("ALERTS")
-    s.banners = MakeCheck(panel, "Raid-warning banners and sounds", "Off: alerts become chat lines instead.")
-    L.Place(s.banners, 0, 42)
+    s.banners = MakeCheck(panel, "Raid-warning banners and sounds")
     s.sound = MakeCheck(panel, "Sounds")
-    L.Place(s.sound, 0, 34)
-    s.fields = MakeCheck(panel, "Killing-field warnings", "\"You have died here N times\" when you walk onto ground where you keep dying.")
-    L.Place(s.fields, 0, 42)
-    L.Heading("WAR TABLE")
-    s.hud = MakeCheck(panel, "Show the war table panel", "Kills, deaths, streak and this zone at a glance. Drag to move.")
-    L.Place(s.hud, 0, 50)
+    s.banners:SetPoint("TOPLEFT", 0, -L.y)
+    s.sound:SetPoint("TOPLEFT", 250, -L.y)
+    L.y = L.y + 26
+    s.overlay = MakeCheck(panel, "Big text for my multi-kills and streaks")
+    L.Place(s.overlay, 0, 24)
+    s.overlaySize = MakeRadios(panel, "Big text size", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } })
+    L.Radios(s.overlaySize, 26)
+    s.groundScreen = MakeCheck(panel, "Ground warnings on screen")
+    s.groundChat = MakeCheck(panel, "Ground warnings in chat")
+    s.groundScreen:SetPoint("TOPLEFT", 0, -L.y)
+    s.groundChat:SetPoint("TOPLEFT", 250, -L.y)
+    L.y = L.y + 24
+    s.groundAfter = MakeRadios(panel, "Warn after", { { 1, "1 death" }, { 2, "2 deaths" }, { 3, "3 deaths" } })
+    L.Radios(s.groundAfter, 28)
+    L.Heading("WAR TABLE AND MINIMAP")
+    s.hud = MakeCheck(panel, "War table panel")
+    s.minimap = MakeCheck(panel, "Minimap button")
+    s.hud:SetPoint("TOPLEFT", 0, -L.y)
+    s.minimap:SetPoint("TOPLEFT", 250, -L.y)
+    L.y = L.y + 32
     L.Heading("GUILD AND PARTY")
     s.share = MakeCheck(panel, "Share enemy sightings, my kills and my PvP deaths",
-        "Sends map positions only, never names or your trail. Each player turns it on.")
-    L.Place(s.share, 0, 46)
+        "Map positions, plus the names on kill lines. Never your trail. Each player turns it on.")
+    L.Place(s.share, 0, 42)
+    s.shareHistory = MakeCheck(panel, "Share my battle history with guildmates",
+        "Your battle haze, so their maps show where you've fought. Needs sharing on.")
+    L.Place(s.shareHistory, 0, 42)
+end
+
+-- "Map icon size": a slider (25%-200%, steps of 5), or -/+ buttons where
+-- the client has no slider template. Changes show at once on an open map.
+local function IconSize(panel, x, y)
+    local ctl = { value = 100 }
+    local label = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
+    label:SetPoint("TOPLEFT", x + 4, -y)
+    local function Apply(v, fromUser)
+        v = math.max(25, math.min(200, math.floor(v / 5 + 0.5) * 5))
+        ctl.value = v
+        label:SetText(("Map icon size: %d%%"):format(v))
+        if fromUser then
+            cfg.iconScale = v
+            if ns.RescalePins then ns.RescalePins() end
+        end
+        return v
+    end
+    local ok, sl = pcall(CreateFrame, "Slider", "WarpathIconSize", panel, "OptionsSliderTemplate")
+    -- a client without the template still makes a bare, invisible slider: check for its thumb
+    if ok and sl and not (sl.GetThumbTexture and sl:GetThumbTexture()) then sl:Hide() sl = nil end
+    if ok and sl then
+        sl:SetPoint("TOPLEFT", x + 6, -(y + 16))
+        sl:SetWidth(200)
+        sl:SetMinMaxValues(25, 200)
+        sl:SetValueStep(5)
+        if sl.SetObeyStepOnDrag then sl:SetObeyStepOnDrag(true) end
+        for _, part in ipairs({ "Low", "High", "Text" }) do
+            local fs = _G["WarpathIconSize" .. part] or sl[part]
+            if fs then fs:SetText(part == "Low" and "25%" or part == "High" and "200%" or "") end
+        end
+        sl:SetScript("OnValueChanged", function(_, v, user)
+            if ctl.loading then Apply(v) return end
+            Apply(v, true)
+        end)
+        function ctl.Set(v) ctl.loading = true sl:SetValue(v) Apply(v) ctl.loading = false end
+    else
+        local minus = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        minus:SetSize(26, 20)
+        minus:SetPoint("TOPLEFT", x + 150, -(y - 3))
+        minus:SetText("-")
+        local plus = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+        plus:SetSize(26, 20)
+        plus:SetPoint("LEFT", minus, "RIGHT", 4, 0)
+        plus:SetText("+")
+        minus:SetScript("OnClick", function() Apply(ctl.value - 10, true) end)
+        plus:SetScript("OnClick", function() Apply(ctl.value + 10, true) end)
+        function ctl.Set(v) Apply(v) end
+    end
+    return ctl
 end
 
 local function BuildMap(s, panel)
@@ -245,9 +329,14 @@ local function BuildMap(s, panel)
         cb:SetPoint("TOPLEFT", (i - 1) % 2 == 0 and 0 or 250, -(L.y + math.floor((i - 1) / 2) * 26))
         s.layers[key] = cb
     end
-    L.y = L.y + math.ceil(#C.LAYERS / 2) * 26 + 8
+    local n = #C.LAYERS + 1
+    s.guildHaze = MakeCheck(panel, "Guildmates' battle haze")
+    s.guildHaze:SetPoint("TOPLEFT", (n - 1) % 2 == 0 and 0 or 250, -(L.y + math.floor((n - 1) / 2) * 26))
+    L.y = L.y + math.ceil(n / 2) * 26 + 8
     s.shimmer = MakeCheck(panel, "Shimmer on well-worn gold roads")
-    L.Place(s.shimmer, 0, 34)
+    s.shimmer:SetPoint("TOPLEFT", 0, -L.y)
+    s.iconScale = IconSize(panel, 250, L.y)
+    L.y = L.y + 40
     L.Heading("HOW LONG THINGS STAY ON THE MAP")
     s.trailHours = MakeRadios(panel, "Today's trail", TRAIL)
     L.Radios(s.trailHours, 18)

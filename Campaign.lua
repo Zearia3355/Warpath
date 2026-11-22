@@ -180,6 +180,13 @@ function Campaign.Summary(c)
     end
     s.shotLo, s.shotHi = lo, hi
 
+    -- the best multi-kill (3.7)
+    local burst, burstZ = 0, nil
+    for _, k in ipairs(c.kl or {}) do
+        if (k.mk or 0) > burst then burst, burstZ = k.mk, k.z end
+    end
+    s.burst, s.burstZone = burst >= 2 and burst or nil, burstZ and MapName(burstZ)
+
     -- The headline: "The Hillsbrad Skirmish".
     local fights = s.kills + s.deaths
     local word = fights == 0 and "Patrol" or fights <= 2 and "Clash" or fights <= 12 and "Skirmish"
@@ -227,6 +234,7 @@ function Campaign.Highlights(s)
     if s.avenged > 0 then settled[#settled + 1] = s.avenged .. (s.avenged == 1 and " death avenged" or " deaths avenged") end
     list[5] = { "Vengeance", #settled > 0 and table.concat(settled, ", ") or nil }
     list[6] = { "Screenshots", s.shotLo and (s.shotLo == s.shotHi and ("#" .. s.shotLo) or ("#" .. s.shotLo .. "\226\128\147#" .. s.shotHi)) }
+    list[7] = { "Best burst", s.burst and (Campaign.Burst(s.burst) .. (s.burstZone and (" in " .. s.burstZone) or "")) }
     return list
 end
 
@@ -238,6 +246,14 @@ local WORDS = { "one", "two", "three", "four", "five", "six", "seven", "eight", 
     "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty" }
 local function Word(n) return WORDS[n] or tostring(n) end
 Campaign.Word = Word
+
+-- "Double kill", "Triple kill", "Quad kill", "Bloodbath of 6"
+function Campaign.Burst(n)
+    if n == 2 then return "Double kill" end
+    if n == 3 then return "Triple kill" end
+    if n == 4 then return "Quad kill" end
+    return "Bloodbath of " .. n
+end
 
 local function Times(n) return n == 1 and "once" or n == 2 and "twice" or (Word(n) .. " times") end
 
@@ -303,6 +319,12 @@ function Campaign.Prose(s)
         else
             out[#out + 1] = ("Your streak of %s was never broken."):format(Word(s.best))
         end
+    end
+    -- the best burst
+    if s.burst then
+        local b = Campaign.Burst(s.burst):lower()
+        out[#out + 1] = ("Your fiercest moment was a %s%s."):format(b,
+            s.burstZone and (" in " .. s.burstZone) or "")
     end
     -- debts paid
     local paid = {}
@@ -419,7 +441,8 @@ function Campaign.Sample()
         bestZone = mapB, bestBy = "Thrall", bestEnded = true, sample = true,
         kl = {
             K("Jaina", "MAGE", mapA, 10500, "first", 1, 41), K("Uther", "PALADIN", mapA, 10200, nil, 2, 42),
-            K("Jaina", "MAGE", mapA, 9000, "streak", 3, 43), K("Varian", "WARRIOR", mapB, 8600, "grudge", 4, 44),
+            (function() local k = K("Jaina", "MAGE", mapA, 9000, "streak", 3, 43) k.mk = 3 return k end)(),
+            (function() local k = K("Varian", "WARRIOR", mapB, 8600, "grudge", 4, 44) k.ft = "payback" return k end)(),
             K("Tyrande", "PRIEST", mapB, 6000, "avenged", 1, 45), K("Jaina", "MAGE", mapB, 5000, nil, 2, 46),
             K("Mathias", "ROGUE", mapA, 3000, "grudge", 3, 47), K("Muradin", "WARRIOR", mapA, 2200, nil, 4, 48),
             K("Genn", "DRUID", mapA, 1200, nil, 1, 49),

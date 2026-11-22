@@ -3,7 +3,7 @@ local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Migrate, Print, Prune, Simplify, VERSION, cur = ns.Migrate, ns.Print, ns.Prune, ns.Simplify, ns.VERSION, ns.cur
 local killCallbacks, outQ, session, Foes, FlushShare, OnComm = ns.killCallbacks, ns.outQ, ns.session, ns.Foes, ns.FlushShare, ns.OnComm
-local CheckFields, FinishShot, OnDeath, Sample, See, CloseStroke = ns.CheckFields, ns.FinishShot, ns.OnDeath, ns.Sample, ns.See, ns.CloseStroke
+local FinishShot, OnDeath, Sample, See, CloseStroke = ns.FinishShot, ns.OnDeath, ns.Sample, ns.See, ns.CloseStroke
 local Redraw, SetupMap, CreateHUD, UpdateHUD, MaybeShowSetup = ns.Redraw, ns.SetupMap, ns.CreateHUD, ns.UpdateHUD, ns.MaybeShowSetup
 local Campaign, Zone, Chronicle = ns.Campaign, ns.Zone, ns.Chronicle
 
@@ -60,6 +60,7 @@ local function RefreshInstance()
     local was = S.inInstance
     S.inInstance = InsideMatch()
     if S.inInstance and cur.stroke then CloseStroke() end
+    if was ~= S.inInstance and ns.Minimap then ns.Minimap.Refresh() end
     if was ~= S.inInstance and db then
         if S.hud then S.hud:SetShown(cfg.hudShown and not S.inInstance) end
         if S.inInstance then
@@ -125,9 +126,15 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
                 end
                 cfg.trailHours = best
             end
+            -- 3.7: dangerous ground replaces killing fields; if those warnings
+            -- were turned off, the new ones start off too.
+            if cfg.groundScreen == nil and cfg.fieldAlert == false then
+                cfg.groundScreen, cfg.groundChat = false, false
+            end
             for k, v in pairs(C.CFG_DEFAULTS) do
                 if cfg[k] == nil then cfg[k] = v end
             end
+            if type(cfg.minimap) ~= "table" then cfg.minimap = { hide = false } end
             cfg.grudge = cfg.grudge or {}
             for k, v in pairs(C.GRUDGE_DEFAULTS) do
                 if cfg.grudge[k] == nil then cfg.grudge[k] = v end
@@ -155,6 +162,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         myFull = myName .. "-" .. (GetNormalizedRealmName() or "")
         ns.faction, ns.foe, ns.myName, ns.myFull = faction, foe, myName, myFull
         ns.Rebind()
+        ns.Phrases.Seed(myFull)
         session.start = time()
         local newCampaign = Campaign.Begin()
         pcall(C_ChatInfo.RegisterAddonMessagePrefix, C.COMM)
@@ -163,21 +171,25 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         SetupMap()
         CreateHUD()
         UpdateHUD()
+        pcall(ns.Minimap.Setup)
         C_Timer.NewTicker(C.SAMPLE_INTERVAL, function()
             tick = tick + 1
             Sample()
-            if tick % 4 == 0 then CheckFields() ns.TownSweep() end
+            if tick % 4 == 0 then ns.Ground.Check() ns.TownSweep() end
             if tick % 2 == 0 then Foes.Track() end
-            if Foes.dead and not UnitIsDeadOrGhost("player") then Foes.dead = false end
+            if UnitAffectingCombat("player") or GetTime() - S.lastCombatEnd < 10 then Foes.ScanDead() end
+            if Foes.dead and not UnitIsDeadOrGhost("player") then Foes.dead = false ns.Feats.OnAlive() end
             if tick % 10 == 0 then RefreshInstance() UpdateHUD() end
-            if tick % 2 == 0 then FlushShare() end
+            if tick % 2 == 0 then FlushShare() elseif #outQ == 0 and cfg.share then ns.Sync.FlushOne() end
             if tick % 1200 == 0 then Prune() end
             if S.dirty and GetTime() - S.lastDraw > 2 then Redraw() end
         end)
         -- The kill-count event can fire while honor data loads; ignore that.
         C_Timer.After(5, function()
             S.ready = true
+            Foes.hk = Foes.ReadHK() -- the honorable-kill counter we count from
             Foes.dead = UnitIsDeadOrGhost("player") and true or false
+            ns.Sync.Start()
             Zone.Enter()
             if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("PvPKillShot") then
                 Print("PvPKillShot is also running, so every kill gets two screenshots. Warpath does its job now: disable or delete PvPKillShot.")
@@ -211,17 +223,22 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             OnDeath()
         end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
-        if not UnitIsDeadOrGhost("player") then Foes.dead = false end
+        if not UnitIsDeadOrGhost("player") then
+            Foes.dead = false
+            ns.Feats.OnAlive()
+        end
     elseif event == "PLAYER_PVP_KILLS_CHANGED" then
         if S.ready and (arg1 == nil or arg1 == "player") then Foes.OnCredit() end
     elseif event == "ZONE_CHANGED_NEW_AREA" then
         RefreshInstance()
         C_Timer.After(1, function() Zone.Enter() UpdateHUD() end)
     elseif event == "PLAYER_TARGET_CHANGED" then
+        Foes.SawDead("target")
         See("target")
         Foes.Track()
         ns.Grudge.OnTarget()
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
+        Foes.SawDead("mouseover")
         See("mouseover")
     elseif event == "NAME_PLATE_UNIT_ADDED" then
         See(arg1)
