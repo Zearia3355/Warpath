@@ -201,10 +201,11 @@ local function InNeutralTown()
     return type(zone) == "string" and NEUTRAL_TOWNS[zone] or false
 end
 
--- Standing in a town marks its map cell as town ground, once. Marking it
--- clears the haze and sighting counts already piled up there (3.6.0's
--- back-fill turned every town into a dark red blot), and sightings shared
--- by guildmates from that cell are ignored from then on.
+-- Standing in a town marks its map cell as town ground, once. Town ground
+-- is hidden, not wiped (3.6.4): its haze isn't drawn and its sighting count
+-- isn't shown in zone stats, but what was recorded there stays saved.
+-- (3.6.1 to 3.6.3 erased it; that is gone.) Sightings shared by guildmates
+-- from that cell are ignored from then on.
 local function TownSweep()
     if S.inInstance or not InNeutralTown() then return end
     local mapID, x, y = PlayerPos()
@@ -214,7 +215,6 @@ local function TownSweep()
     z.town = z.town or {}
     if z.town[c] then return end
     z.town[c] = true
-    z.battle[c], z.sight[c] = nil, nil
     S.dirty = true
 end
 
@@ -282,6 +282,7 @@ local function Fields(mapID)
 end
 
 local function CheckFields()
+    if not cfg.fieldAlert then return end
     if UnitIsDeadOrGhost("player") or UnitOnTaxi("player") then return end
     local mapID, x, y = PlayerPos()
     if not mapID then return end

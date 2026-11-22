@@ -13,9 +13,13 @@ local Zone = {}
 local DOT = " \194\183 "
 local leftAt, shownAt, inZone = {}, {}, nil
 
+-- Neutral-town ground doesn't count: enemies are expected there. The
+-- counts stay saved (3.6.4: hidden, not wiped).
 local function Sighted(z)
-    local n = 0
-    for _, v in pairs(z.sight) do n = n + v end
+    local n, town = 0, z.town or {}
+    for c, v in pairs(z.sight) do
+        if not town[c] then n = n + v end
+    end
     return n
 end
 

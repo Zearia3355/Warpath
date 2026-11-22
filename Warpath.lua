@@ -1,5 +1,5 @@
 
--- Warpath 3.6.3
+-- Warpath 3.6.4
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -99,9 +99,13 @@ local C = {
     TRAIL_CHOICES   = { 2, 4, 7, 12, 24 }, -- hours a stretch walked once stays
     GRUDGE_SEEN     = 900,     -- a grudge sighting stays named on the map this long
     GRUDGE_LOG      = 30,      -- encounters kept per grudge
-    BATTLE_MIN      = 0.5,     -- battle heat below this isn't drawn
-    BATTLE_FULL     = 6,       -- ...and is darkest from here
-    BATTLE_W        = { kill = 1, death = 1, shared = 0.5, sight = 0.25 }, -- heat each event adds
+    BATTLE_MIN      = 0.6,     -- battle heat (spread, below) under this isn't drawn:
+                               -- one kill shows faintly, a lone sighting doesn't
+    BATTLE_FULL     = 4,       -- ...and is darkest from here (was 6 before 3.6.4)
+    BATTLE_SPREAD   = 1.2,     -- each fight also warms the cells around it (Gaussian,
+    BATTLE_REACH    = 2,       -- this many cells each way), so a running fight adds up
+    BATTLE_ALPHA    = { 0.16, 0.42 }, -- faintest and darkest drawn patch (was 0.07-0.32)
+    BATTLE_W        = { kill = 1, death = 1, shared = 0.75, sight = 0.25 }, -- heat each event adds
     CAMPAIGN_GAP    = 7200,    -- back within 2 hours = the same campaign
     CAMPAIGN_KEEP   = 30,
     ZONE_REENTRY    = 1800,    -- zone stats again after 30 minutes away
@@ -127,7 +131,7 @@ local C = {
         sightings = "Recent enemy sightings", shared = "Guild sharing" },
     CFG_DEFAULTS = { sound = true, hudShown = true, quiet = false, share = false, shown = true,
         zoneChat = true, zoneText = true, chronLogin = true, chronOpen = false, shimmer = true,
-        runHours = 24, flightHours = 24 },
+        runHours = 24, flightHours = 24, fieldAlert = true },
     GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
     SHOT_DEFAULTS = { on = true, mode = "all", card = "text", delay = 0.5, combat = true },
 }
@@ -152,7 +156,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.6.3"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.6.4"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -411,6 +415,37 @@ local function AddBattle(mapID, x, y, w)
     S.dirty = true
 end
 
+-- The haze as drawn: each cell's heat plus its neighbours', weighted by
+-- distance (3.6.4). Stored heat stays per cell; the spreading happens here,
+-- so existing history gets it too. Only cells with heat of their own are
+-- returned, so the haze never reaches ground where nothing happened.
+-- Neutral-town ground (z.town) is left out: seeing the enemy there is
+-- expected, so it doesn't haze the map. Its heat stays saved.
+local function BattleField(z)
+    local raw, out, town = {}, {}, z.town or {}
+    for c, e in pairs(z.battle) do
+        local v = not town[c] and Long(e) or 0
+        if v > 0 then raw[c] = v end
+    end
+    local R, k = C.BATTLE_REACH, -1 / (2 * C.BATTLE_SPREAD * C.BATTLE_SPREAD)
+    for c in pairs(raw) do
+        local cx, cy = c % C.SW, math.floor(c / C.SW)
+        local v = 0
+        for dy = -R, R do
+            local y = cy + dy
+            if y >= 0 and y < C.SH then
+                for dx = -R, R do
+                    local x = cx + dx
+                    local n = x >= 0 and x < C.SW and raw[y * C.SW + x]
+                    if n then v = v + n * math.exp(k * (dx * dx + dy * dy)) end
+                end
+            end
+        end
+        out[c] = v
+    end
+    return out
+end
+
 local function RunSeconds(kind)
     return (kind == "f" and cfg.flightHours or cfg.runHours) * 3600
 end
@@ -636,6 +671,7 @@ end
 
 -- Shared with the other files.
 ns.AddBattle = AddBattle
+ns.BattleField = BattleField
 ns.Ago = Ago
 ns.Cell = Cell
 ns.CellXY = CellXY

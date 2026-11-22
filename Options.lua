@@ -1,6 +1,6 @@
 -- Warpath: Options
 -- The options window, with tabs: General, Map, Screenshots, Chronicle & zones, Grudges.
--- Opens once after each install or update; /warpath options any time.
+-- Opens once after each install or update; /warpath setup any time.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Print, VERSION, UpdateHUD = ns.Print, ns.VERSION, ns.UpdateHUD
@@ -77,6 +77,7 @@ end
 local function SetupLoad(s, c)
     s.banners:SetChecked(not c.quiet)
     s.sound:SetChecked(c.sound)
+    s.fields:SetChecked(c.fieldAlert)
     s.hud:SetChecked(c.hudShown)
     s.share:SetChecked(c.share)
     s.shown:SetChecked(c.shown)
@@ -106,6 +107,7 @@ local function On(cb) return cb:GetChecked() and true or false end
 local function SetupSave(s)
     cfg.quiet = not s.banners:GetChecked()
     cfg.sound = On(s.sound)
+    cfg.fieldAlert = On(s.fields)
     cfg.hudShown = On(s.hud)
     cfg.share = On(s.share)
     cfg.shown = On(s.shown)
@@ -220,6 +222,8 @@ local function BuildGeneral(s, panel)
     L.Place(s.banners, 0, 42)
     s.sound = MakeCheck(panel, "Sounds")
     L.Place(s.sound, 0, 34)
+    s.fields = MakeCheck(panel, "Killing-field warnings", "\"You have died here N times\" when you walk onto ground where you keep dying.")
+    L.Place(s.fields, 0, 42)
     L.Heading("WAR TABLE")
     s.hud = MakeCheck(panel, "Show the war table panel", "Kills, deaths, streak and this zone at a glance. Drag to move.")
     L.Place(s.hud, 0, 50)
@@ -430,7 +434,7 @@ local function BuildSetup()
     go:SetScript("OnClick", function()
         SetupSave(s)
         s.MarkSeen()
-        Print("settings saved. /warpath options to change them.")
+        Print("settings saved. /warpath setup to change them.")
         s:Hide()
     end)
     local def = CreateFrame("Button", nil, s, "UIPanelButtonTemplate")

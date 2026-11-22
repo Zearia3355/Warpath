@@ -255,7 +255,14 @@ function H.sound(arg)
     Print("sounds " .. State(v) .. ".")
 end
 
-function H.options()
+function H.fields(arg)
+    local v = OnOff(arg, cfg.fieldAlert)
+    if v == nil then Print("usage: /warpath fields [on|off]") return end
+    cfg.fieldAlert = v
+    Print("killing-field warnings " .. State(v) .. ".")
+end
+
+function H.setup()
     local ok, err = pcall(ShowSetup, false)
     if not ok then Print("the options window failed to open: " .. tostring(err)) end
 end
@@ -319,7 +326,38 @@ function H.clear(arg)
     UpdateHUD()
 end
 
-function H.debug()
+-- /warpath debug haze: the strongest battle-haze spots in this zone, so the
+-- haze can be checked against what you remember.
+local function DebugHaze()
+    local mapID, px, py = PlayerPos()
+    local z = mapID and db.maps[mapID]
+    if not z then Print("no battle haze recorded in this zone.") return end
+    local field, list, stored, drawn = ns.BattleField(z), {}, 0, 0
+    for c, v in pairs(field) do
+        stored = stored + 1
+        if v >= C.BATTLE_MIN then drawn = drawn + 1 end
+        list[#list + 1] = { c = c, v = v, own = ns.Long(z.battle[c]) }
+    end
+    table.sort(list, function(a, b) return a.v > b.v end)
+    local towns = 0
+    for c in pairs(z.town or {}) do if z.battle[c] then towns = towns + 1 end end
+    Print(("battle haze in %s: %d spots with heat, %d drawn (from %.1f, darkest at %d)%s%s")
+        :format(MapName(mapID), stored, drawn, C.BATTLE_MIN, C.BATTLE_FULL,
+            towns > 0 and (" | %d town spots hidden, still saved"):format(towns) or "",
+            cfg.layers.battle and "" or " | the battle layer is OFF"))
+    for i = 1, math.min(5, #list) do
+        local e = list[i]
+        local x, y = ns.CellXY(e.c, C.SW, C.SH)
+        Print(("  %.1f, %.1f: heat %.2f (%.2f on the spot itself)"):format(x * 100, y * 100, e.v, e.own))
+    end
+    if px then
+        local here = field[ns.Cell(px, py, C.SW, C.SH)]
+        Print(("  where you stand (%.1f, %.1f): %s"):format(px * 100, py * 100, here and ("%.2f"):format(here) or "none"))
+    end
+end
+
+function H.debug(arg)
+    if (arg or ""):lower():match("^%s*haze") then DebugHaze() return end
     Print(("in a battleground or instance: %s"):format(S.inInstance and "yes, Warpath is resting" or "no"))
     Print(("in a neutral town: %s (zone PvP type %s, subzone \"%s\")"):format(
         ns.InNeutralTown() and "yes, sightings aren't recorded" or "no",
@@ -370,13 +408,14 @@ local LIST = {
     { nil,         "share test",                    "send a test ping",                   "Guild sharing" },
     { "quiet",     "quiet [on|off]",                "banners become chat lines, no sounds", "Alerts", false, H.quiet },
     { "sound",     "sound [on|off]",                "sounds only",                        "Alerts", false, H.sound },
+    { "fields",    "fields [on|off]",               "killing-field warnings (\"you have died here N times\")", "Alerts", false, H.fields },
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },
-    { "options",   "options",                       "all settings",                       "Settings", true, H.options },
+    { "setup",     "setup",                         "all settings",                       "Settings", true, H.setup },
     { "memory",    "memory <hours> <days>",         "how long today's trail stays; how fast long memory fades", "Settings", false, H.memory },
     { "roads",     "roads <days>",                  "days of use before a road turns gold", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },
-    { "debug",     "debug",                         "what Warpath can and can't see",     "Troubleshooting", false, H.debug },
+    { "debug",     "debug [haze]",                  "what Warpath can and can't see (haze: this zone's battle haze)", "Troubleshooting", false, H.debug },
     { nil,         "share status",                  "guild messages sent, refused, received", "Troubleshooting" },
 }
 local GROUPS = { "Stats", "Map", "Grudges", "Kill screenshots", "Guild sharing", "Alerts", "Settings", "Data", "Troubleshooting" }
@@ -384,7 +423,7 @@ local GROUPS = { "Stats", "Map", "Grudges", "Kill screenshots", "Guild sharing",
 -- Old names keep working. Value: the new command line.
 local ALIASES = {
     stats = "", toggle = "map", hud = "table", revenge = "waypoint death", lastkill = "waypoint kill",
-    setup = "options", config = "options", settings = "options",
+    options = "setup", config = "setup", settings = "setup",
 }
 
 local HANDLERS = {}

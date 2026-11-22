@@ -1,6 +1,36 @@
 Warpath changelog
 
 =====================================================================
+3.6.4
+=====================================================================
+
+- The battle haze actually shows. It was tuned so faint that a fight
+  left nothing you could see: one kill drew at about 9% opacity, and only
+  a spot with six or more fights reached full strength (almost none did).
+- Fighting now adds up across an area: each kill, death or sighting also
+  warms the ground around it, so a fight that moves a few hundred yards
+  builds one patch instead of scattering into specks.
+- Visible from the first fight: one kill or death leaves a faint red
+  patch, a skirmish a clear one, a running battle a dark one. A lone
+  enemy sighting still leaves nothing.
+- Guildmates' kills and deaths count three quarters of yours (was half).
+- Your existing history is redrawn the new way straight away.
+- /warpath debug haze lists this zone's strongest haze spots.
+- Neutral towns are hidden, no longer wiped. Haze and enemy sightings in
+  Booty Bay, Gadgetzan and the like still don't show on the map or in zone
+  stats (enemies are expected there), but what was recorded is kept
+  instead of erased the first time you walk through. (Anything 3.6.1 to
+  3.6.3 already erased can't be brought back.)
+- /warpath setup is the name for the options window again (/warpath
+  options still works).
+- Killing-field warnings ("you have died here N times") can be turned
+  off: options window, General tab, or /warpath fields off. On by default,
+  as before.
+- Your saved data: everything is kept. Nothing is removed or converted;
+  this release only changes how the haze is drawn and what towns show.
+- Includes everything from 3.6.1 to 3.6.3.
+
+=====================================================================
 3.6.3
 =====================================================================
 

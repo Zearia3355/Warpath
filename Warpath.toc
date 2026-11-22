@@ -2,7 +2,7 @@
 ## Title: |cffffd100Warpath|r
 ## Notes: Your war, inked on the map. A battle haze where the fighting is, silver roads that gild to gold, today's footsteps, corpse runs and flights, kill screenshots, skulls and blades, killing fields, enemy sightings, grudges, a shared guild war map, zone records and a chronicle of your campaigns.
 ## Author: Joe + Claude
-## Version: 3.6.3
+## Version: 3.6.4
 ## SavedVariables: WarpathGlobal
 ## SavedVariablesPerCharacter: WarpathDB
 Warpath.lua

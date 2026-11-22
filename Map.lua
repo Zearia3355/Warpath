@@ -307,16 +307,17 @@ end
 
 -- The battle haze: soft patches of one blood red where fighting happens,
 -- drawn with normal blending (never additive, so it can't wash to white),
--- deepening from a faint rust to dark red as fights pile up.
+-- deepening from a faint rust to dark red as fights pile up. Strength comes
+-- from ns.BattleField, which spreads each fight over the cells around it.
 local function DrawHaze(D, scene)
     if not cfg.layers.battle then return end
     local w, h = D.w, D.h
     local span = C.BATTLE_FULL - C.BATTLE_MIN
+    local a0, a1 = C.BATTLE_ALPHA[1], C.BATTLE_ALPHA[2]
     for _, e in ipairs(scene.zones) do
         local z, p = e.z, e.p
         local cell = p.sx * w / C.SW
-        for c, rec in pairs(z.battle) do
-            local v = Long(rec)
+        for c, v in pairs(ns.BattleField(z)) do
             if v >= C.BATTLE_MIN then
                 if D.nd >= C.DOT_BUDGET then break end
                 local t = Clamp((v - C.BATTLE_MIN) / span)
@@ -324,7 +325,7 @@ local function DrawHaze(D, scene)
                 local d = GetDot(D.nd)
                 local x, y = CellXY(c, C.SW, C.SH)
                 d:SetVertexColor(Lerp(0.62, 0.42, t), Lerp(0.20, 0.03, t), Lerp(0.09, 0.02, t))
-                d:SetAlpha(0.07 + 0.25 * t)
+                d:SetAlpha(a0 + (a1 - a0) * t)
                 local size = math.max(6, cell * (2.8 + 1.4 * t))
                 d:SetSize(size, size)
                 At(d, p, x, y, w, h)
