@@ -10,13 +10,12 @@ ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction e
 
 local ShowSetup, MaybeShowSetup, setup
 do
+-- One entry per change; the box wraps them, with a bullet and a hanging indent.
 local NEW_IN = {
-    "Multi-kills and feats: double kill up to Bloodbath (kills within 2 minutes),",
-    "    streak names, Payback, Clutch, Underdog and more, one line per kill,",
-    "    shared with your guild. Your own get big text on screen (General tab).",
-    "Dangerous ground replaces killing fields: dangerous, contested or your hunting ground.",
-    "Guild-wide battle haze: guildmates' fights show on your map (Map tab).",
-    "A minimap button, and map icons that keep their size (Map tab).",
+    "Multi-kills and feats: Double Kill up to Bloodbath, streak names, Payback, Clutch, Underdog and more. One line per kill, shared with your guild, and big text on screen for your own.",
+    "Dangerous ground replaces killing fields: it tells you if ground has been dangerous, contested or your hunting ground.",
+    "Guild-wide battle haze: guildmates' fights show on your map. The haze now counts kills and deaths only.",
+    "A minimap button, and map icons that keep their size when you zoom (Map tab).",
 }
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
@@ -422,8 +421,7 @@ end
 
 local function BuildSetup()
     local s = CreateFrame("Frame", "WarpathSetup", UIParent, "BackdropTemplate")
-    local newH = 26 + #NEW_IN * 15
-    s.newH = newH
+    local TEXT_W = 516 - 12 - 14 - 12  -- box width less padding and the bullet
     s:SetSize(560, 430)
     s:SetPoint("TOP", 0, -90)
     s:SetFrameStrata("DIALOG")
@@ -479,17 +477,31 @@ local function BuildSetup()
     s.newBox:SetBackdropBorderColor(0.55, 0.45, 0.28, 0.9)
     s.newBox:SetPoint("TOPLEFT", 22, -76)
     s.newBox:SetPoint("TOPRIGHT", -22, -76)
-    s.newBox:SetHeight(newH)
     local nh = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    nh:SetPoint("TOPLEFT", 10, -8)
+    nh:SetPoint("TOPLEFT", 12, -10)
     nh:SetText("NEW IN " .. (VERSION:match("^(%d+%.%d+)") or VERSION))
-    local prevLine = nh
+    local y = 10 + 14 + 6
     for _, line in ipairs(NEW_IN) do
+        -- a small gold square as the bullet (a bullet glyph may draw as a box in the game font)
+        local dot = s.newBox:CreateTexture(nil, "ARTWORK")
+        dot:SetColorTexture(1, 0.82, 0, 0.9)
+        dot:SetSize(4, 4)
+        dot:SetPoint("TOPLEFT", 14, -(y + 4))
         local fs = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        fs:SetPoint("TOPLEFT", prevLine, "BOTTOMLEFT", 0, -3)
+        fs:SetPoint("TOPLEFT", 12 + 14, -y)
+        fs:SetWidth(TEXT_W)
+        fs:SetJustifyH("LEFT")
+        fs:SetWordWrap(true)
+        if fs.SetSpacing then fs:SetSpacing(2) end
         fs:SetText(line)
-        prevLine = fs
+        local h = fs:GetStringHeight() or 0
+        if h < 10 then -- not measured yet: estimate from the length
+            h = math.ceil(#line * 5.6 / TEXT_W) * 14
+        end
+        y = y + h + 6
     end
+    s.newH = y + 6
+    s.newBox:SetHeight(s.newH)
     s.welcome = s:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     s.welcome:SetPoint("TOPLEFT", 22, -78)
     s.welcome:SetWidth(516)
