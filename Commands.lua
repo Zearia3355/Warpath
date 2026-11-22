@@ -241,7 +241,7 @@ function H.share(arg)
     if v == nil then Print("usage: /warpath share [on|off] | test | status") return end
     cfg.share = v
     Print(cfg.share
-        and "sharing ON. Guild and party members running Warpath get your enemy sightings, kills and PvP deaths, and you get theirs. Your trail and enemy names are never sent."
+        and "sharing ON. Guild and party members running Warpath get your enemy sightings, kills and PvP deaths (with the enemy's name), and you get theirs. Your trail is never sent."
         or "sharing off.")
     if not cfg.share then
         for i = #shared, 1, -1 do shared[i] = nil end
@@ -270,6 +270,17 @@ function H.fields(arg)
     if v == nil then Print("usage: /warpath fields [on|off]") return end
     cfg.groundScreen, cfg.groundChat, cfg.fieldAlert = v, v, v
     Print("dangerous-ground warnings " .. State(v) .. ".")
+end
+
+-- Every stored pin at full strength, faded or not. Off again at login.
+function H.history(arg)
+    local v = OnOff(arg, S.showAll)
+    if v == nil then Print("usage: /warpath history [on|off]") return end
+    S.showAll = v
+    S.dirty = true
+    Redraw()
+    Print(v and "showing all pin history, faded pins too (until you log out, or /warpath history off)."
+        or "pins fade again: yours over a week, guildmates' over 3 days.")
 end
 
 function H.icons(arg)
@@ -456,6 +467,7 @@ local LIST = {
     { "waypoint",  "waypoint death|kill",           "waypoint to your last death or kill", "Map", false, H.waypoint },
     { "table",     "table [on|off]",                "the war table",                      "Map", false, H.table },
     { "minimap",   "minimap [on|off]",              "the minimap button",                 "Map", false, H.minimap },
+    { "history",   "history [on|off]",              "show every stored pin, faded ones too (off at login)", "Map", false, H.history },
     { "icons",     "icons <25-200>",                "map icon size, in percent",          "Map", false, H.icons },
     { "grudge",    "grudge [name]",                 "hold a grudge (default: your target)", "Grudges", true, H.grudge },
     { nil,         "grudge forgive [name]",         "strike a grudge from your ledger",   "Grudges" },

@@ -1,6 +1,31 @@
 Warpath changelog
 
 =====================================================================
+3.7.4
+=====================================================================
+
+- Map pins fade, so the map doesn't fill up. Calendar time, whether or
+  not you play:
+  Your kills and deaths: full strength for 2 days, then fading over 5
+  (gone after a week).
+  Notable ones take twice as long: avenged deaths, grudge kills, first
+  kills of a player, streaks, multi-kills and feats.
+  Mob and fall deaths (the small grey skulls): gone within a day.
+  Guildmates' kills and deaths: full strength for 2 hours, then fading
+  over 3 days. They're now saved, so they no longer vanish when you log
+  out or /reload.
+- Show all history: draws every stored pin at full strength, faded ones
+  too. Map button right-click menu, the Map tab, or /warpath history
+  [on|off]. It switches itself off at your next login, so fading is
+  always the normal view. A replay still shows every pin.
+- The battle haze, roads and the chronicle keep the long memory; pins are
+  for what happened lately.
+- Your saved data: everything is kept. Fading only hides pins; they stay
+  saved (300 per zone, oldest dropped past that, as before). Guildmates'
+  kills and deaths are now saved too, 300 per zone.
+- Includes 3.7.0 to 3.7.3.
+
+=====================================================================
 3.7.3
 =====================================================================
 

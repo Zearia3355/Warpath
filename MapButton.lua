@@ -88,6 +88,9 @@ local function LayerMenu(owner)
             checked = function() return cfg.layers[key] end,
             func = function() SetLayer(key, not cfg.layers[key]) end }
     end
+    items[#items + 1] = { text = "Show all history (faded pins too)",
+        checked = function() return S.showAll end,
+        func = function() S.showAll = not S.showAll S.dirty = true ns.Redraw() end }
     table.insert(items, 2, { text = "Guildmates' battle haze",
         checked = function() return cfg.guildHaze end,
         func = function() cfg.guildHaze = not cfg.guildHaze S.dirty = true ns.Redraw() end })

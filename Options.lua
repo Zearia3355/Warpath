@@ -86,6 +86,7 @@ local function SetupLoad(s, c)
     s.share:SetChecked(c.share)
     s.shareHistory:SetChecked(c.shareHistory)
     s.shown:SetChecked(c.shown)
+    s.showAll:SetChecked(c == cfg and S.showAll or false)
     for key, cb in pairs(s.layers) do cb:SetChecked(c.layers[key]) end
     s.guildHaze:SetChecked(c.guildHaze)
     s.iconScale.Set(c.iconScale or 100)
@@ -125,6 +126,7 @@ local function SetupSave(s)
     cfg.share = On(s.share)
     cfg.shareHistory = On(s.shareHistory)
     cfg.shown = On(s.shown)
+    if S.showAll ~= On(s.showAll) then S.showAll = On(s.showAll) S.dirty = true end
     for key, cb in pairs(s.layers) do cfg.layers[key] = On(cb) end
     cfg.guildHaze = On(s.guildHaze)
     cfg.iconScale = s.iconScale.value or 100
@@ -320,6 +322,8 @@ local function BuildMap(s, panel)
     local L = Layout(panel)
     s.shown = MakeCheck(panel, "Show Warpath on the world map",
         "Same as the crossed-swords button in the map's top-right corner. Recording never stops.")
+    s.showAll = MakeCheck(panel, "Show all pin history")
+    s.showAll:SetPoint("TOPLEFT", 300, -L.y)
     L.Place(s.shown, 0, 46)
     L.Heading("LAYERS")
     s.layers = {}

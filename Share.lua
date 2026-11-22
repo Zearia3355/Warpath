@@ -135,11 +135,18 @@ local function OnComm(prefix, text, channel, sender)
     end
 
     local full = FullSender(sender)
-    if #shared >= 200 then table.remove(shared, 1) end
-    shared[#shared + 1] = {
-        kind = kind, mapID = mapID, x = x, y = y, t = time(), from = from,
-        expire = time() + (kind == "S" and C.SIGHT_LIVE or C.SHARED_DEATH),
-    }
+    if kind == "S" then
+        if #shared >= 200 then table.remove(shared, 1) end
+        shared[#shared + 1] = { kind = kind, mapID = mapID, x = x, y = y, t = time(), from = from,
+            expire = time() + C.SIGHT_LIVE }
+    else
+        -- Kills and deaths are saved (3.7.4), so they can fade over 3 days
+        -- instead of vanishing at logout. 300 per zone, oldest dropped.
+        local z = ns.ZoneData(mapID)
+        z.gmarks = z.gmarks or {}
+        z.gmarks[#z.gmarks + 1] = { kind = kind, x = x, y = y, t = time(), from = from, full = full }
+        while #z.gmarks > C.GMARK_CAP do table.remove(z.gmarks, 1) end
+    end
     S.dirty = true
     -- A guildmate's kills and deaths go into their own layer of the haze
     -- (3.7), never into yours; deaths also into their dangerous ground.

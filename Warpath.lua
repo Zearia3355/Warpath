@@ -1,5 +1,5 @@
 
--- Warpath 3.7.3
+-- Warpath 3.7.4
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -123,6 +123,19 @@ local C = {
     ZONE_REENTRY    = 1800,    -- zone stats again after 30 minutes away
     SHARE_COOLDOWN  = 5,
     DAY             = 86400,
+    -- Map pins fade (3.7.4), on the calendar: yours stay full for 2 days and
+    -- fade over the next 5; notable ones (avenged, grudge, first kill of a
+    -- player, streaks, multi-kills, feats) take twice as long; mob and fall
+    -- deaths are gone within a day. Guildmates' kills and deaths stay full
+    -- for 2 hours and fade over 3 days. Fading only hides: every pin stays
+    -- saved (300 per zone each), and "Show all history" draws them all.
+    PIN_FULL        = 2 * 86400,
+    PIN_FADE        = 5 * 86400,
+    PIN_NOTABLE     = 2,
+    PIN_MINOR       = 43200,   -- mob/fall deaths: full 12 h, fade 12 h
+    GPIN_FULL       = 7200,
+    GPIN_FADE       = 3 * 86400,
+    GMARK_CAP       = 300,
     TEX_SKULL  = "Interface\\TargetingFrame\\UI-TargetingFrame-Skull",
     TEX_BLADES = "Interface\\CURSOR\\Attack",
     TEX_GLOW   = "Interface\\Cooldown\\star4",
@@ -155,7 +168,8 @@ ns.C = C
 
 -- State that several files read and change.
 local S = { inInstance = false, ready = false, dirty = false, lastDraw = 0,
-    lastCombatEnd = -1000, setupWaiting = false, hud = nil }
+    lastCombatEnd = -1000, setupWaiting = false, hud = nil,
+    showAll = false } -- "Show all history": off at every login
 ns.S = S
 
 -- Saved data and who you are. Set at load and login by Events.lua, then
@@ -171,7 +185,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.3"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.4"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -251,6 +265,27 @@ local function NoteSent(text)
     local now = GetTime()
     sentRecent[text] = now
     for k, t in pairs(sentRecent) do if now - t > 15 then sentRecent[k] = nil end end
+end
+
+-- How much of a pin still shows (1 = full, 0 = faded out). Calendar time.
+local function Ease(t) return 0.5 * (1 + math.cos(math.pi * t)) end
+local function Fade(age, full, fade)
+    if age <= full then return 1 end
+    if age >= full + fade then return 0 end
+    return Ease((age - full) / fade)
+end
+-- Your own kill or death mark.
+local function MarkFade(m, now)
+    if S.showAll then return 1 end
+    local age = now - (m[3] or now)
+    if m[4] == "death" and not m.pvp then return Fade(age, C.PIN_MINOR, C.PIN_MINOR) end
+    local k = (m.av or m.tag or m.mk or m.ft) and C.PIN_NOTABLE or 1
+    return Fade(age, C.PIN_FULL * k, C.PIN_FADE * k)
+end
+-- A guildmate's kill or death.
+local function GuildFade(g, now)
+    if S.showAll then return 1 end
+    return Fade(now - (g.t or now), C.GPIN_FULL, C.GPIN_FADE)
 end
 
 local function Clamp01(v) return v < 0 and 0 or (v > 0.9999 and 0.9999 or v) end
@@ -844,6 +879,8 @@ local function Migrate()
 end
 
 -- Shared with the other files.
+ns.MarkFade = MarkFade
+ns.GuildFade = GuildFade
 ns.IsMe = IsMe
 ns.IsEcho = IsEcho
 ns.NoteSent = NoteSent

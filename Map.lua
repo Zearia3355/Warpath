@@ -653,15 +653,17 @@ local function DrawMarks(D, scene, from, upTo)
     if L.marks then
         for _, e in ipairs(scene.zones) do
             for _, m in ipairs(e.z.marks) do
-                if m[3] >= from and m[3] <= upTo then
+                -- faded pins are hidden, not deleted (a replay shows them all)
+                local f = D.replay and 1 or ns.MarkFade(m, now)
+                if f >= 0.03 and m[3] >= from and m[3] <= upTo then
                     if m[4] == "kill" then
-                        Pin("kill", m, e.p, m[1], m[2], C.TEX_BLADES, base)
+                        Pin("kill", m, e.p, m[1], m[2], C.TEX_BLADES, base, 1, 1, 1, f)
                     elseif not m.pvp then
-                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base * 0.7, 0.6, 0.6, 0.6, 0.5)
+                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base * 0.7, 0.6, 0.6, 0.6, 0.5 * f)
                     elseif m.av then
-                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base, 1, 0.82, 0.2)
+                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base, 1, 0.82, 0.2, f)
                     else
-                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base)
+                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base, 1, 1, 1, f)
                     end
                 end
             end
@@ -685,13 +687,20 @@ local function DrawMarks(D, scene, from, upTo)
     if L.shared then
         for _, s in ipairs(shared) do
             local p = Proj(scene, s.mapID)
-            if p and s.expire >= now then
-                if s.kind == "S" then
-                    Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 0.85 - 0.45 * math.min(1, (now - s.t) / C.SIGHT_LIVE))
-                elseif s.kind == "K" then
-                    Pin("skill", s, p, s.x, s.y, C.TEX_BLADES, base * 1.15, 0.55, 0.8, 1, 1)
-                else
-                    Pin("sdeath", s, p, s.x, s.y, C.TEX_SKULL, base * 1.1, 0.55, 0.8, 1, 1)
+            if p and s.expire >= now and s.kind == "S" then
+                Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 0.85 - 0.45 * math.min(1, (now - s.t) / C.SIGHT_LIVE))
+            end
+        end
+        -- guildmates' kills and deaths: full for 2 hours, then fading over 3 days
+        for _, e in ipairs(scene.zones) do
+            for _, g in ipairs(e.z.gmarks or {}) do
+                local f = ns.GuildFade(g, now)
+                if f >= 0.03 then
+                    if g.kind == "K" then
+                        Pin("skill", g, e.p, g.x, g.y, C.TEX_BLADES, base * 1.15, 0.55, 0.8, 1, f)
+                    else
+                        Pin("sdeath", g, e.p, g.x, g.y, C.TEX_SKULL, base * 1.1, 0.55, 0.8, 1, f)
+                    end
                 end
             end
         end
