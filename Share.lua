@@ -8,7 +8,7 @@ ns.OnBind(function()
     db, gdb, cfg, faction, foe, myName, myFull = ns.db, ns.gdb, ns.cfg, ns.faction, ns.foe, ns.myName, ns.myFull
 end)
 
-local shareSeen, senderSeen = {}, {}
+local shareSeen, senderSeen, dupSeen, lastSweep = {}, {}, {}, 0
 
 ---------------------------------------------------------------------------
 -- Sharing (opt in). Sends only: an enemy was seen here / I died to PvP here.
@@ -19,7 +19,10 @@ local shareStats = { sent = 0, refused = 0, got = 0, lastRefusal = nil }
 
 local function Share(kind, mapID, x, y, force)
     if not cfg.share then return end
-    if not force then
+    -- Sightings: at most one per map cell a minute. Kills and deaths are
+    -- always sent (until 3.6.1 a second kill or death in the same spot
+    -- within a minute was silently not shared).
+    if kind == "S" and not force then
         local key = kind .. mapID .. ":" .. Cell(x, y, C.SW, C.SH)
         local now = GetTime()
         if shareSeen[key] and now - shareSeen[key] < 60 then return end
@@ -57,21 +60,57 @@ local function FlushShare()
     end
 end
 
+-- The zone a map belongs to: a cave, town or other sub-map counts as its
+-- zone, so "in your zone" holds when one of you is in a sub-map.
+local function ZoneOf(mapID)
+    local zoneType = Enum and Enum.UIMapType and Enum.UIMapType.Zone or 3
+    for _ = 1, 5 do
+        if not mapID or Secret(mapID) then return nil end
+        local info = C_Map.GetMapInfo(mapID)
+        if not info or not info.mapType or info.mapType <= zoneType
+            or not info.parentMapID or info.parentMapID == 0 then return mapID end
+        mapID = info.parentMapID
+    end
+    return mapID
+end
+
 local function OnComm(prefix, text, _, sender)
     if prefix ~= C.COMM or not cfg.share or S.inInstance then return end
     if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then return end
     if sender == myFull or Ambiguate(sender, "short") == myName then return end
     local now = GetTime()
-    if senderSeen[sender] and now - senderSeen[sender] < 3 then return end -- per-sender rate limit
-    senderSeen[sender] = now
+    -- The same message arrives twice from a guildmate who is also in your
+    -- group (GUILD and PARTY/RAID): keep the first copy.
+    local key = sender .. "\031" .. text
+    if dupSeen[key] and now - dupSeen[key] < 10 then return end
+    dupSeen[key] = now
 
     local sep = text:find(";", 1, true) and ";" or "|" -- 3.3.0 used "|"
     local ver, kind, mapID, x, y = strsplit(sep, text)
+    -- Flood guard for sightings only: at most 6 per sender per 10 seconds.
+    -- Kills, deaths and test pings always get through (the sender already
+    -- limits them). Until 3.6.1 a 3-second limit on every message dropped
+    -- kills that came right after a sighting, which in a fight is most of them.
+    if kind == "S" then
+        local b = senderSeen[sender]
+        if not b or now - b.t >= 10 then b = { t = now, n = 0 } senderSeen[sender] = b end
+        if b.n >= 6 then return end
+        b.n = b.n + 1
+    end
+    if now - lastSweep > 60 then
+        lastSweep = now
+        for k, t in pairs(dupSeen) do if now - t >= 10 then dupSeen[k] = nil end end
+        for k, b in pairs(senderSeen) do if now - b.t >= 10 then senderSeen[k] = nil end end
+    end
     mapID, x, y = tonumber(mapID), tonumber(x), tonumber(y)
     if ver ~= C.PROTO or (kind ~= "S" and kind ~= "D" and kind ~= "K" and kind ~= "T") then return end
     if not mapID or not x or not y or x < 0 or x > 1 or y < 0 or y > 1 then return end
     if not C_Map.GetMapInfo(mapID) then return end
     shareStats.got = shareStats.got + 1
+    if kind == "S" then -- a sighting in a neutral town you've walked through
+        local z = db.maps[mapID]
+        if z and z.town and z.town[Cell(x, y, C.SW, C.SH)] then return end
+    end
     local from = Ambiguate(sender, "short")
 
     if kind == "T" then -- a test ping: always announced, shown for two minutes
@@ -89,7 +128,7 @@ local function OnComm(prefix, text, _, sender)
     S.dirty = true
     if kind == "K" or kind == "D" then ns.AddBattle(mapID, x, y, C.BATTLE_W.shared) end
     -- Kills and deaths get a chat line in your zone; sightings are map-only.
-    if kind ~= "S" and mapID == C_Map.GetBestMapForUnit("player") then
+    if kind ~= "S" and ZoneOf(mapID) == ZoneOf(C_Map.GetBestMapForUnit("player")) then
         Print(("%s %s in %s."):format(from, kind == "K" and "scored a kill" or "was killed", MapName(mapID)))
     end
 end

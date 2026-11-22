@@ -175,7 +175,7 @@ function UpdateHUD()
         end
         local fields = #Fields(mapID)
         if seen > 0 then
-            S.hud.rows[4]:SetText(("|cffff8000%d enem%s seen in the last 5 min|r"):format(seen, seen == 1 and "y" or "ies"))
+            S.hud.rows[4]:SetText(("|cffff8000%d enem%s seen (5 min)|r"):format(seen, seen == 1 and "y" or "ies"))
         elseif fields > 0 then
             S.hud.rows[4]:SetText(("|cffff4030%d killing field%s here|r"):format(fields, fields == 1 and "" or "s"))
         else

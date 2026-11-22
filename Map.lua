@@ -246,6 +246,8 @@ local function PinClick(self, button)
         or self.kind == "grudge" and ("where you saw " .. (d.short or "a grudge")) or "a fallen ally")
 end
 
+local PIN_LEVEL = { sight = 1, kill = 3, death = 3, skill = 4, sdeath = 4, grudge = 6 }
+
 local function GetPin(i)
     local f = pins[i]
     if not f then
@@ -614,6 +616,9 @@ local function DrawMarks(D, scene, from, upTo)
             f.label:Hide()
         end
         f.tex:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
+        -- Stack by kind, not draw order: sightings at the bottom, kills and
+        -- deaths above them, grudges on top.
+        f:SetFrameLevel(overlay:GetFrameLevel() + (PIN_LEVEL[kind] or 2))
         f:SetSize(size, size)
         At(f, p, x, y, w, h)
         f:Show()
@@ -655,11 +660,11 @@ local function DrawMarks(D, scene, from, upTo)
             local p = Proj(scene, s.mapID)
             if p and s.expire >= now then
                 if s.kind == "S" then
-                    Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 0.85)
+                    Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 0.85 - 0.45 * math.min(1, (now - s.t) / C.SIGHT_LIVE))
                 elseif s.kind == "K" then
-                    Pin("skill", s, p, s.x, s.y, C.TEX_BLADES, base * 0.9, 0.6, 0.8, 1, 0.9)
+                    Pin("skill", s, p, s.x, s.y, C.TEX_BLADES, base * 1.15, 0.55, 0.8, 1, 1)
                 else
-                    Pin("sdeath", s, p, s.x, s.y, C.TEX_SKULL, base, 0.6, 0.8, 1, 0.9)
+                    Pin("sdeath", s, p, s.x, s.y, C.TEX_SKULL, base * 1.1, 0.55, 0.8, 1, 1)
                 end
             end
         end

@@ -1,6 +1,37 @@
 Warpath changelog
 
 =====================================================================
+3.6.1
+=====================================================================
+
+Guild sharing
+- Guildmates' kills and deaths no longer go missing. A message that came
+  within 3 seconds of that guildmate's previous one was thrown away, so a
+  kill right after a sighting (most kills) was lost, chat line and all.
+  Now only exact duplicates (the same message by guild and by party) are
+  dropped, and kills and deaths always get through.
+- A second kill or death in the same spot within a minute is now shared
+  too (only sightings are held to one a minute per spot).
+- Guildmates' kills and deaths are drawn above sighting crests, a little
+  bigger, so a sword is no longer hidden under the crests of its own
+  fight. Shared sighting crests fade over their 15 minutes like your own.
+- The "scored a kill / was killed" chat line counts a cave or town inside
+  your zone as your zone.
+- Guildmates need 3.6.1 too: the fix is on the receiving end.
+
+Neutral towns
+- In Booty Bay, Gadgetzan, Ratchet, Everlook, Light's Hope and other
+  neutral towns, enemy players aren't recorded as sightings: no crests,
+  no war table count, no haze, nothing shared, no zone-stat count. Kills,
+  deaths and grudge alerts still work there.
+- The haze and sighting counts that had piled up over a town are cleared
+  as you walk through it, and guildmates' sightings from there are ignored.
+- /warpath debug says whether Warpath thinks you're in a neutral town.
+
+War table
+- "4 enemies seen (5 min)" instead of a line cut off by the skull button.
+
+=====================================================================
 3.6.0
 =====================================================================
 

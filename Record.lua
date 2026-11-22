@@ -176,6 +176,48 @@ local function Sample()
     S.dirty = true
 end
 
+---------------------------------------------------------------------------
+-- Neutral towns (Booty Bay, Gadgetzan, Ratchet...): the other faction is
+-- everywhere (auction house, boats, flight masters) and nobody fights, so
+-- sightings there aren't recorded, shared, counted or added to the haze.
+-- Kills, deaths and grudge alerts still work. English names; sanctuaries
+-- are caught by the game's own zone PvP type in any language.
+---------------------------------------------------------------------------
+
+local NEUTRAL_TOWNS = {
+    ["Booty Bay"] = true, ["The Salty Sailor Tavern"] = true, ["Gadgetzan"] = true,
+    ["Ratchet"] = true, ["Everlook"] = true, ["Light's Hope Chapel"] = true,
+    ["Cenarion Hold"] = true, ["Thorium Point"] = true, ["Steamwheedle Port"] = true,
+    ["Mudsprocket"] = true, ["Shattrath City"] = true, ["Area 52"] = true,
+    ["The Stormspire"] = true, ["Dalaran"] = true,
+}
+
+local function InNeutralTown()
+    local kind = GetZonePVPInfo and Foes.Safe(GetZonePVPInfo)
+    if kind == "sanctuary" then return true end
+    local sub = GetSubZoneText and Foes.Safe(GetSubZoneText)
+    if type(sub) == "string" and NEUTRAL_TOWNS[sub] then return true end
+    local zone = GetZoneText and Foes.Safe(GetZoneText)
+    return type(zone) == "string" and NEUTRAL_TOWNS[zone] or false
+end
+
+-- Standing in a town marks its map cell as town ground, once. Marking it
+-- clears the haze and sighting counts already piled up there (3.6.0's
+-- back-fill turned every town into a dark red blot), and sightings shared
+-- by guildmates from that cell are ignored from then on.
+local function TownSweep()
+    if S.inInstance or not InNeutralTown() then return end
+    local mapID, x, y = PlayerPos()
+    if not mapID then return end
+    local z = ZoneData(mapID)
+    local c = Cell(x, y, C.SW, C.SH)
+    z.town = z.town or {}
+    if z.town[c] then return end
+    z.town[c] = true
+    z.battle[c], z.sight[c] = nil, nil
+    S.dirty = true
+end
+
 local function See(unit)
     if S.inInstance or not S.ready then return end
     if Foes.Safe(UnitIsDeadOrGhost, unit) == true then return end
@@ -193,6 +235,7 @@ local function See(unit)
     if not full then return end
 
     ns.Grudge.OnSighted(full, short, class)
+    if InNeutralTown() then return end
 
     if sightSeen[full] and now - sightSeen[full] < C.SIGHT_DEDUPE then return end
     sightSeen[full] = now
@@ -635,3 +678,6 @@ ns.OnDeath = OnDeath
 ns.Sample = Sample
 ns.See = See
 ns.TakeKillShot = TakeKillShot
+
+ns.InNeutralTown = InNeutralTown
+ns.TownSweep = TownSweep

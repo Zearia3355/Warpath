@@ -320,6 +320,9 @@ end
 
 function H.debug()
     Print(("in a battleground or instance: %s"):format(S.inInstance and "yes, Warpath is resting" or "no"))
+    Print(("in a neutral town: %s (zone PvP type %s, subzone \"%s\")"):format(
+        ns.InNeutralTown() and "yes, sightings aren't recorded" or "no",
+        tostring(GetZonePVPInfo and Foes.Safe(GetZonePVPInfo)), tostring(GetSubZoneText and Foes.Safe(GetSubZoneText))))
     Print(("version %s | data v%s | options seen %s | install %s | PvPKillShot loaded %s")
         :format(VERSION, tostring(db.v), tostring(gdb.seenVersion), tostring(gdb.installed),
             tostring(C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("PvPKillShot"))))

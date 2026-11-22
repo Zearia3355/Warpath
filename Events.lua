@@ -166,7 +166,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         C_Timer.NewTicker(C.SAMPLE_INTERVAL, function()
             tick = tick + 1
             Sample()
-            if tick % 4 == 0 then CheckFields() end
+            if tick % 4 == 0 then CheckFields() ns.TownSweep() end
             if tick % 2 == 0 then Foes.Track() end
             if Foes.dead and not UnitIsDeadOrGhost("player") then Foes.dead = false end
             if tick % 10 == 0 then RefreshInstance() UpdateHUD() end
