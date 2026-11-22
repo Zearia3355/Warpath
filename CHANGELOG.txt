@@ -1,6 +1,34 @@
 Warpath changelog
 
 =====================================================================
+3.7.1
+=====================================================================
+
+- Fixed: chat filling with "No player named 'Lethality Starunner-' is
+  currently playing". WoW Forever gives names as "First Last" with no
+  realm, so Warpath didn't recognise its own guild messages echoing back,
+  took itself for a guildmate, and whispered its battle history to a
+  misspelt copy of your name, one failed whisper per message. Your own
+  messages are now recognised however the name is written, whispers go to
+  the name exactly as the game gives it, and if the game says a player
+  isn't online, whatever was queued for them is dropped.
+- The same echo meant your own kills and deaths could come back as a
+  guildmate's (a chat line about yourself, and a second copy in the
+  haze). That's fixed too, and 3.7.0's copy of you is removed.
+- The battle haze is rebuilt from your kills and deaths only. The old
+  haze had enemy sightings mixed in (3.6 counted each a quarter of a
+  kill) plus your own echoed fights counted again, so ground where you
+  died once and saw a lot of enemies looked like a war zone. In the
+  Hinterlands: one death and 24 sightings had become a dark patch; now
+  it's one faint patch at your skull.
+
+Your saved data: kept. The old haze is saved alongside, hidden, not
+deleted. The only thing removed is 3.7.0's copy of your own fights filed
+as if from a guildmate.
+
+Includes 3.7.0.
+
+=====================================================================
 3.7.0
 =====================================================================
 

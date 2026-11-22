@@ -44,6 +44,8 @@ local function Dec(str)
 end
 
 local function Send(msg, target)
+    if target and ns.IsMe(target) then return end
+    if not target then ns.NoteSent(msg) end
     local ok, res = pcall(C_ChatInfo.SendAddonMessage, C.COMM, msg, target and "WHISPER" or "GUILD", target)
     if ok and (res == nil or res == true or res == 0) then Sync.stats.sentMsgs = Sync.stats.sentMsgs + 1 end
 end
@@ -135,8 +137,18 @@ local function OnHistory(text, sender)
 end
 
 function Sync.OnMessage(text, sender, channel)
-    if sender == myFull then return end
+    if ns.IsMe(sender) then return end
     if text:sub(3, 3) == "H" then OnHello(text, sender, channel) else OnHistory(text, sender) end
+end
+
+-- The game said a whisper's target isn't online: drop what's queued for them.
+function Sync.Unreachable(name)
+    local n = 0
+    for i = #Sync.queue, 1, -1 do
+        local to = Sync.queue[i].to
+        if to == name or to == name .. "-" or (to:gsub("%-$", "")) == name then table.remove(Sync.queue, i) n = n + 1 end
+    end
+    return n
 end
 
 -- /warpath share sync: ask every guildmate for everything again.

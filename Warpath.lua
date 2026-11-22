@@ -1,5 +1,5 @@
 
--- Warpath 3.7.0
+-- Warpath 3.7.1
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -171,7 +171,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.0"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.1"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -222,6 +222,35 @@ local function PlayerPos()
     local x, y = pos:GetXY()
     if not x or Secret(x) or Secret(y) or (x == 0 and y == 0) then return end
     return mapID, x, y
+end
+
+-- Is an addon-message sender you? On WoW Forever a character's name comes
+-- back as "First Last" (with a space) and the realm reads as empty, so the
+-- plain "Name-Realm" test missed your own guild messages echoing back (3.7.1).
+-- Compared without spaces, dashes or case against every form of your name.
+local sentRecent = {}  -- text -> when you sent it (guild echo check)
+local function Norm(s) return (tostring(s or ""):gsub("[%s%-]", ""):lower()) end
+local function IsMe(sender)
+    local n = Norm(sender)
+    if n == "" then return false end
+    local me = ns.myName
+    if n == Norm(me) or n == Norm(ns.myFull) or n == Norm(UnitName and UnitName("player")) then return true end
+    local ok, a, b = pcall(UnitFullName, "player")
+    if ok and type(a) == "string" and n == Norm(a .. (type(b) == "string" and b or "")) then return true end
+    return false
+end
+-- A message you sent in the last 15 seconds, back from a sender whose name
+-- begins with yours: your own guild message echoing back.
+local function IsEcho(text, sender)
+    local t = sentRecent[text]
+    if not t or GetTime() - t > 15 then return false end
+    local me = Norm(ns.myName)
+    return me ~= "" and Norm(sender):sub(1, #me) == me
+end
+local function NoteSent(text)
+    local now = GetTime()
+    sentRecent[text] = now
+    for k, t in pairs(sentRecent) do if now - t > 15 then sentRecent[k] = nil end end
 end
 
 local function Clamp01(v) return v < 0 and 0 or (v > 0.9999 and 0.9999 or v) end
@@ -763,8 +792,33 @@ local function MigrateToV8()
     db.v = 8
 end
 
+-- 3.7.1 (db.v 9): the haze rebuilt from your kill and death marks, which is
+-- all 3.7 counts. The old haze had enemy sightings (3.6 counted each one a
+-- quarter of a kill) and your own guild messages echoing back (counted again
+-- as a guildmate's) mixed in, so a spot where you once died and saw a lot of
+-- enemies read as a war zone. The old haze is kept as z.battleOld, hidden.
+local function MigrateToV9()
+    local now, half = time(), db.longDays * C.DAY
+    for _, z in pairs(db.maps) do
+        if z.battleOld == nil then z.battleOld = z.battle or {} end
+        local heat = {}
+        for _, m in ipairs(z.marks or {}) do
+            if m[4] == "kill" or m.pvp then
+                local c = Cell(m[1], m[2], C.SW, C.SH)
+                local age = math.max(0, now - (m[3] or now))
+                heat[c] = (heat[c] or 0) + 2 ^ (-age / half)
+            end
+        end
+        z.battle = {}
+        for c, l in pairs(heat) do
+            if l >= 0.05 then z.battle[c] = { l = l, tl = PlayNow(), ts = now } end
+        end
+    end
+    db.v = 9
+end
+
 local function Migrate()
-    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 and db.v ~= 8 then MigrateToV4() end
+    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 and db.v ~= 8 and db.v ~= 9 then MigrateToV4() end
     if db.v == 4 then
         local ok, err = pcall(MigrateToV5)
         if not ok then
@@ -781,11 +835,18 @@ local function Migrate()
         local ok, err = pcall(MigrateToV8)
         if not ok then Print("the 3.7 upgrade hit an error, so dangerous ground starts empty: " .. tostring(err)) db.v = 8 end
     end
+    if db.v == 8 then
+        local ok, err = pcall(MigrateToV9)
+        if not ok then Print("the 3.7.1 haze rebuild hit an error, so the haze is as it was: " .. tostring(err)) db.v = 9 end
+    end
     for _, z in pairs(db.maps) do ZoneFields(z) end
     db.campaigns = db.campaigns or {}
 end
 
 -- Shared with the other files.
+ns.IsMe = IsMe
+ns.IsEcho = IsEcho
+ns.NoteSent = NoteSent
 ns.AddBattle = AddBattle
 ns.AddDeathHeat = AddDeathHeat
 ns.AddHeat = AddHeat

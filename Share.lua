@@ -46,6 +46,7 @@ end
 -- C_ChatInfo.SendAddonMessage returns true/false on older clients and a
 -- result code (0 = success) on newer ones.
 local function SendOne(msg, channel)
+    ns.NoteSent(msg)
     local ok, res = pcall(C_ChatInfo.SendAddonMessage, C.COMM, msg, channel)
     if ok and (res == nil or res == true or res == 0) then
         shareStats.sent = shareStats.sent + 1
@@ -70,16 +71,21 @@ local function FlushShare()
     end
 end
 
--- "Name-Realm" for a sender (same-realm senders can arrive without the realm).
+-- The sender as one key: "Name-Realm", or the name exactly as the client
+-- gives it when there's no realm to add (WoW Forever: "First Last").
+-- 3.7.0 appended an empty realm ("First Last-"), so whispers back failed.
 local function FullSender(sender)
-    if sender:find("-", 1, true) then return sender end
-    return sender .. "-" .. (GetNormalizedRealmName() or "")
+    if sender:find("-", 1, true) or sender:find(" ", 1, true) then return sender end
+    local realm = GetNormalizedRealmName and GetNormalizedRealmName()
+    if type(realm) == "string" and realm ~= "" then return sender .. "-" .. realm end
+    return sender
 end
+ns.FullSender = FullSender
 
 local function OnComm(prefix, text, channel, sender)
     if prefix ~= C.COMM or not cfg.share or S.inInstance then return end
     if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then return end
-    if sender == myFull or Ambiguate(sender, "short") == myName then return end
+    if sender == myFull or Ambiguate(sender, "short") == myName or ns.IsMe(sender) or ns.IsEcho(text, sender) then return end
     -- battle-haze sync (3.7): hellos and history
     local head = text:sub(1, 4)
     if head == C.PROTO .. "|H|" or head == C.PROTO .. "|B|" then

@@ -82,8 +82,34 @@ for _, ev in ipairs({
     "ZONE_CHANGED_NEW_AREA", "PLAYER_TARGET_CHANGED", "UPDATE_MOUSEOVER_UNIT", "NAME_PLATE_UNIT_ADDED",
     "NAME_PLATE_UNIT_REMOVED",
     "CHAT_MSG_ADDON", "PLAYER_REGEN_ENABLED", "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED",
-    "PLAYER_ALIVE", "PLAYER_UNGHOST", "PVP_MATCH_ACTIVE", "PVP_MATCH_COMPLETE",
+    "PLAYER_ALIVE", "PLAYER_UNGHOST", "PVP_MATCH_ACTIVE", "PVP_MATCH_COMPLETE", "CHAT_MSG_SYSTEM",
 }) do f:RegisterEvent(ev) end
+
+-- "No player named '%s' is currently playing." as a pattern.
+local notFound
+local function NotFoundName(msg)
+    if not notFound then
+        local fmt = ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing."
+        notFound = "^" .. fmt:gsub("([%(%)%.%[%]%*%+%-%?%^%$])", "%%%1"):gsub("%%s", "(.+)") .. "$"
+    end
+    return type(msg) == "string" and msg:match(notFound)
+end
+
+-- 3.7.1: forget battle-history layers 3.7.0 filed under your own name (your
+-- guild messages echoing back), and what it "sent" to you. They were a
+-- second copy of your own kills and deaths, not anyone else's history.
+local function DropSelfLayers()
+    for _, z in pairs(db.maps) do
+        for _, key in ipairs({ "guildBattle", "guildDeaths" }) do
+            for who in pairs(z[key] or {}) do
+                if ns.IsMe(who) or ns.IsMe((who:gsub("%-$", ""))) then z[key][who] = nil end
+            end
+        end
+    end
+    for who in pairs(db.syncSent or {}) do
+        if ns.IsMe(who) or ns.IsMe((who:gsub("%-$", ""))) then db.syncSent[who] = nil end
+    end
+end
 
 f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
     if event == "ADDON_LOADED" then
@@ -159,10 +185,13 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         faction = C.FACTION[group or "Neutral"] or C.FACTION.Neutral
         foe = C.FACTION[faction.foe]
         myName = UnitName("player")
-        myFull = myName .. "-" .. (GetNormalizedRealmName() or "")
+        local fn, fr = UnitFullName("player")
+        local realm = (type(fr) == "string" and fr ~= "" and fr) or GetNormalizedRealmName() or ""
+        myFull = (fn or myName) .. "-" .. realm
         ns.faction, ns.foe, ns.myName, ns.myFull = faction, foe, myName, myFull
         ns.Rebind()
         ns.Phrases.Seed(myFull)
+        pcall(DropSelfLayers)
         session.start = time()
         local newCampaign = Campaign.Begin()
         pcall(C_ChatInfo.RegisterAddonMessagePrefix, C.COMM)
@@ -245,6 +274,9 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         ns.Grudge.OnPlate(arg1, true)
     elseif event == "NAME_PLATE_UNIT_REMOVED" then
         ns.Grudge.OnPlate(arg1, false)
+    elseif event == "CHAT_MSG_SYSTEM" then
+        local who = NotFoundName(arg1)
+        if who and ns.Sync then ns.Sync.Unreachable(who) end
     elseif event == "CHAT_MSG_ADDON" then
         if db then OnComm(arg1, arg2, arg3, arg4) end
     elseif event == "PLAYER_REGEN_ENABLED" then
