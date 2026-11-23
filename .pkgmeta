@@ -1,0 +1,33 @@
+# Packaging for the BigWigs packager, which builds the CurseForge release.
+# Reference: https://github.com/BigWigsMods/packager
+#
+# The addon's files sit at the repo root. package-as puts them back inside a
+# Warpath/ folder in the zip, which is what players need when they extract it
+# into Interface\AddOns.
+
+package-as: Warpath
+
+# CHANGELOG.txt is written by hand, in plain language, aimed at guildmates.
+# Use it as the release notes rather than a generated commit log.
+manual-changelog:
+  filename: CHANGELOG.txt
+  markup-type: plain
+
+# Libraries stay committed in-tree instead of being pulled as externals.
+# These versions were picked to work on the Forever client (LibDBIcon r56,
+# taken from Questie's repo); externals would silently upgrade them on every
+# build, which is exactly the kind of change that cannot be tested outside the
+# game. Declaring them here still tells CurseForge what is embedded.
+embedded-libraries:
+  - LibStub
+  - CallbackHandler-1.0
+  - LibDataBroker-1.1
+  - LibDBIcon-1.0
+
+# Repo-only files: never shipped to players.
+ignore:
+  - .github
+  - docs
+  - tools
+  - CLAUDE.md
+  - README.md

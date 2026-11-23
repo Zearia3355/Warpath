@@ -1,0 +1,35 @@
+name: Release
+
+# Fires on a bare version tag, e.g. 3.7.11 -- no "v" prefix, because the
+# packager uses the tag verbatim as the version string, so a tag of "v3.7.11"
+# would publish on CurseForge as "v3.7.11".
+#
+# The imported tags for 3.3.5 through 3.7.10 point at commits made before this
+# file existed. GitHub reads the workflow from the tagged ref, so pushing that
+# history triggers nothing and cannot re-upload old releases.
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write # create the GitHub release
+
+jobs:
+  release:
+    name: Package and publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history: the packager needs it for changelogs
+
+      - uses: BigWigsMods/packager@v2
+        env:
+          # Set CF_API_TOKEN in the repo's secrets once the CurseForge project
+          # exists, and put its project id in Warpath.toc as
+          # ## X-Curse-Project-ID: <id>
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          # Provided automatically by Actions; uploads the zip to the GitHub
+          # release as well, so there is always a copy outside CurseForge.
+          GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}

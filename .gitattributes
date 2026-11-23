@@ -1,0 +1,7 @@
+# Git for Windows sets core.autocrlf=true, which hands you CRLF working files
+# while the CI runner checks out LF. Pinning eol=lf makes a local build and the
+# packager's build produce byte-identical zips.
+* text=auto eol=lf
+
+# Never touch the artwork.
+*.tga binary

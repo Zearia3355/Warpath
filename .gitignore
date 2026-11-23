@@ -1,0 +1,12 @@
+# Build output from the packager
+/.release/
+
+# Test harness scratch
+__pycache__/
+*.pyc
+/tools/out/
+
+# Windows and editor noise
+Thumbs.db
+desktop.ini
+*.swp
