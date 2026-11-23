@@ -67,6 +67,12 @@ A new project is invisible to others and its files do not sync until a moderator
 - Upgrades run inside `pcall`; on error, print one chat line and start the new feature empty rather than breaking.
 - Saved-data versions: `db.v` 4 (3.3.x) → 5 (3.4) → 6 → 7 (3.6.0) → 8 (3.7.0) → 9 (3.7.1). One `MigrateToV<n>` function each, in `Warpath.lua`.
 
+### Upgrading from hand-copied installs (verified 2026-11-23)
+
+Every release from 3.3.5 to 3.7.10 upgrades to the current version with nothing lost, tested by `Upgrades` on every push. A mutation check (deleting marks in the 3.4 step) failed exactly the 3.3.5 row, so the test sees real upgrade steps. Limits: the data is a short synthetic session, not years of play; nothing older than 3.3.5 exists to test (the code routes any saved-data version below 4 through `MigrateToV4`); the old **Wake** addon's data is a different addon and is never imported.
+
+Moving a hand-copied install to the CurseForge app: saved data lives in `WTF`, not the addon folder, so nothing is lost however the files arrive. The app recognises addons by matching files against uploads, so a hand-copied folder shows as an unknown local addon with no updates. Install "Warpath Forever" through the app once. Removing the old `Interface\AddOns\Warpath` folder first is safe and avoids leftovers or "modified" warnings. This only works because `package-as: Warpath` keeps the folder name: a different folder name would orphan everyone's saved data. **Never change `package-as`.**
+
 ### Design principles
 - **Preserve Blizzard's art and the Warcraft theme.** Build UI from the game's own textures, fonts and sounds; no custom art. Verify texture paths exist in the Forever client.
 - **Don't clutter** the map or UI, especially where seeing the other faction is expected (neutral towns: Booty Bay, Gadgetzan, Ratchet, Everlook, Light's Hope). Hide, don't erase.
@@ -144,6 +150,7 @@ Prefix-based addon messages (`WARPATH`, proto `1`). Old versions safely ignore u
 | `python tools/harness/check.py` | Compiles every file in `Warpath.toc` order with the real 5.1 compiler, so the 200-local / 60-upvalue limits are enforced exactly. Reports each file's top-level locals used (heaviest: `Map.lua`, ~81/200) and any `.lua` the TOC never loads. |
 | `python tools/harness/test_warpath.py` | Boot, slash commands, an hour of simulated play, guild sharing and the 3.7.10 diagnostics, every chat line at every index, map drawing. |
 | `WARPATH_WTF=<account dir> python tools/harness/test_warpath.py` | Also boots every real character (`RealData`): no Lua errors, nothing lost, SavedVariables checksummed before and after to prove they are never written. |
+| `python tools/harness/upgrade_matrix.py [tags]` | For every release tag: that release plays a session and saves, then the working copy upgrades the data. Prints what survived. Also runs as the `Upgrades` test (CI checks out tags for it). |
 | `python tools/harness/render.py --wtf <account dir> --char Name-Realm [--map ID] [--ref A --ref B] [--layers roads,trail]` | Renders the map from real saved data with the addon's own `Map.lua`. Repeated `--ref` renders each git ref side by side: the before/after Joe picks from. Defaults to the zone with most roads, as of the character's last logout. |
 
 How the stub behaves, so you know what a failure means:

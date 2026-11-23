@@ -304,7 +304,7 @@ UnitCanAttack = function() return false end
 UnitIsPVP = function() return false end
 UnitHealth = function() return 100 end
 UnitHealthMax = function() return 100 end
-UnitAffectingCombat = function() return false end
+UnitAffectingCombat = function() return H.combat or false end
 UnitOnTaxi = function() return false end
 UnitPosition = function() return 0, 0, 0, 0 end
 UnitInParty = function() return false end
@@ -393,6 +393,11 @@ C_Map.CanSetUserWaypointOnMap = function() return true end
 C_SuperTrack = { SetSuperTrackedUserWaypoint = function() end }
 UiMapPoint = { CreateFromCoordinates = function(id, x, y) return { uiMapID = id, position = vec(x, y) } end }
 C_TaxiMap = { GetAllTaxiNodes = function() return {} end }
+
+C_NamePlate = {
+    GetNamePlates = function() return {} end,
+    GetNamePlateForUnit = function() return nil end,
+}
 
 -- Addon messages -----------------------------------------------------------------------
 C_ChatInfo = {

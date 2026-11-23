@@ -347,6 +347,29 @@ class Steadiness(unittest.TestCase):
         self.assertNotEqual(self.new_ink(first, shifted), [])
 
 
+class Upgrades(unittest.TestCase):
+    """Saved data from every past release upgrades with nothing lost.
+
+    Each tag's own code plays a session and saves; the working copy then
+    boots on that data. Needs the release tags (CI checks out with tags)."""
+
+    def test_every_release_upgrades_cleanly(self):
+        import subprocess
+        from upgrade_matrix import upgrade
+        tags = subprocess.run(["git", "-C", str(Path(__file__).resolve().parents[2]), "tag"],
+                              capture_output=True, text=True).stdout.split()
+        if not tags:
+            self.skipTest("no release tags in this checkout")
+        import tempfile
+        work = Path(tempfile.mkdtemp(prefix="warpath-upgrade-"))
+        for tag in sorted(tags, key=lambda t: tuple(int(x) for x in t.split("."))):
+            with self.subTest(release=tag):
+                before, after, errors, lost = upgrade(tag, work)
+                self.assertEqual(errors, [])
+                self.assertEqual(lost, [], f"upgrading from {tag} lost: {lost}")
+                self.assertEqual(after["v"], 9)
+
+
 class RealData(unittest.TestCase):
     """Boot every character found under WARPATH_WTF. Skipped without it.
 
