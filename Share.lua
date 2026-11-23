@@ -82,15 +82,44 @@ local function FullSender(sender)
 end
 ns.FullSender = FullSender
 
+-- 3.7.10 diagnostics: what reaches the client and why anything is dropped,
+-- shown by /warpath share status. Counts this session only; nothing saved.
+local diag = { all = 0, allInside = 0, ours = 0, oursInside = 0, unreadable = 0, unreadableInside = 0,
+    secretPrefix = 0, own = 0, dup = 0, bad = 0, off = 0, errors = 0, lockdownSeen = 0, channels = {} }
+local function Lockdown()
+    local f = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
+    if not f then return nil end
+    local ok, v = pcall(f)
+    if ok and not Secret(v) then return v == true end
+end
+
 -- 3.7.8: guildmates' messages are received everywhere, battlegrounds,
 -- arenas, dungeons and raids included, so you hear about their open-world
 -- kills and deaths while you're inside and their pins are waiting on your
 -- map when you come out. Inside, Warpath still sends nothing and records
 -- nothing of yours.
-local function OnComm(prefix, text, channel, sender)
-    if prefix ~= C.COMM or not cfg.share then return end
-    if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then return end
-    if sender == myFull or Ambiguate(sender, "short") == myName or ns.IsMe(sender) or ns.IsEcho(text, sender) then return end
+local function Receive(prefix, text, channel, sender)
+    local inside = S.inInstance
+    diag.all = diag.all + 1
+    if inside then diag.allInside = diag.allInside + 1 end
+    if Lockdown() then diag.lockdownSeen = diag.lockdownSeen + 1 end
+    if Secret(prefix) then diag.secretPrefix = diag.secretPrefix + 1 return end
+    if inside and type(channel) == "string" and not Secret(channel) then
+        diag.channels[channel] = (diag.channels[channel] or 0) + 1
+    end
+    if prefix ~= C.COMM then return end
+    diag.ours = diag.ours + 1
+    if inside then diag.oursInside = diag.oursInside + 1 end
+    if not cfg.share then diag.off = diag.off + 1 return end
+    if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then
+        diag.unreadable = diag.unreadable + 1
+        if inside then diag.unreadableInside = diag.unreadableInside + 1 end
+        return
+    end
+    if sender == myFull or Ambiguate(sender, "short") == myName or ns.IsMe(sender) or ns.IsEcho(text, sender) then
+        diag.own = diag.own + 1
+        return
+    end
     -- battle-haze sync (3.7): hellos and history
     local head = text:sub(1, 4)
     if head == C.PROTO .. "|H|" or head == C.PROTO .. "|B|" then
@@ -101,7 +130,7 @@ local function OnComm(prefix, text, channel, sender)
     -- The same message arrives twice from a guildmate who is also in your
     -- group (GUILD and PARTY/RAID): keep the first copy.
     local key = sender .. "\031" .. text
-    if dupSeen[key] and now - dupSeen[key] < 10 then return end
+    if dupSeen[key] and now - dupSeen[key] < 10 then diag.dup = diag.dup + 1 return end
     dupSeen[key] = now
 
     local sep = text:find(";", 1, true) and ";" or "|" -- 3.3.0 used "|"
@@ -122,9 +151,9 @@ local function OnComm(prefix, text, channel, sender)
         for k, b in pairs(senderSeen) do if now - b.t >= 10 then senderSeen[k] = nil end end
     end
     mapID, x, y = tonumber(mapID), tonumber(x), tonumber(y)
-    if ver ~= C.PROTO or (kind ~= "S" and kind ~= "D" and kind ~= "K" and kind ~= "T") then return end
-    if not mapID or not x or not y or x < 0 or x > 1 or y < 0 or y > 1 then return end
-    if not C_Map.GetMapInfo(mapID) then return end
+    if ver ~= C.PROTO or (kind ~= "S" and kind ~= "D" and kind ~= "K" and kind ~= "T") then diag.bad = diag.bad + 1 return end
+    if not mapID or not x or not y or x < 0 or x > 1 or y < 0 or y > 1 then diag.bad = diag.bad + 1 return end
+    if not C_Map.GetMapInfo(mapID) then diag.bad = diag.bad + 1 return end
     shareStats.got = shareStats.got + 1
     if kind == "S" then -- a sighting in a neutral town you've walked through
         local z = db.maps[mapID]
@@ -175,7 +204,33 @@ local function OnComm(prefix, text, channel, sender)
     end
 end
 
+-- Errors are counted, not raised, so a bad message can't stop the next one.
+local function OnComm(...)
+    local ok, err = pcall(Receive, ...)
+    if not ok then
+        diag.errors = diag.errors + 1
+        diag.lastError = Secret(err) and "(unreadable)" or tostring(err)
+    end
+end
+
+local function DiagStatus()
+    local d = diag
+    Print(("diagnostics: %d Warpath messages reached your client (%d inside an instance), %d unreadable (%d inside), %d errors."):format(
+        d.ours, d.oursInside, d.unreadable, d.unreadableInside, d.errors))
+    Print(("dropped: %d your own echo, %d duplicates, %d malformed%s."):format(
+        d.own, d.dup, d.bad, d.off > 0 and (", " .. d.off .. " while sharing was off") or ""))
+    local parts = {}
+    for ch, n in pairs(d.channels) do parts[#parts + 1] = ch .. " " .. n end
+    table.sort(parts)
+    local lock = Lockdown()
+    Print(("inside instances: %d addon messages from all addons%s, %d with an unreadable prefix. Chat lockdown now: %s (on for %d arrivals)."):format(
+        d.allInside, #parts > 0 and (" (" .. table.concat(parts, ", ") .. ")") or "", d.secretPrefix,
+        lock == nil and "unknown" or (lock and "on" or "off"), d.lockdownSeen))
+    if d.lastError then Print("last error: " .. d.lastError) end
+end
+
 -- Shared with the other files.
+ns.DiagStatus = DiagStatus
 ns.FlushShare = FlushShare
 ns.OnComm = OnComm
 ns.Share = Share

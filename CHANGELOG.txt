@@ -1,6 +1,26 @@
 Warpath changelog
 
 =====================================================================
+3.7.10
+=====================================================================
+
+- /warpath share status now also shows what's reaching you, to find out
+  why guildmates' kills go missing in battlegrounds: how many Warpath
+  messages arrived (and how many inside an instance), how many arrived
+  unreadable, and how many were dropped as your own echo, duplicates or
+  malformed. Inside an instance it also counts every addon's messages
+  by channel and says whether the game's chat lockdown is on.
+- A message that causes an error is counted instead of stopping the
+  next one.
+- Only your copy changes; guildmates don't need it.
+
+- Your saved data: everything is kept. Nothing about your data changes;
+  the counts are for this session only and aren't saved.
+- No new files: a /reload loads it (the version number shown stays
+  3.7.5 until you next restart the game).
+- Includes 3.7.0 to 3.7.9.
+
+=====================================================================
 3.7.9
 =====================================================================
 

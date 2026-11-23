@@ -226,6 +226,7 @@ function H.share(arg)
             :format(shareStats.sent, shareStats.refused, shareStats.got,
                 shareStats.lastRefusal and (" Last refusal: " .. shareStats.lastRefusal) or ""))
         if shareStats.lastEvent then Print("last guild kill or death received: " .. shareStats.lastEvent .. ".") end
+        if ns.DiagStatus then ns.DiagStatus() end
         if cfg.share then ns.Sync.Status() end
         return
     end
