@@ -368,7 +368,21 @@ end
 CreateVector2D = vec
 C_Map.GetPlayerMapPosition = function(id, u) if isPlayer(u) then return vec(H.player.x, H.player.y) end end
 C_Map.GetWorldPosFromMapPos = function(id, pos) return 0, vec(pos.x * 1000, pos.y * 1000) end
-C_Map.GetMapRectOnMap = function() return 0, 1, 0, 1 end
+-- Where one map sits on another. Map.lua draws EVERY zone with data onto
+-- the viewed map through this, so a wrong answer stacks other zones' trails
+-- on top of the one you're looking at. (The first version of this stub
+-- returned "fills the whole map" for every pair, and a Felwood render came
+-- out 95% other zones.) So: only real rects, captured from the client into
+-- H.rects; for any pair we don't know, say "no overlap", which leaves that
+-- zone out of the render instead of putting it in the wrong place.
+C_Map.GetMapRectOnMap = function(child, parent)
+    if child == parent then return 0, 1, 0, 1 end
+    local r = H.rects and H.rects[child] and H.rects[child][parent]
+    if r then return r[1], r[2], r[3], r[4] end
+    H.rectMisses = H.rectMisses or {}
+    H.rectMisses[child .. ">" .. parent] = true
+    return nil
+end
 C_Map.GetMapChildrenInfo = function() return {} end
 C_Map.GetMapGroupID = function() return nil end
 C_Map.SetUserWaypoint = function(p) H.waypoint = p end

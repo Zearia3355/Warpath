@@ -223,6 +223,23 @@ class MapDrawing(unittest.TestCase):
         self.assertAlmostEqual(x, 0.25 * 1002, delta=1.0)
         self.assertAlmostEqual(y, 0.75 * 668, delta=1.0)
 
+    def test_another_zone_is_not_stacked_on_the_viewed_map(self):
+        # The bug a real screenshot caught: with every map "covering" every
+        # other, a Felwood render was 95% other zones. A zone whose place on
+        # the viewed map is unknown must not be drawn on it at all.
+        self.wow.run("ns.OnComm('WARPATH', '1|K|1440|0.50|0.50', 'GUILD', 'Bob Smith')")  # Ashenvale
+        self.assertEqual(self.primitives(), [])
+
+    def test_another_zone_is_drawn_inside_its_rect(self):
+        # Ashenvale occupying x 0.2-0.4, y 0.6-0.8 of the viewed map: its
+        # centre lands at the centre of that box, not the centre of the map.
+        self.wow.run("__H.rects = { [1440] = { [1448] = { 0.2, 0.4, 0.6, 0.8 } } }")
+        self.wow.run("ns.OnComm('WARPATH', '1|K|1440|0.50|0.50', 'GUILD', 'Bob Smith')")
+        pins = [p for p in self.primitives() if p[0] == "T"]
+        self.assertTrue(pins, "no pin drawn")
+        self.assertAlmostEqual(float(pins[-1][6]), 0.30 * 1002, delta=1.0)
+        self.assertAlmostEqual(float(pins[-1][7]), 0.70 * 668, delta=1.0)
+
     def test_hiding_the_map_draws_nothing(self):
         self.wow.run("ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')")
         self.wow.run("ns.cfg.shown = false")

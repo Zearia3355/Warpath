@@ -262,6 +262,13 @@ def render(addon_dir, saved, account, name, map_id, at, layers=None):
     D = wow.eval("ns.Redraw()")
     prims = [p for p in wow.run(COLLECT).split("\n") if p]
     stats = {k: D[k] for k in ("nl", "nd", "np", "ndash", "nrun")}
+    # Zones with data that couldn't be placed on this map: no known rect.
+    # In game some of these overlap the viewed map and would be drawn.
+    stats["unplaced"] = int(wow.eval(f"""(function()
+        local n = 0
+        for id in pairs(WarpathDB.maps) do
+            if id ~= {int(map_id)} and __H.rectMisses and __H.rectMisses[id .. ">" .. {int(map_id)}] then n = n + 1 end
+        end return n end)()"""))
     return paint(prims, int(D["w"]), int(D["h"])), stats, wow
 
 
@@ -320,6 +327,10 @@ def main():
         img, stats, wow = render(addon_dir, saved, account, name, map_id, at, layers)
         zone = wow.eval(f"ns.MapName({map_id})")
         label = f"{ref or 'working copy'}  -  {zone}  -  {stats['nl']} lines, {stats['nd']} dots, {stats['np']} pins"
+        if stats["unplaced"]:
+            label += f"  -  {stats['unplaced']} other zones not placed (no map rects)"
+            print(f"note: {stats['unplaced']} other zones with data have no known rect on this map and are "
+                  "left out; in game, any that overlap it would be drawn. Capture rects in game (CLAUDE.md, Testing).")
         print(label)
         panels.append(caption(img, label))
 

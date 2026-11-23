@@ -152,7 +152,13 @@ How the stub behaves, so you know what a failure means:
 - A test failure can be the stub's fault. Two were found while building it (an animation type mistaken for a frame name, which invented a global called `Alpha`; `SetAllPoints` not inheriting size, which made the map silently draw nothing). Check that before blaming the addon.
 - Time is controlled: `wow.H.now` (wall clock), `wow.advance(s)` runs `C_Timer` callbacks in order.
 
-Renders are trustworthy for geometry, colour, alpha, thickness, fade and draw order; a test pins orientation (a kill at 0.25, 0.75 draws at exactly that point). Map art and icon textures exist only in the client, so the ground is an olive stand-in and icons are simple glyphs. **Final looks are always checked in game.**
+Renders are trustworthy for geometry, colour, alpha, thickness, fade and draw order; tests pin orientation (a kill at 0.25, 0.75 draws at exactly that point) and placement of other zones.
+
+**Other zones need real map rects.** `Map.lua` draws every zone with data onto the viewed map via `C_Map.GetMapRectOnMap`. The first stub answered "covers the whole map" for every pair, and a Felwood render came out 95% other zones' roads stacked full-size. Joe caught it against an in-game screenshot on 2026-11-23. Now an unknown pair means "no overlap": the zone is left out and `render.py` says how many were. With only Felwood's own data, the render matches the in-game map's road shape and skull positions. To place neighbouring zones as the game does, capture the client's rects once (one line in game, then `/reload`; it adds a `mapRects` key to `WarpathGlobal`, which Warpath ignores, and the harness picks it up automatically):
+
+    /run local m,t=WarpathDB.maps,{} for a in pairs(m) do for b in pairs(m) do local ok,x,X,y,Y=pcall(C_Map.GetMapRectOnMap,a,b) if ok and x then t[a]=t[a] or {} t[a][b]={x,X,y,Y} end end end WarpathGlobal.mapRects=t
+
+Lesson: a render that *looks* like a map proves nothing. Check new render features against an in-game screenshot of the same data. Map art and icon textures exist only in the client, so the ground is an olive stand-in and icons are simple glyphs. **Final looks are always checked in game.**
 
 Known gap recorded as an `expectedFailure`: a garbled guild message with the grudge pool code and no victim prints "settled a grudge in Felwood:  falls!". Honest 3.7 senders always name the victim. Fix in `Feats.GuildKillLine`, then remove the decorator.
 

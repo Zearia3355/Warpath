@@ -81,6 +81,10 @@ class Wow:
         if saved:
             self._exec(read_lua(saved), "@SavedVariables(character)")
         self.saved_globals = set(g.keys()) - self.globals_before
+        # Where maps sit on each other, as captured from the real client (see
+        # CLAUDE.md, Testing). Without these, other zones are left off renders.
+        self.call(self.lua.eval(
+            "function() local r = WarpathGlobal and WarpathGlobal.mapRects if r then __H.rects = r end end"))
 
         self.ns = self.lua.table()
         for rel in self.files:
