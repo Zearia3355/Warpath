@@ -1,5 +1,5 @@
 
--- Warpath 3.7.6
+-- Warpath 3.7.7
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -61,10 +61,11 @@ local C = {
     DWELL_SAMPLES   = 40,      -- samples (20 s) in one cell = lingering there
     HIST            = 60,      -- samples (30 s) of position history
     TRAVEL_CELLS    = 3,       -- net cells moved in that time = travelling
-    FRESH_SECONDS   = 900,     -- today's trail: your last 15 minutes (3.7.6)...
-    LINE_SOLID      = 300,     -- ...a solid line for the first 5, then dashes that fade out
+    LINE_SOLID      = 300,     -- today's trail: a solid line for your last 5 minutes, then dashes
+                               -- fading out over the trail length (cfg.trailMin, 3.7.7)
+    TRAIL_MIN_CHOICES = { 15, 30, 60, 240, 720, 1440 }, -- trail lengths offered, in minutes
     DASH_PERIOD     = 5,       -- one dash every 5 x thin (about 10 px on a zone map)
-    DASH_BUDGET     = 3000,
+    DASH_BUDGET     = 4000,    -- past this the oldest (faintest) dashes are dropped
     TEX_RAID   = "Interface\\TargetingFrame\\UI-RaidTargetingIcons",
     RECENT_CAP      = 30,      -- short memory saturates here
     RECENT_MIN      = 0.2,     -- short memory below this is not drawn
@@ -159,7 +160,7 @@ local C = {
         runHours = 24, flightHours = 24, fieldAlert = true,
         iconScale = 100, overlay = true, overlaySize = "medium",
         groundScreen = true, groundChat = true, groundAfter = 2,
-        guildHaze = true, shareHistory = true, selfChat = true },
+        guildHaze = true, shareHistory = true, selfChat = true, trailMin = 60 },
     GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
     SHOT_DEFAULTS = { on = true, mode = "all", card = "text", delay = 0.5, combat = true },
 }
@@ -185,7 +186,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.6"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.7"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -585,6 +586,11 @@ local function DeathField(z)
     return mine, Spread(graw)
 end
 
+-- How long today's trail stays (3.7.7): 15 minutes to 24 hours, default 1 hour.
+local function TrailSeconds()
+    return math.max(15, math.min(1440, tonumber(cfg.trailMin) or 60)) * 60
+end
+
 local function RunSeconds(kind)
     return (kind == "f" and cfg.flightHours or cfg.runHours) * 3600
 end
@@ -906,6 +912,7 @@ ns.Prune = Prune
 ns.Q = Q
 ns.Recent = Recent
 ns.RunSeconds = RunSeconds
+ns.TrailSeconds = TrailSeconds
 ns.Secret = Secret
 ns.Simplify = Simplify
 ns.StrokeArc = StrokeArc

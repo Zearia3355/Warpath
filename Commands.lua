@@ -333,6 +333,24 @@ function H.memory(arg)
     end
 end
 
+-- How long today's trail stays (3.7.7): "/warpath trail 1h", "30m", "90" (minutes).
+function H.trail(arg)
+    arg = (arg or ""):lower():gsub("%s+", "")
+    local n, unit = arg:match("^(%d+%.?%d*)([mh]?)$")
+    n = tonumber(n)
+    if not n then
+        local m = cfg.trailMin or 60
+        Print(("today's trail stays %s. Usage: /warpath trail <15m to 24h>"):format(m < 60 and (m .. " minutes") or ((m / 60) .. (m == 60 and " hour" or " hours"))))
+        return
+    end
+    local minutes = unit == "h" and n * 60 or n
+    minutes = math.floor(math.max(15, math.min(1440, minutes)) + 0.5)
+    cfg.trailMin = minutes
+    Print(("today's trail now stays %s; the oldest part is the faintest."):format(minutes < 60 and (minutes .. " minutes")
+        or ((minutes / 60) .. (minutes == 60 and " hour" or " hours"))))
+    Redraw()
+end
+
 -- Your own kills and deaths in chat, worded as your guild sees them (3.7.6).
 function H.chat(arg)
     local v = OnOff(arg, cfg.selfChat)
@@ -477,6 +495,7 @@ local LIST = {
     { "minimap",   "minimap [on|off]",              "the minimap button",                 "Map", false, H.minimap },
     { "history",   "history [on|off]",              "show every stored pin, faded ones too (off at login)", "Map", false, H.history },
     { "icons",     "icons <25-200>",                "map icon size, in percent",          "Map", false, H.icons },
+    { "trail",     "trail <15m-24h>",               "how long today's trail stays (default 1h)", "Map", false, H.trail },
     { "grudge",    "grudge [name]",                 "hold a grudge (default: your target)", "Grudges", true, H.grudge },
     { nil,         "grudge forgive [name]",         "strike a grudge from your ledger",   "Grudges" },
     { "grudges",   "grudges [chat]",                "your ledger of grudges (book, or chat)", "Grudges", false, H.grudges },

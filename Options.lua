@@ -16,10 +16,13 @@ local NEW_IN = {
     "Dangerous ground replaces killing fields: it tells you if ground has been dangerous, contested or your hunting ground.",
     "Guild-wide battle haze: guildmates' fights show on your map. The haze now counts kills and deaths only.",
     "A minimap button, and map icons that keep their size when you zoom (Map tab).",
-    "3.7.6: your own kills and deaths in chat, worded as your guild sees them, with new death lines. Today's trail is a solid line, then dashes that fade out by 15 minutes.",
+    "3.7.6: your own kills and deaths in chat, worded as your guild sees them, with new death lines. Today's trail is a solid line, then dashes that fade out.",
+    "3.7.7: choose how long today's trail stays, 15 minutes to 24 hours (Map tab). The oldest part is the faintest.",
 }
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
+local TRAIL = {}
+for i, m in ipairs(C.TRAIL_MIN_CHOICES) do TRAIL[i] = { m, m < 60 and (m .. "m") or ((m / 60) .. "h") } end
 
 local function MakeCheck(parent, label, hint)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
@@ -91,6 +94,7 @@ local function SetupLoad(s, c)
     s.guildHaze:SetChecked(c.guildHaze)
     s.iconScale.Set(c.iconScale or 100)
     s.shimmer:SetChecked(c.shimmer)
+    s.trailMin:Set(c.trailMin)
     s.runHours:Set(c.runHours)
     s.flightHours:Set(c.flightHours)
     s.shotOn:SetChecked(c.shot.on)
@@ -131,6 +135,7 @@ local function SetupSave(s)
     cfg.guildHaze = On(s.guildHaze)
     cfg.iconScale = s.iconScale.value or 100
     cfg.shimmer = On(s.shimmer)
+    cfg.trailMin = s.trailMin.value or cfg.trailMin or 60
     cfg.runHours = s.runHours.value or 24
     cfg.flightHours = s.flightHours.value or 24
     cfg.shot.on = On(s.shotOn)
@@ -342,6 +347,8 @@ local function BuildMap(s, panel)
     s.iconScale = IconSize(panel, 250, L.y)
     L.y = L.y + 40
     L.Heading("HOW LONG THINGS STAY ON THE MAP")
+    s.trailMin = MakeRadios(panel, "Today's trail", TRAIL)
+    L.Radios(s.trailMin)
     s.runHours = MakeRadios(panel, "Corpse runs", HOURS)
     L.Radios(s.runHours)
     s.flightHours = MakeRadios(panel, "Today's flights", HOURS)

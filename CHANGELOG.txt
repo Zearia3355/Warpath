@@ -1,6 +1,29 @@
 Warpath changelog
 
 =====================================================================
+3.7.7
+=====================================================================
+
+- Choose how long today's trail stays: 15 minutes, 30 minutes, 1 hour
+  (the default), 4, 12 or 24 hours. Map tab, or /warpath trail <15m to
+  24h> for any length in between (/warpath trail 90 is 90 minutes).
+- Your last 5 minutes are still a solid line. After that the dashes
+  shorten, thin and fade evenly over the whole length you chose, so the
+  oldest part is always the faintest and it's gone at the end.
+- Dashes still keep their place on the ground at every length.
+- Long trails (12 or 24 hours) draw everything you walked today, so busy
+  zones get busy; at most about 4,000 dash pieces are drawn, oldest
+  (faintest) dropped first.
+
+- Your saved data: everything is kept. One new setting, trail length,
+  which starts at 1 hour whatever the old setting was. Today's trail
+  history was already kept for 24 hours, so a longer setting shows
+  what you've walked straight away.
+- No new files: a /reload loads it (the version number shown stays
+  3.7.5 until you next restart the game).
+- Includes 3.7.0 to 3.7.6.
+
+=====================================================================
 3.7.6
 =====================================================================
 

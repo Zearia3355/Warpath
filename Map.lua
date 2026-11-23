@@ -4,7 +4,7 @@ local C, S = ns.C, ns.S
 local Ago, CellXY, Long, Print, Secret = ns.Ago, ns.CellXY, ns.Long, ns.Print, ns.Secret
 local Simplify, Waypoint, cur, recentSight, shared = ns.Simplify, ns.Waypoint, ns.cur, ns.recentSight, ns.shared
 local Fields, PointTime, RunSeconds, ClassColor = ns.Fields, ns.PointTime, ns.RunSeconds, ns.ClassColor
-local StrokeArc = ns.StrokeArc
+local StrokeArc, TrailSeconds = ns.StrokeArc, ns.TrailSeconds
 
 local db, gdb, cfg, faction, foe
 ns.OnBind(function()
@@ -454,22 +454,24 @@ local function DrawWalkLine(D, scene)
     end
 end
 
--- How a dash looks at a given age (3.7.6): how much of its slot it fills,
--- its thickness and its opacity. Long dashes where the solid line hands
--- over, shortening, thinning and fading evenly to nothing at 15 minutes.
-local function DashLook(age)
-    local u = Clamp((age - C.LINE_SOLID) / (C.FRESH_SECONDS - C.LINE_SOLID))
+-- How a dash looks at a given age: how much of its slot it fills, its
+-- thickness and its opacity. Long dashes where the solid line hands over,
+-- shortening, thinning and fading evenly to nothing at the trail's end, so
+-- the oldest part is the faintest (3.7.7: over the trail length you pick).
+local function DashLook(age, life)
+    local u = Clamp((age - C.LINE_SOLID) / math.max(1, life - C.LINE_SOLID))
     return Lerp(0.85, 0.5, Smooth(u)), Lerp(1, 0.55, u), 0.95 * (1 - u)
 end
 
--- Today's trail after the solid line (3.7.6): from 5 to 15 minutes old it
--- breaks into dashes that fade out, then it's gone. Each dash has a fixed
+-- Today's trail after the solid line (3.7.6): from 5 minutes old it breaks
+-- into dashes that fade out over the trail length (3.7.7), then it's gone. Each dash has a fixed
 -- place on the ground, measured along the stroke from where it began (s.d),
 -- so walking on and time passing never move a dash: it only shortens and
 -- fades where it is.
 local function DrawTrail(D, scene)
     local w, h, now = D.w, D.h, D.now
-    local oldest = now - C.FRESH_SECONDS
+    local life = TrailSeconds()
+    local oldest = now - life
     local fr, fg, fb = faction.r, faction.g, faction.b
     for _, e in ipairs(scene.zones) do
         local p, strokes = e.p, e.z.strokes
@@ -496,9 +498,9 @@ local function DrawTrail(D, scene)
                         local _, _, f = Along(s, d, i, mid)
                         local t1 = PointTime(s, i)
                         local age = now - (t1 + (PointTime(s, i + 1) - t1) * f)
-                        if age >= C.FRESH_SECONDS or D.ndash >= C.DASH_BUDGET then break end
+                        if age >= life or D.ndash >= C.DASH_BUDGET then break end
                         if age >= C.LINE_SOLID then
-                            local fill, tk, alpha = DashLook(age)
+                            local fill, tk, alpha = DashLook(age, life)
                             -- the dash, from mid - half to mid + half, following the path's bends
                             local half = fill * slot / 2
                             local a0, a1 = math.max(0, mid - half), math.min(d[n], mid + half)
