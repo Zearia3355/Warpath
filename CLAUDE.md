@@ -31,14 +31,15 @@ History was imported on 2026-11-23: **21 tagged releases, 3.3.5 to 3.7.10**, fro
 - `.pkgmeta` keeps libraries **committed in-tree** instead of pulling them as `externals`. Their versions were chosen to work on the Forever client; externals would upgrade them on every build, untested, and lib behaviour cannot be checked outside the game.
 - `.gitattributes` pins `eol=lf`, because Git for Windows defaults to `core.autocrlf=true` and the CI runner checks out LF. Without it, a local build and a CI build produce different zips.
 
-### Before CurseForge publishing works
+### CurseForge
 
-Two things need Joe's account, and the workflow skips the upload until they exist:
+The project exists as of 2026-11-23: **Warpath Forever**, project id **1826632**, MIT licensed, listed publicly, 3rd-party distribution allowed. Its id is in `Warpath.toc` as `## X-Curse-Project-ID: 1826632`.
 
-1. A CurseForge project, whose id goes in `Warpath.toc` as `## X-Curse-Project-ID: <id>`.
-2. A `CF_API_TOKEN` repo secret.
+**The CurseForge project is named "Warpath Forever"; the addon is still "Warpath".** The plain name was already taken on CurseForge by an abandoned 2024 travel tracker, and names are global. `package-as: Warpath` in `.pkgmeta` keeps the folder, the slash commands and the saved data untouched, so this is a storefront name only. Don't "fix" the mismatch.
 
-The current packager reads `CF_API_TOKEN` and `GH_API_TOKEN`. The widely-copied wiki example uses `CF_API_KEY` and `GITHUB_OAUTH`; both are deprecated.
+Still outstanding: a **`CF_API_TOKEN` repo secret**, made at `authors.curseforge.com/account/api-tokens` and set with `gh secret set CF_API_TOKEN`. Until it exists the workflow skips the CurseForge upload with a warning rather than failing. The current packager reads `CF_API_TOKEN` and `GH_API_TOKEN`; the widely-copied wiki example uses `CF_API_KEY` and `GITHUB_OAUTH`, both deprecated.
+
+A new project is invisible to others and its files do not sync until a moderator approves it. CurseForge reviews roughly 2,000 new projects a week and rejections come back with a reason.
 
 ---
 
