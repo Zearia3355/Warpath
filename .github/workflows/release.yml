@@ -34,7 +34,13 @@ jobs:
 
       - uses: BigWigsMods/packager@v2
         with:
-          args: ${{ github.event_name == 'workflow_dispatch' && '-d' || '' }}
+          # -u keeps LF in the zip. The packager converts to CRLF by default,
+          # which works fine in game but would mean the released zip never
+          # byte-matches the repo or an installed copy. With -u the whole
+          # pipeline is LF, so "does the installed copy match the release?"
+          # stays answerable with a checksum.
+          # -d (manual runs only) skips every upload.
+          args: ${{ github.event_name == 'workflow_dispatch' && '-d -u' || '-u' }}
         env:
           # Set CF_API_TOKEN in the repo's secrets once the CurseForge project
           # exists, and put its project id in Warpath.toc as

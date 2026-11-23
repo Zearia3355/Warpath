@@ -1,6 +1,10 @@
-# Git for Windows sets core.autocrlf=true, which hands you CRLF working files
-# while the CI runner checks out LF. Pinning eol=lf makes a local build and the
-# packager's build produce byte-identical zips.
+# Git for Windows sets core.autocrlf=true, which would hand you CRLF working
+# files while the CI runner checks out LF. Pinning eol=lf keeps the working
+# copy, the repo and anything tools/install.ps1 copies on LF.
+#
+# This does not by itself control the released zip: the packager normalises
+# line endings itself and defaults to CRLF. The release workflow passes -u to
+# keep the zip on LF too, so the whole pipeline agrees.
 * text=auto eol=lf
 
 # Never touch the artwork.
