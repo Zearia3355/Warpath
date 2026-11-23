@@ -12,8 +12,8 @@ Migrated from a claude.ai Project on 2026-11-23. Everything before that is in `C
 
 ## Current state (2026-11-23)
 
-- **`main`** is at **3.7.11, built but not tagged**: the 3.7.10 diagnostics, the grudge-line fix, the CurseForge project id and the licence. Tag `3.7.10` (the old project's zip) is the newest tag.
-- **Installed in the game:** 3.7.9. 3.7.10 never reached the game; 3.7.11 replaces it. On Joe's "rev": tag `3.7.11`, push the tag (CI tests, then publishes to CurseForge), run `tools/install.ps1`. It will be the first release through the new pipeline.
+- **3.7.11 is tagged and installed** (installed files verified byte-identical to the tag). **Not yet on CurseForge or GitHub Releases:** its release run (45261632007) failed at upload because the token secret was wrong; nothing was published. Once a valid token is set, re-run that run.
+- **Installed in the game:** 3.7.11, installed 2026-11-23 (needs `/reload`; the version shown updates after a restart).
 - **Saved-data version:** `db.v` = 9 (since 3.7.1).
 - **Open investigation:** guildmates' kills don't reach Joe inside battlegrounds. 3.7.10's diagnostics (in 3.7.11) exist to diagnose it. See `docs/open-items.md`.
 - **Nothing else is queued.**
@@ -37,7 +37,7 @@ The project exists as of 2026-11-23: **Warpath Forever**, project id **1826632**
 
 **The CurseForge project is named "Warpath Forever"; the addon is still "Warpath".** The plain name was already taken on CurseForge by an abandoned 2024 travel tracker, and names are global. `package-as: Warpath` in `.pkgmeta` keeps the folder, the slash commands and the saved data untouched, so this is a storefront name only. Don't "fix" the mismatch.
 
-The **`CF_API_TOKEN` repo secret is set** (2026-11-23; a validation run logs `CurseForge ID: 1826632 [token set]`), so a bare version tag now publishes end to end. If it ever needs replacing, it's made at `https://authors.curseforge.com/#/settings/api-tokens` (Author Settings → API Tokens; the portal uses hash routes, so the older `/account/api-tokens` path that third-party guides cite lands on Not Found) and set with `gh secret set CF_API_TOKEN`. Until it exists the workflow skips the CurseForge upload with a warning rather than failing. The current packager reads `CF_API_TOKEN` and `GH_API_TOKEN`; the widely-copied wiki example uses `CF_API_KEY` and `GITHUB_OAUTH`, both deprecated.
+**Token status: invalid as of 2026-11-23.** The first publish (3.7.11) failed: the secret held the text of the `gh secret set` command instead of the token (CurseForge's error echoed it back). The packager's `[token set]` only means the secret is non-empty, so it is **not** evidence the token works. Verify with the **CurseForge check** workflow (Actions → CurseForge check → Run): a good token returns HTTP 200 and a list including WoW Forever versions; a bad one returns 400 with `API token is malformed`. Tokens are made at `https://authors.curseforge.com/#/settings/api-tokens` (Author Settings → API Tokens; the portal uses hash routes, so the older `/account/api-tokens` path that third-party guides cite lands on Not Found) and set with `gh secret set CF_API_TOKEN --repo Zearia3355/Warpath`, pasting only the token at the prompt. A failed publish is re-run with `gh run rerun <id>`; the tag doesn't need to move.
 
 A new project is invisible to others and its files do not sync until a moderator approves it. CurseForge reviews roughly 2,000 new projects a week and rejections come back with a reason.
 
