@@ -158,7 +158,9 @@ Renders are trustworthy for geometry, colour, alpha, thickness, fade and draw or
 
     /run local m,t=WarpathDB.maps,{} for a in pairs(m) do for b in pairs(m) do local ok,x,X,y,Y=pcall(C_Map.GetMapRectOnMap,a,b) if ok and x then t[a]=t[a] or {} t[a][b]={x,X,y,Y} end end end WarpathGlobal.mapRects=t
 
-Lesson: a render that *looks* like a map proves nothing. Check new render features against an in-game screenshot of the same data. Map art and icon textures exist only in the client, so the ground is an olive stand-in and icons are simple glyphs. **Final looks are always checked in game.**
+Lesson: a render that *looks* like a map proves nothing. Check new render features against an in-game screenshot of the same data.
+
+Verified against in-game screenshots on 2026-11-23 (Lethality's data): Felwood (road shape and skull positions) and Kalimdor (northern skull cluster, the blue blade marks east of it, the trail south). Joe confirmed both. Map art and icon textures exist only in the client, so the ground is an olive stand-in and icons are simple glyphs. **Final looks are always checked in game.**
 
 Known gap recorded as an `expectedFailure`: a garbled guild message with the grudge pool code and no victim prints "settled a grudge in Felwood:  falls!". Honest 3.7 senders always name the victim. Fix in `Feats.GuildKillLine`, then remove the decorator.
 
