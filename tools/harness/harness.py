@@ -81,10 +81,35 @@ class Wow:
         if saved:
             self._exec(read_lua(saved), "@SavedVariables(character)")
         self.saved_globals = set(g.keys()) - self.globals_before
-        # Where maps sit on each other, as captured from the real client (see
-        # CLAUDE.md, Testing). Without these, other zones are left off renders.
-        self.call(self.lua.eval(
-            "function() local r = WarpathGlobal and WarpathGlobal.mapRects if r then __H.rects = r end end"))
+        # Where maps sit on each other in the real client: the committed
+        # capture (map_rects.lua), plus any fresher capture found in the
+        # account's saved data (WarpathGlobal.mapRects), which wins. See
+        # CLAUDE.md, Testing. A pair known from neither is treated as
+        # "no overlap" and reported, so a render never invents placement.
+        fixture = self._exec(read_lua(HERE / "map_rects.lua"), "@map_rects.lua")
+        self.call(self.lua.eval("""
+            function(fx)
+                local rects, known = {}, {}
+                for _, r in ipairs(fx.rects) do
+                    rects[r[1]] = rects[r[1]] or {}
+                    rects[r[1]][r[2]] = { r[3], r[4], r[5], r[6] }
+                end
+                for _, id in ipairs(fx.known) do known[id] = true end
+                local cap = WarpathGlobal and WarpathGlobal.mapRects
+                if cap then
+                    for a, row in pairs(cap) do
+                        known[a] = true
+                        for b, v in pairs(row) do
+                            known[b] = true
+                            if v[2] - v[1] >= 0.002 and v[4] - v[3] >= 0.002 then
+                                rects[a] = rects[a] or {}
+                                rects[a][b] = v
+                            end
+                        end
+                    end
+                end
+                __H.rects, __H.rectsKnown = rects, known
+            end"""), fixture)
 
         self.ns = self.lua.table()
         for rel in self.files:

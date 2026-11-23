@@ -379,6 +379,8 @@ C_Map.GetMapRectOnMap = function(child, parent)
     if child == parent then return 0, 1, 0, 1 end
     local r = H.rects and H.rects[child] and H.rects[child][parent]
     if r then return r[1], r[2], r[3], r[4] end
+    -- Both maps were in a capture: the client said 0,0,0,0, i.e. no overlap.
+    if H.rectsKnown and H.rectsKnown[child] and H.rectsKnown[parent] then return 0, 0, 0, 0 end
     H.rectMisses = H.rectMisses or {}
     H.rectMisses[child .. ">" .. parent] = true
     return nil

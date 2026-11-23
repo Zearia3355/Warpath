@@ -240,6 +240,17 @@ class MapDrawing(unittest.TestCase):
         self.assertAlmostEqual(float(pins[-1][6]), 0.30 * 1002, delta=1.0)
         self.assertAlmostEqual(float(pins[-1][7]), 0.70 * 668, delta=1.0)
 
+    def test_felwood_lands_where_the_client_puts_it_on_kalimdor(self):
+        # Real placement, from the rects captured in game (map_rects.lua):
+        # the middle of Felwood is the middle of Felwood's box on Kalimdor.
+        x0, x1, y0, y1 = (float(self.wow.eval(f"__H.rects[1448][1414][{i}]")) for i in range(1, 5))
+        self.wow.run("__H.mapShown = 1414")
+        self.wow.run("ns.OnComm('WARPATH', '1|K|1448|0.50|0.50', 'GUILD', 'Bob Smith')")
+        pins = [p for p in self.primitives() if p[0] == "T"]
+        self.assertTrue(pins, "no pin drawn")
+        self.assertAlmostEqual(float(pins[-1][6]), (x0 + x1) / 2 * 1002, delta=1.0)
+        self.assertAlmostEqual(float(pins[-1][7]), (y0 + y1) / 2 * 668, delta=1.0)
+
     def test_hiding_the_map_draws_nothing(self):
         self.wow.run("ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')")
         self.wow.run("ns.cfg.shown = false")
