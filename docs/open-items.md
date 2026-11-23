@@ -22,6 +22,11 @@ Opened 2026-11-22. This is the one piece of live work.
 - **Fix options.** A whisper relay only helps for (a). **Catch-up on exit** — the receiver asks guildmates what it missed when leaving — works for both.
 - **Next step:** install 3.7.10, have a guildmate send a test ping while Joe is inside, then read `/warpath share status`.
 
+## Found by the test harness
+
+- **Grudge line with no victim** (found 2026-11-23). A guild message carrying the grudge pool code but an empty victim prints "settled a grudge in Felwood:  falls!". Honest 3.7 senders always name the victim, so only a garbled or hand-made message hits it. Fix in `Feats.GuildKillLine`: fall back to the plain kill pool when the chosen pool needs a field it wasn't given. Recorded as an `expectedFailure` in `tools/harness/test_warpath.py`; remove the decorator with the fix. Addon code, so it ships in a versioned release.
+- **Map drawing is switched off on Joe's account** (`cfg.shown = false` in `WarpathGlobal`, seen 2026-11-23). Probably deliberate via the map button, but worth a glance if the map ever "shows nothing".
+
 ## Waiting on in-game confirmation
 
 Nothing in the old project tracked these to closure, so the state of most was simply unknown. An amnesty was applied on 2026-11-23: the 3.4-era block was dropped (the handoff itself marked it "probably moot — much of it was reworked since"), and what remains is only what has a concrete next action. From here, each check is tied to the release that introduced it, so it either closes or expires.

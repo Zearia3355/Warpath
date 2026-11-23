@@ -1,0 +1,32 @@
+name: Test
+
+# The Lua 5.1 compile check and the harness tests, on every push to main and
+# every pull request. The release workflow calls this too and won't publish
+# unless it passes, so a release that doesn't compile can't reach CurseForge.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  test:
+    name: Lua 5.1 check and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install lupa (real Lua 5.1) and Pillow
+        run: pip install lupa pillow
+
+      - name: Compile-check every file under Lua 5.1
+        run: python tools/harness/check.py
+
+      - name: Harness tests
+        # Real SavedVariables never leave Joe's machine, so the RealData
+        # tests skip here; run them locally with WARPATH_WTF set.
+        run: python tools/harness/test_warpath.py

@@ -24,8 +24,12 @@ permissions:
   contents: write # create the GitHub release
 
 jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
   release:
     name: Package and publish
+    needs: test # nothing is packaged, let alone published, unless it compiles and passes
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

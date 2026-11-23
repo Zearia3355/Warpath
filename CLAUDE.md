@@ -83,7 +83,7 @@ A new project is invisible to others and its files do not sync until a moderator
 
 ### Release checklist
 1. Read this file and `docs/how-it-works.md`.
-2. Build; compile-check every Lua file under Lua 5.1 (limits: 200 locals, 60 upvalues). **See the gap noted under Testing.**
+2. Build; run `python tools/harness/check.py` and `python tools/harness/test_warpath.py` (with `WARPATH_WTF` set, so real characters boot too). CI runs both on every push and the release workflow won't publish unless they pass.
 3. In one pass: update `docs/how-it-works.md` (feature state + decision log), `CHANGELOG.txt`, and `docs/open-items.md` (close checks Joe has confirmed, add new ones).
 4. Bump `## Version:` in `Warpath.toc`, and the comment at the top of `Warpath.lua` to match.
 5. Release summary for Joe: files changed, saved-data impact, whether `/reload` is enough or a restart is needed, and any calls you made yourself.
@@ -137,16 +137,23 @@ Prefix-based addon messages (`WARPATH`, proto `1`). Old versions safely ignore u
 
 ## Testing outside the game
 
-**Current gap:** the release checklist calls for a Lua 5.1 compile check, and there is no Lua interpreter on this machine (no `lua`, `luac`, `luacheck`). Python 3.13 is available. The old harness was rebuilt from scratch in a throwaway container and lost with it. Rebuilding it in `tools/`, committed this time, is the highest-value piece of unfinished setup.
+`tools/harness/` loads the real addon under **genuine Lua 5.1** (lupa's bundled `lua51`, not LuaJIT) against a stubbed WoW API. Setup: `pip install lupa pillow`. Nothing in `tools/` ships to players.
 
-Intended shape, from the old project:
+| Command | What it does |
+|---|---|
+| `python tools/harness/check.py` | Compiles every file in `Warpath.toc` order with the real 5.1 compiler, so the 200-local / 60-upvalue limits are enforced exactly. Reports each file's top-level locals used (heaviest: `Map.lua`, ~81/200) and any `.lua` the TOC never loads. |
+| `python tools/harness/test_warpath.py` | Boot, slash commands, an hour of simulated play, guild sharing and the 3.7.10 diagnostics, every chat line at every index, map drawing. |
+| `WARPATH_WTF=<account dir> python tools/harness/test_warpath.py` | Also boots every real character (`RealData`): no Lua errors, nothing lost, SavedVariables checksummed before and after to prove they are never written. |
+| `python tools/harness/render.py --wtf <account dir> --char Name-Realm [--map ID] [--ref A --ref B] [--layers roads,trail]` | Renders the map from real saved data with the addon's own `Map.lua`. Repeated `--ref` renders each git ref side by side: the before/after Joe picks from. Defaults to the zone with most roads, as of the character's last logout. |
 
-- `pip install lupa pycairo` — lupa gives a Lua 5.1 runtime.
-- `stub.lua` stubs the WoW API and records the lines and textures drawn.
-- `run.lua` loads `Warpath.lua` + `Map.lua` against real SavedVariables and calls `ns.Redraw()` (marks and sightings layers off, `ns.Grudge` stubbed).
-- `render.py` draws the recorded lines and textures with pycairo on an olive stand-in background — this is what produces the before/after renders Joe picks from.
-- Steadiness test: hook each dash's centre and compare across `NOW` shifts and strokes truncated to an earlier time. Target 0 px movement.
-- Line test: load `Warpath.lua`, `Phrases.lua`, `Feats.lua`; call `DeathFields`/`GuildDeathLine`, `KillFields`/`GuildKillLine`.
-- Share test: `Share.lua` loads alone with a stub `ns`; call `ns.OnComm` with fake messages.
+How the stub behaves, so you know what a failure means:
+- **Widgets accept any method** as a recorded no-op; methods whose results matter (sizes, points, text, colours, line endpoints, blend, draw layer) are implemented.
+- **Unknown globals stay nil**, as in the client, because Warpath guards optional APIs with `if C_X and C_X.Y`. A missing stub fails loudly with a traceback naming it: add the stub, don't make globals magic.
+- A test failure can be the stub's fault. Two were found while building it (an animation type mistaken for a frame name, which invented a global called `Alpha`; `SetAllPoints` not inheriting size, which made the map silently draw nothing). Check that before blaming the addon.
+- Time is controlled: `wow.H.now` (wall clock), `wow.advance(s)` runs `C_Timer` callbacks in order.
 
-Map art isn't available outside the game, so final looks are always checked in game.
+Renders are trustworthy for geometry, colour, alpha, thickness, fade and draw order; a test pins orientation (a kill at 0.25, 0.75 draws at exactly that point). Map art and icon textures exist only in the client, so the ground is an olive stand-in and icons are simple glyphs. **Final looks are always checked in game.**
+
+Known gap recorded as an `expectedFailure`: a garbled guild message with the grudge pool code and no victim prints "settled a grudge in Felwood:  falls!". Honest 3.7 senders always name the victim. Fix in `Feats.GuildKillLine`, then remove the decorator.
+
+**Steadiness** (`Steadiness` tests) guards the "anchored to the ground, only fade" rule: walk, stop, then as time passes no trail ink may appear where there was none. It deliberately does *not* compare segment centres, as the old project's test did — a dash crossing a bend is several segments whose split point changes as it shortens, so centres move even when the dash doesn't. A companion test proves the check catches a 3 px crawl. Not yet covered: steadiness *while walking* (strokes extended at the open end).
