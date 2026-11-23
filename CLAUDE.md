@@ -37,7 +37,7 @@ The project exists as of 2026-11-23: **Warpath Forever**, project id **1826632**
 
 **The CurseForge project is named "Warpath Forever"; the addon is still "Warpath".** The plain name was already taken on CurseForge by an abandoned 2024 travel tracker, and names are global. `package-as: Warpath` in `.pkgmeta` keeps the folder, the slash commands and the saved data untouched, so this is a storefront name only. Don't "fix" the mismatch.
 
-Still outstanding: a **`CF_API_TOKEN` repo secret**, made at `authors.curseforge.com/account/api-tokens` and set with `gh secret set CF_API_TOKEN`. Until it exists the workflow skips the CurseForge upload with a warning rather than failing. The current packager reads `CF_API_TOKEN` and `GH_API_TOKEN`; the widely-copied wiki example uses `CF_API_KEY` and `GITHUB_OAUTH`, both deprecated.
+Still outstanding: a **`CF_API_TOKEN` repo secret**, made at `https://authors.curseforge.com/#/settings/api-tokens` (Author Settings → API Tokens; the portal uses hash routes, so the older `/account/api-tokens` path that third-party guides cite lands on Not Found) and set with `gh secret set CF_API_TOKEN`. Until it exists the workflow skips the CurseForge upload with a warning rather than failing. The current packager reads `CF_API_TOKEN` and `GH_API_TOKEN`; the widely-copied wiki example uses `CF_API_KEY` and `GITHUB_OAUTH`, both deprecated.
 
 A new project is invisible to others and its files do not sync until a moderator approves it. CurseForge reviews roughly 2,000 new projects a week and rejections come back with a reason.
 
