@@ -1,0 +1,31 @@
+name: CurseForge check
+
+# Run by hand to see whether the CurseForge token and API work, without
+# publishing anything. It makes the same call the packager makes before an
+# upload (the game-version list) and reports the HTTP status, any error
+# message, and the WoW Forever versions CurseForge offers. The token itself
+# is never printed (and Actions masks secrets regardless).
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Game versions, as the packager asks for them
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          if [ -z "$CF_API_TOKEN" ]; then echo "CF_API_TOKEN secret is empty or missing"; exit 1; fi
+          echo "token length: ${#CF_API_TOKEN}"
+          for site in https://wow.curseforge.com https://legacy.curseforge.com; do
+            code=$(curl -s -o body.json -w '%{http_code}' -H "x-api-token: $CF_API_TOKEN" "$site/api/game/wow/versions")
+            echo "== $site/api/game/wow/versions -> HTTP $code, $(wc -c < body.json) bytes"
+            if jq -e 'type == "array"' body.json >/dev/null 2>&1; then
+              echo "versions: $(jq length body.json); WoW Forever (type 88568): $(jq -c '[.[] | select(.gameVersionTypeID == 88568) | .name]' body.json)"
+            else
+              echo "not a version list; first 300 bytes:"; head -c 300 body.json; echo
+            fi
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$site/api/game/wow/versions")
+            echo "   same call with NO token -> HTTP $code (for comparison)"
+          done
