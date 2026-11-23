@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Ago, CellXY, Long, Print, Secret = ns.Ago, ns.CellXY, ns.Long, ns.Print, ns.Secret
-local Simplify, Waypoint, cur, recentSight, shared = ns.Simplify, ns.Waypoint, ns.cur, ns.recentSight, ns.shared
+local Simplify, cur, recentSight, shared = ns.Simplify, ns.cur, ns.recentSight, ns.shared
 local Fields, PointTime, RunSeconds, ClassColor = ns.Fields, ns.PointTime, ns.RunSeconds, ns.ClassColor
 local StrokeArc, TrailSeconds = ns.StrokeArc, ns.TrailSeconds
 
@@ -215,18 +215,12 @@ local function PinEnter(self)
         GameTooltip:AddLine(d.from .. " was killed here", 1, 0.5, 0.4)
         GameTooltip:AddLine(Ago(d.t), 0.8, 0.8, 0.8)
     end
-    GameTooltip:AddLine("Click to set a waypoint", 0.1, 1, 0.1)
     GameTooltip:Show()
 end
 
-local function PinClick(self, button)
-    if button ~= "LeftButton" then return end
-    local d = self.d
-    Waypoint(self.mapID, d[1] or d.x, d[2] or d.y,
-        (self.kind == "death" or self.kind == "mob") and "where you fell" or self.kind == "kill" and "your kill"
-        or self.kind == "sight" and "enemy sighting" or self.kind == "skill" and "an ally's kill"
-        or self.kind == "grudge" and ("where you saw " .. (d.short or "a grudge")) or "a fallen ally")
-end
+-- Pins don't take clicks (3.7.9): hovering shows the tooltip, and clicks fall
+-- through to the map (zoom in / out). Waypoints are set from the chronicle,
+-- the grudge ledger or /warpath waypoint.
 
 local PIN_LEVEL = { sight = 1, mob = 2, kill = 3, death = 3, skill = 4, sdeath = 4, grudge = 6 }
 
@@ -268,9 +262,9 @@ local function GetPin(i)
         f.label:SetTextColor(1, 0.35, 0.25)
         f.label:Hide()
         f:EnableMouse(true)
+        if f.SetMouseClickEnabled then f:SetMouseClickEnabled(false) end
         f:SetScript("OnEnter", PinEnter)
         f:SetScript("OnLeave", GameTooltip_Hide)
-        f:SetScript("OnMouseUp", PinClick)
         pins[i] = f
     end
     return f

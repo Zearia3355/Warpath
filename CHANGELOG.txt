@@ -1,6 +1,21 @@
 Warpath changelog
 
 =====================================================================
+3.7.9
+=====================================================================
+
+- Clicking a pin on the map no longer sets a waypoint. Hovering still
+  shows its tooltip, and the click goes through to the map, so zooming
+  in and out works with the cursor over a pin.
+- Waypoints are still there: click a kill or death in the chronicle,
+  the Waypoint button on a grudge, or /warpath waypoint death|kill.
+
+- Your saved data: everything is kept. Nothing about your data changes.
+- No new files: a /reload loads it (the version number shown stays
+  3.7.5 until you next restart the game).
+- Includes 3.7.0 to 3.7.8.
+
+=====================================================================
 3.7.8
 =====================================================================
 
