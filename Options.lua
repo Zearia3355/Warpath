@@ -16,11 +16,10 @@ local NEW_IN = {
     "Dangerous ground replaces killing fields: it tells you if ground has been dangerous, contested or your hunting ground.",
     "Guild-wide battle haze: guildmates' fights show on your map. The haze now counts kills and deaths only.",
     "A minimap button, and map icons that keep their size when you zoom (Map tab).",
+    "3.7.6: your own kills and deaths in chat, worded as your guild sees them, with new death lines. Today's trail is a solid line, then dashes that fade out by 15 minutes.",
 }
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
-local TRAIL = {}
-for i, h in ipairs(C.TRAIL_CHOICES) do TRAIL[i] = { h, h .. "h" } end
 
 local function MakeCheck(parent, label, hint)
     local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
@@ -77,6 +76,7 @@ local function SetupLoad(s, c)
     s.banners:SetChecked(not c.quiet)
     s.sound:SetChecked(c.sound)
     s.overlay:SetChecked(c.overlay)
+    s.selfChat:SetChecked(c.selfChat)
     s.overlaySize:Set(c.overlaySize)
     s.groundScreen:SetChecked(c.groundScreen)
     s.groundChat:SetChecked(c.groundChat)
@@ -91,7 +91,6 @@ local function SetupLoad(s, c)
     s.guildHaze:SetChecked(c.guildHaze)
     s.iconScale.Set(c.iconScale or 100)
     s.shimmer:SetChecked(c.shimmer)
-    s.trailHours:Set(c.trailHours)
     s.runHours:Set(c.runHours)
     s.flightHours:Set(c.flightHours)
     s.shotOn:SetChecked(c.shot.on)
@@ -116,6 +115,7 @@ local function SetupSave(s)
     cfg.quiet = not s.banners:GetChecked()
     cfg.sound = On(s.sound)
     cfg.overlay = On(s.overlay)
+    cfg.selfChat = On(s.selfChat)
     cfg.overlaySize = s.overlaySize.value or "medium"
     cfg.groundScreen, cfg.groundChat = On(s.groundScreen), On(s.groundChat)
     cfg.groundAfter = s.groundAfter.value or 2
@@ -131,7 +131,6 @@ local function SetupSave(s)
     cfg.guildHaze = On(s.guildHaze)
     cfg.iconScale = s.iconScale.value or 100
     cfg.shimmer = On(s.shimmer)
-    cfg.trailHours = s.trailHours.value or 7
     cfg.runHours = s.runHours.value or 24
     cfg.flightHours = s.flightHours.value or 24
     cfg.shot.on = On(s.shotOn)
@@ -156,7 +155,6 @@ local function DefaultsView()
     for _, name in ipairs(C.LAYERS) do view.layers[name] = true end
     for k, v in pairs(C.SHOT_DEFAULTS) do view.shot[k] = v end
     for k, v in pairs(C.CFG_DEFAULTS) do view[k] = v end
-    view.trailHours = 7
     view.minimap = { hide = false }
     view.grudge = {}
     for k, v in pairs(C.GRUDGE_DEFAULTS) do view.grudge[k] = v end
@@ -242,8 +240,11 @@ local function BuildGeneral(s, panel)
     s.banners:SetPoint("TOPLEFT", 0, -L.y)
     s.sound:SetPoint("TOPLEFT", 250, -L.y)
     L.y = L.y + 26
-    s.overlay = MakeCheck(panel, "Big text for my multi-kills and streaks")
-    L.Place(s.overlay, 0, 24)
+    s.overlay = MakeCheck(panel, "Big text on screen")
+    s.selfChat = MakeCheck(panel, "My kills and deaths in chat")
+    s.overlay:SetPoint("TOPLEFT", 0, -L.y)
+    s.selfChat:SetPoint("TOPLEFT", 250, -L.y)
+    L.y = L.y + 24
     s.overlaySize = MakeRadios(panel, "Big text size", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } })
     L.Radios(s.overlaySize, 26)
     s.groundScreen = MakeCheck(panel, "Ground warnings on screen")
@@ -341,12 +342,6 @@ local function BuildMap(s, panel)
     s.iconScale = IconSize(panel, 250, L.y)
     L.y = L.y + 40
     L.Heading("HOW LONG THINGS STAY ON THE MAP")
-    s.trailHours = MakeRadios(panel, "Today's trail", TRAIL)
-    L.Radios(s.trailHours, 18)
-    local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    hint:SetPoint("TOPLEFT", 28, -L.y)
-    hint:SetText("A stretch walked once. Paths you walk again and again stay longer.")
-    L.y = L.y + 20
     s.runHours = MakeRadios(panel, "Corpse runs", HOURS)
     L.Radios(s.runHours)
     s.flightHours = MakeRadios(panel, "Today's flights", HOURS)

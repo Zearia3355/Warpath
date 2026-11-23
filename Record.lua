@@ -536,6 +536,8 @@ local function OnKill(full, short, class)
     k.feat = top and top.key ~= "streak" and top.key or nil
     Feats.OnKilled(short)
 
+    -- The kill line your guildmates get; 3.7.6 prints it for you too.
+    local kfields = Feats.KillFields(n, k, feats)
     local tag = k.avenged and "avenged" or k.grudge and "grudge" or times == 1 and "first"
         or (P.StreakPool(k.streak) and "streak") or nil
     if m then
@@ -545,7 +547,7 @@ local function OnKill(full, short, class)
         k.entry = ns.CampaignKill({ n = short, f = full, c = class, z = mapID, x = m[1], y = m[2],
             t = m[3], tag = tag, st = session.streak, grudge = k.grudge, lv = info.lv, ra = info.ra, gu = info.gu,
             mk = m.mk, ft = k.feat })
-        Share("K", mapID, m[1], m[2], nil, Feats.KillFields(n, k, feats))
+        Share("K", mapID, m[1], m[2], nil, kfields)
     end
     if k.grudge then ns.Grudge.OnKill(full, mapID, true) end
 
@@ -554,10 +556,12 @@ local function OnKill(full, short, class)
     local big = cfg.overlay and not cfg.quiet and Feats.OverlayFor(n, k, feats)
     if big then ns.Overlay.Show(big) end
     local function Announce()
+        -- your own kill in chat, worded as your guild sees it (3.7.6)
+        if cfg.selfChat then ns.Print(Feats.GuildKillLine(myName, k.zone, strsplit("|", kfields))) end
         if big then return end
         if cfg.quiet or not cfg.overlay or n >= 2 or P.StreakPool(k.streak) then
             if cfg.quiet then
-                ns.Print(Feats.OwnLine(n, k, feats))
+                if not cfg.selfChat then ns.Print(Feats.OwnLine(n, k, feats)) end
             else
                 ns.Notice(Feats.OwnLine(n, k, feats), faction.r, faction.g, faction.b)
                 Sound("PVP_THROUGH_QUEUE", 8459)
@@ -690,7 +694,10 @@ local function OnDeath()
         if streak >= 3 then
             local by = killer and killer.short
             if cfg.quiet or not cfg.overlay then
-                Print(("Streak ended at %s%d|r%s."):format(C.GOLD, streak, by and (" by " .. by) or ""))
+                -- the death line below says it when your own lines are on
+                if not cfg.selfChat then
+                    Print(("Streak ended at %s%d|r%s."):format(C.GOLD, streak, by and (" by " .. by) or ""))
+                end
             else
                 ns.Overlay.Show({ title = ("Streak ended at %d"):format(streak), sub = by and ("by " .. by) or "",
                     r = 0.72, g = 0.72, b = 0.72, sr = 0.8, sg = 0.8, sb = 0.8, small = true })
@@ -700,6 +707,11 @@ local function OnDeath()
             lv = ki.lv, ra = ki.ra, gu = ki.gu, z = mapID, x = m and m[1], y = m and m[2], t = time() }, streak)
         if killer then ns.Grudge.OnDeath(killer.full, killer.class, mapID) end
         local fields = Feats.DeathFields(killer and killer.full, streak)
+        -- your own death in chat, worded as your guild sees it (3.7.6)
+        if cfg.selfChat then
+            local zone = mapID and MapName(mapID) or (GetZoneText and GetZoneText()) or ""
+            Print(Feats.GuildDeathLine(myName, zone, strsplit("|", fields)))
+        end
         Feats.OnDied(true, killer)
         session.streak = 0
         for _, zz in pairs(db.maps) do zz.streak = 0 end

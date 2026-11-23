@@ -1,6 +1,46 @@
 Warpath changelog
 
 =====================================================================
+3.7.6
+=====================================================================
+
+Today's trail: a line, then dashes, then gone
+- Your last 5 minutes are a solid line, as before. From 5 to 15 minutes
+  it breaks into dashes that get shorter, thinner and fainter, gone by
+  15 minutes. Footsteps are gone.
+- Every dash keeps its place on the ground: walking on and time passing
+  only shorten and fade it. Nothing jumps around any more.
+- The "Today's trail" length setting is gone from the Map tab, since the
+  trail is now always 15 minutes. /warpath memory <days> still sets how
+  fast roads, haze and flight routes fade (the old "<hours> <days>" form
+  still works; the hours are ignored).
+
+Your own kills and deaths in chat
+- Your kills and PvP deaths now print a chat line, worded exactly as
+  your guildmates see it ("Lethality scored a triple kill in Felwood!
+  Bloodthirsty: 3 without dying."). On by default; General tab ("My
+  kills and deaths in chat") or /warpath chat [on|off]. Works with
+  sharing off too.
+- In quiet mode this line replaces the old short one, so there's no
+  second copy.
+
+Death lines
+- Deaths have a dozen ways of being said instead of one: "fell in",
+  "bit the dust in", "Felwood claims...", "off to the spirit healer",
+  and when the killer is known, "Aldric cut down...", "ran into Aldric,
+  and lost", "a new score to settle with Aldric". Taking someone down
+  with you and ended streaks get more wordings too.
+- Guildmates see the same line you do once they're on 3.7.6. On 3.7.5
+  they still get the plain "was killed in" line.
+
+- Your saved data: everything is kept. Each stretch of today's trail
+  also saves its distances along the way, so dashes stay put across
+  logouts and reloads. Your trail-length setting is kept (unused).
+- No new files: a /reload loads it (the version number shown stays
+  3.7.5 until you next restart the game).
+- Includes 3.7.0 to 3.7.5.
+
+=====================================================================
 3.7.5
 =====================================================================
 

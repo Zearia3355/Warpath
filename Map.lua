@@ -1,9 +1,10 @@
 -- Warpath: Map
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
-local Ago, CellXY, Long, Print, Recent, Secret = ns.Ago, ns.CellXY, ns.Long, ns.Print, ns.Recent, ns.Secret
-local Simplify, StepLook, Waypoint, cur, recentSight, shared = ns.Simplify, ns.StepLook, ns.Waypoint, ns.cur, ns.recentSight, ns.shared
+local Ago, CellXY, Long, Print, Secret = ns.Ago, ns.CellXY, ns.Long, ns.Print, ns.Secret
+local Simplify, Waypoint, cur, recentSight, shared = ns.Simplify, ns.Waypoint, ns.cur, ns.recentSight, ns.shared
 local Fields, PointTime, RunSeconds, ClassColor = ns.Fields, ns.PointTime, ns.RunSeconds, ns.ClassColor
+local StrokeArc = ns.StrokeArc
 
 local db, gdb, cfg, faction, foe
 ns.OnBind(function()
@@ -38,14 +39,6 @@ local function Gild(g)
     local i = math.floor(f)
     local t, a, b = Smooth(f - i), STOPS[i + 1], STOPS[i + 2]
     return Lerp(a[1], b[1], t), Lerp(a[2], b[2], t), Lerp(a[3], b[3], t)
-end
-
--- The same hue at full saturation (Horde red -> pure red, Alliance blue -> pure blue).
-local function Saturate(r, g, b)
-    local hi, lo = math.max(r, g, b), math.min(r, g, b)
-    if hi - lo < 0.01 then return r, g, b end
-    local k = hi / (hi - lo)
-    return (r - lo) * k, (g - lo) * k, (b - lo) * k
 end
 
 ---------------------------------------------------------------------------
@@ -133,17 +126,6 @@ local function GetDot(i)
         d:SetTexture(C.TEX_DOT)
         d:SetBlendMode("BLEND")
         dots[i] = d
-    end
-    return d
-end
-
-local function GetStep(pool, i, sub)
-    local d = pool[i]
-    if not d then
-        d = overlay:CreateTexture(nil, "ARTWORK", nil, sub)
-        d:SetTexture(C.TEX_STEP)
-        d:SetBlendMode("BLEND")
-        pool[i] = d
     end
     return d
 end
@@ -382,29 +364,22 @@ local function DrawGround(D, scene)
     local gStart, gEnd = silver * 1.2, gold * 2 -- the gilding band
     local full = math.max(C.ROAD_FULL, gEnd + 4)
     local roadCap = C.LINE_BUDGET - C.ROAD_RESERVE - 3
-    local fr, fg, fb = faction.r, faction.g, faction.b
-    local vr, vg, vb = Saturate(fr, fg, fb)
-    local deepC = faction.deep or { fr * 0.65, fg * 0.2, fb * 0.7 }
-    local deR, deG, deB = deepC[1], deepC[2], deepC[3]
     local shine = cfg.shimmer
     for _, e in ipairs(scene.zones) do
         local z, p = e.z, e.p
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
         local thin = p.far and w * 0.0011 or w * 0.0020
-        local spacing = math.max(4, thin * 2.5) -- dense; older steps are thinned out below
-        local dot = math.max(2, thin * 1.5)
-        local candidates, feet = {}, {}
+        local candidates = {}
         for edge, rec in pairs(z.road) do
             local long = L.roads and Long(rec, now) or 0
-            local recent = L.recent and Recent(rec, now) or 0
-            if long >= faint or recent >= C.RECENT_MIN then
+            if long >= faint then
                 local a, b = math.floor(edge / 10000), edge % 10000
                 local ax, ay = z.cx[a], z.cy[a]
                 local bx, by = z.cx[b], z.cy[b]
                 if not ax then ax, ay = CellXY(a, C.GW, C.GH) end
                 if not bx then bx, by = CellXY(b, C.GW, C.GH) end
                 local x1, y1, x2, y2 = ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy)
-                if long >= faint and D.nl < roadCap then
+                if D.nl < roadCap then
                     local g = Clamp((long - gStart) / (gEnd - gStart))
                     local wear = Clamp((long - silver) / (full - silver))
                     local worn = long >= gEnd and Clamp((long - gEnd) / (full - gEnd)) or 0
@@ -417,83 +392,6 @@ local function DrawGround(D, scene)
                             candidates[#candidates + 1] = { x = (ax + bx) / 2, y = (ay + by) / 2, worn = worn }
                         end
                     end
-                end
-                if recent >= C.RECENT_MIN then
-                    -- Footsteps (3.7.5): vivid with a dark rim when fresh, then
-                    -- full colour for the last hour, then one lighter, deeper
-                    -- tone. Not on a silver or gold road once 10 minutes old
-                    -- (the road already says you've been there), and not
-                    -- under the solid line.
-                    local alpha, scale, vivid, deep, age = StepLook(rec, now)
-                    local onRoad = L.roads and long >= silver
-                    local underLine = L.recent and age < C.LINE_SOLID -- the line's full-strength part
-                    if alpha > 0.01 and not underLine and not (onRoad and age >= C.STEP_VIVID) then
-                        local r, g, b = Lerp(fr, deR, deep), Lerp(fg, deG, deep), Lerp(fb, deB, deep)
-                        r, g, b = Lerp(r, vr, vivid), Lerp(g, vg, vivid), Lerp(b, vb, vivid)
-                        alpha = alpha + (1 - alpha) * vivid
-                        local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
-                        local n = math.max(1, math.floor(len / spacing + 0.5))
-                        for k = 0, n - 1 do
-                            local t = (k + 0.5) / n
-                            feet[#feet + 1] = { x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, age,
-                                r, g, b, alpha, dot * scale, vivid }
-                        end
-                    end
-                end
-            end
-        end
-        -- Place footsteps newest first: fresh ones (first 10 minutes) all go
-        -- in; older ones keep a minimum gap, and each small square of the
-        -- screen takes only a few, so ground you circled doesn't fill in.
-        -- The gap grows with age: close together where the line hands over,
-        -- spreading out toward the end of the trail.
-        table.sort(feet, function(a, b) return a[3] < b[3] end)
-        local fine, coarse = {}, {}
-        local G, B = C.STEP_GAP_MAX, C.STEP_BIN
-        local life = (cfg.trailHours or 7) * 3600
-        for _, f in ipairs(feet) do
-            if D.ns >= C.STEP_BUDGET then break end
-            local px, py, vivid = f[1], f[2], f[9]
-            local u = Clamp((f[3] - C.LINE_SOLID) / math.max(1, life - C.LINE_SOLID))
-            local gap = C.STEP_GAP_MIN + (C.STEP_GAP_MAX - C.STEP_GAP_MIN) * math.sqrt(u)
-            local fx, fy = math.floor(px / G), math.floor(py / G)
-            local ok = true
-            for dx = -1, 1 do
-                for dy = -1, 1 do
-                    local cell = fine[(fx + dx) .. ":" .. (fy + dy)]
-                    if cell then
-                        for _, q in ipairs(cell) do
-                            if (q[1] - px) ^ 2 + (q[2] - py) ^ 2 < gap * gap then ok = false break end
-                        end
-                    end
-                end
-            end
-            local key = math.floor(px / B) .. ":" .. math.floor(py / B)
-            local cap = f[3] < C.STEP_RECENT and C.STEP_BIN_CAP * 2 or C.STEP_BIN_CAP
-            if ok and (coarse[key] or 0) >= cap then ok = false end
-            if ok then
-                coarse[key] = (coarse[key] or 0) + 1
-                local ck = fx .. ":" .. fy
-                fine[ck] = fine[ck] or {}
-                table.insert(fine[ck], f)
-                D.ns = D.ns + 1
-                local size = f[8]
-                local d = GetStep(steps, D.ns, 6)
-                d:SetVertexColor(f[4], f[5], f[6])
-                d:SetAlpha(f[7])
-                d:SetSize(size, size)
-                d:ClearAllPoints()
-                d:SetPoint("CENTER", overlay, "TOPLEFT", px, py)
-                d:Show()
-                if vivid > 0.02 and D.nr < C.STEP_BUDGET then
-                    D.nr = D.nr + 1
-                    local rim = GetStep(rims, D.nr, 5)
-                    rim:SetVertexColor(0.03, 0.02, 0.02)
-                    rim:SetAlpha(0.7 * vivid)
-                    rim:SetSize(size + 2, size + 2)
-                    rim:ClearAllPoints()
-                    rim:SetPoint("CENTER", overlay, "TOPLEFT", px, py)
-                    rim:Show()
                 end
             end
         end
@@ -523,11 +421,12 @@ local function DrawGround(D, scene)
     end
 end
 
--- The line: your last 15 minutes, full for the first 5, then fading out (3.7.5).
--- Trail recorded before 3.4 has no point times and shows as footsteps only.
+-- The line: your last 5 minutes, solid (3.7.6). After that the trail
+-- breaks into dashes (DrawTrail). Trail recorded before 3.4 has no point
+-- times and isn't drawn.
 local function DrawWalkLine(D, scene)
     local w, h, now = D.w, D.h, D.now
-    local cutoff = now - C.FRESH_SECONDS
+    local cutoff = now - C.LINE_SOLID
     for _, e in ipairs(scene.zones) do
         local p, strokes = e.p, e.z.strokes
         local thick = p.far and w * 0.0012 or w * 0.0022
@@ -546,13 +445,77 @@ local function DrawWalkLine(D, scene)
                         local k = (cutoff - t1) / (t2 - t1)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
                     end
-                    -- full for the first 5 minutes, then fading evenly (and thinning)
-                    -- to nothing at the line's far end
-                    local age = now - (t1 + t2) / 2
-                    local k = 1 - Clamp((age - C.LINE_SOLID) / (C.FRESH_SECONDS - C.LINE_SOLID))
                     D.nl = D.nl + 1
-                    PutLine(D.nl, 7, "BLEND", thick * (0.55 + 0.45 * k), faction.r, faction.g, faction.b, 0.95 * k,
+                    PutLine(D.nl, 7, "BLEND", thick, faction.r, faction.g, faction.b, 0.95,
                         ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy))
+                end
+            end
+        end
+    end
+end
+
+-- How a dash looks at a given age (3.7.6): how much of its slot it fills,
+-- its thickness and its opacity. Long dashes where the solid line hands
+-- over, shortening, thinning and fading evenly to nothing at 15 minutes.
+local function DashLook(age)
+    local u = Clamp((age - C.LINE_SOLID) / (C.FRESH_SECONDS - C.LINE_SOLID))
+    return Lerp(0.85, 0.5, Smooth(u)), Lerp(1, 0.55, u), 0.95 * (1 - u)
+end
+
+-- Today's trail after the solid line (3.7.6): from 5 to 15 minutes old it
+-- breaks into dashes that fade out, then it's gone. Each dash has a fixed
+-- place on the ground, measured along the stroke from where it began (s.d),
+-- so walking on and time passing never move a dash: it only shortens and
+-- fades where it is.
+local function DrawTrail(D, scene)
+    local w, h, now = D.w, D.h, D.now
+    local oldest = now - C.FRESH_SECONDS
+    local fr, fg, fb = faction.r, faction.g, faction.b
+    for _, e in ipairs(scene.zones) do
+        local p, strokes = e.p, e.z.strokes
+        local line = p.far and w * 0.0012 or w * 0.0022
+        local thin = p.far and w * 0.0011 or w * 0.0020
+        local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
+        local slot = C.DASH_PERIOD * thin / sx -- one dash slot, in map widths
+        -- the point at distance a along stroke s, on segment i
+        local function Along(s, d, i, a)
+            local f = d[i + 1] > d[i] and (a - d[i]) / (d[i + 1] - d[i]) or 0
+            return s[2 * i - 1] + (s[2 * i + 1] - s[2 * i - 1]) * f, s[2 * i] + (s[2 * i + 2] - s[2 * i]) * f, f
+        end
+        for si = #strokes, 1, -1 do -- newest first
+            local s = strokes[si]
+            if s.e < oldest or D.ndash >= C.DASH_BUDGET then break end
+            local n = #s / 2
+            if s.ts and n >= 2 then
+                local d = StrokeArc(s)
+                local i = n - 1
+                for k = math.floor(d[n] / slot), 0, -1 do
+                    local mid = (k + 0.5) * slot
+                    while i > 1 and d[i] > mid do i = i - 1 end
+                    if mid <= d[n] then
+                        local _, _, f = Along(s, d, i, mid)
+                        local t1 = PointTime(s, i)
+                        local age = now - (t1 + (PointTime(s, i + 1) - t1) * f)
+                        if age >= C.FRESH_SECONDS or D.ndash >= C.DASH_BUDGET then break end
+                        if age >= C.LINE_SOLID then
+                            local fill, tk, alpha = DashLook(age)
+                            -- the dash, from mid - half to mid + half, following the path's bends
+                            local half = fill * slot / 2
+                            local a0, a1 = math.max(0, mid - half), math.min(d[n], mid + half)
+                            local j = i
+                            while j > 1 and d[j] > a0 do j = j - 1 end
+                            local x0, y0 = Along(s, d, j, a0)
+                            while j <= n - 1 and D.ndash < C.DASH_BUDGET do
+                                local stop = math.min(a1, d[j + 1])
+                                local x1, y1 = Along(s, d, j, stop)
+                                D.ndash, D.nl = D.ndash + 1, D.nl + 1
+                                PutLine(D.nl, 6, "BLEND", line * tk, fr, fg, fb, alpha,
+                                    ox + x0 * sx, -(oy + y0 * sy), ox + x1 * sx, -(oy + y1 * sy))
+                                if stop >= a1 then break end
+                                x0, y0, j = x1, y1, j + 1
+                            end
+                        end
+                    end
                 end
             end
         end
@@ -800,7 +763,7 @@ local EMPTY = { proj = {}, zones = {} }
 -- limit: number of trail points to draw (replay); nil = live view.
 local function Draw(scene, limit)
     local D = { w = overlay:GetWidth(), h = overlay:GetHeight(), now = time(), replay = limit and true,
-        nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0 }
+        nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0 }
     local L = cfg.layers
     for i = #shimmer, 1, -1 do shimmer[i] = nil end
     for i = #twinkle, 1, -1 do twinkle[i] = nil end
@@ -812,9 +775,12 @@ local function Draw(scene, limit)
         hx, hy, upTo = DrawReplay(D, scene, limit)
         from = scene.since
     else
-        if L.roads or L.recent then DrawGround(D, scene) end
+        if L.roads then DrawGround(D, scene) end
         if L.runs then DrawRuns(D, scene) end
-        if L.recent then DrawWalkLine(D, scene) end
+        if L.recent then
+            DrawWalkLine(D, scene)
+            DrawTrail(D, scene)
+        end
     end
     DrawMarks(D, scene, from, upTo)
 

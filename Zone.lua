@@ -195,7 +195,7 @@ function Zone.Report()
         elseif long >= db.roadMin * C.SILVER_SHARE then silverN = silverN + 1 end
         if Recent(e, now) >= C.RECENT_MIN then recent = recent + 1 end
     end
-    Print(("Ground remembered: %d stretches of gold road, %d of silver, %d with today's footsteps. Dangerous ground: %d spot%s.")
+    Print(("Ground remembered: %d stretches of gold road, %d of silver, %d walked today. Dangerous ground: %d spot%s.")
         :format(goldN, silverN, recent, ns.Ground.Spots(mapID), ns.Ground.Spots(mapID) == 1 and "" or "s"))
     local victims, names = {}, {}
     for _, m in ipairs(z.marks) do

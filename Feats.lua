@@ -231,7 +231,10 @@ end
 function Feats.DeathFields(killerFull, streak)
     local lk = Feats.lastKill
     local took = lk and GetTime() - lk.at <= 3 and lk.short or ""
-    local pi = streak >= 3 and P.Deal("ended", { killer = killerFull ~= nil }) or ""
+    -- 3.7.6: a line number for every death, not only streaks (3.7.5 and
+    -- earlier ignore it unless the streak was 3 or more)
+    local pool = streak >= 3 and "ended" or took ~= "" and "took" or "died"
+    local pi = P.Deal(pool, { killer = killerFull ~= nil and killerFull ~= "", victim = took ~= "" })
     return table.concat({ Clean(killerFull), streak, pi, Clean(took) }, "|")
 end
 
@@ -244,9 +247,9 @@ function Feats.GuildDeathLine(from, zone, killerFull, streak, pi, took)
         line = P.Text("ended", pi, { name = from, zone = zone, n = streak, killer = killer })
         if took then line = line .. (" Took %s down too."):format(took) end
     elseif took then
-        line = P.Text("took", 1, { name = from, zone = zone, victim = took })
+        line = P.Text("took", pi, { name = from, zone = zone, victim = took })
     else
-        line = P.Text("died", 1, { name = from, zone = zone })
+        line = P.Text("died", pi, { name = from, zone = zone, killer = killer })
     end
     return line
 end

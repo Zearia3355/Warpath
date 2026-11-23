@@ -320,17 +320,25 @@ function H.setup()
     if not ok then Print("the options window failed to open: " .. tostring(err)) end
 end
 
+-- 3.7.6: today's trail is a fixed 15 minutes, so only long memory is set
+-- here. The old "<hours> <days>" form still works (the hours are ignored).
 function H.memory(arg)
-    local hours, days = arg:match("^(%S+)%s+(%S+)$")
-    hours, days = tonumber(hours), tonumber(days)
-    if hours and days and hours >= 1 and hours <= 48 and days >= 2 and days <= 90 then
-        cfg.trailHours, db.longDays = hours, days
-        Print(("today's trail now stays about %g hours; long memory halves every %g days you play."):format(hours, days))
+    local days = tonumber(arg:match("(%S+)%s*$") or "")
+    if days and days >= 2 and days <= 90 then
+        db.longDays = days
+        Print(("long memory (roads, battle haze, flight routes) halves every %g days you play."):format(days))
         Redraw()
     else
-        Print(("today's trail stays about %g hours; long memory halves every %g days you play. Usage: /warpath memory <trail hours 1-48> <days 2-90>")
-            :format(cfg.trailHours, db.longDays))
+        Print(("long memory halves every %g days you play. Usage: /warpath memory <days 2-90>"):format(db.longDays))
     end
+end
+
+-- Your own kills and deaths in chat, worded as your guild sees them (3.7.6).
+function H.chat(arg)
+    local v = OnOff(arg, cfg.selfChat)
+    if v == nil then Print("usage: /warpath chat [on|off]") return end
+    cfg.selfChat = v
+    Print("your own kills and deaths in chat " .. State(v) .. ".")
 end
 
 function H.roads(arg)
@@ -483,10 +491,11 @@ local LIST = {
     { "quiet",     "quiet [on|off]",                "banners become chat lines, no sounds", "Alerts", false, H.quiet },
     { "sound",     "sound [on|off]",                "sounds only",                        "Alerts", false, H.sound },
     { "overlay",   "overlay [on|off|test]",         "big text for your multi-kills and streaks", "Alerts", false, H.overlay },
+    { "chat",      "chat [on|off]",                 "your own kills and deaths in chat", "Alerts", false, H.chat },
     { "fields",    "fields [on|off]",               "dangerous-ground warnings", "Alerts", false, H.fields },
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },
     { "setup",     "setup",                         "all settings",                       "Settings", true, H.setup },
-    { "memory",    "memory <hours> <days>",         "how long today's trail stays; how fast long memory fades", "Settings", false, H.memory },
+    { "memory",    "memory <days>",                 "how fast long memory (roads, haze, routes) fades", "Settings", false, H.memory },
     { "roads",     "roads <days>",                  "days of use before a road turns gold", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },

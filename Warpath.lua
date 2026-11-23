@@ -1,5 +1,5 @@
 
--- Warpath 3.7.5
+-- Warpath 3.7.6
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -61,23 +61,10 @@ local C = {
     DWELL_SAMPLES   = 40,      -- samples (20 s) in one cell = lingering there
     HIST            = 60,      -- samples (30 s) of position history
     TRAVEL_CELLS    = 3,       -- net cells moved in that time = travelling
-    FRESH_SECONDS   = 900,     -- the solid line covers your last 15 minutes (3.7.5; was 5)...
-    LINE_SOLID      = 300,     -- ...full strength for the first 5, then fading out
-    STEP_GAP_MIN    = 5,       -- footsteps start (as the line fades) this close together...
-    STEP_GAP_MAX    = 16,      -- ...and spread to this far apart by the end of the trail
-    STEP_FADE       = 1800,    -- footsteps shrink from fresh size over 30 minutes (opacity: StepLook)
-    STEP_VIVID      = 600,     -- ...and are vivid, with a dark rim, for the first 10
-    STEP_DEEP       = 3600,    -- (3.6.3-3.7.4: deepened between 1 and 2 hours)
-    -- 3.7.5: footsteps come in two flat tones, not a gradient: the last hour
-    -- in full faction colour, earlier in one lighter, deeper tone; the trail
-    -- fades out over its last hour. Mixed ages then read as "recent" and
-    -- "earlier today" instead of random speckle.
-    STEP_RECENT     = 3600,
-    STEP_RECENT_A   = 0.9,
-    STEP_EARLIER_A  = 0.5,
-    STEP_BIN        = 24,      -- at most STEP_BIN_CAP footsteps in each 24 x 24 px square
-    STEP_BIN_CAP    = 3,       --    once over an hour old (6 before), newest kept, so a spot
-                               --    you circled is a light scatter
+    FRESH_SECONDS   = 900,     -- today's trail: your last 15 minutes (3.7.6)...
+    LINE_SOLID      = 300,     -- ...a solid line for the first 5, then dashes that fade out
+    DASH_PERIOD     = 5,       -- one dash every 5 x thin (about 10 px on a zone map)
+    DASH_BUDGET     = 3000,
     TEX_RAID   = "Interface\\TargetingFrame\\UI-RaidTargetingIcons",
     RECENT_CAP      = 30,      -- short memory saturates here
     RECENT_MIN      = 0.2,     -- short memory below this is not drawn
@@ -87,7 +74,6 @@ local C = {
     LN2             = math.log(2),
     LOG2_5          = math.log(5) / math.log(2), -- short memory 1 -> 0.2 (RECENT_MIN) takes this many half-lives
     SILVER_SHARE    = 0.6,     -- silver appears at this share of the gold threshold
-    STEP_BUDGET     = 4000,
     SHOT_THROTTLE   = 1.5,     -- one screenshot per burst of kills
     COMBAT_GRACE    = 3,       -- seconds after combat that a kill still counts as yours
     MARK_CAP        = 300,
@@ -173,7 +159,7 @@ local C = {
         runHours = 24, flightHours = 24, fieldAlert = true,
         iconScale = 100, overlay = true, overlaySize = "medium",
         groundScreen = true, groundChat = true, groundAfter = 2,
-        guildHaze = true, shareHistory = true },
+        guildHaze = true, shareHistory = true, selfChat = true },
     GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
     SHOT_DEFAULTS = { on = true, mode = "all", card = "text", delay = 0.5, combat = true },
 }
@@ -199,7 +185,7 @@ local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards 
 local recentSight, shared, outQ = {}, {}, {}
 local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
-    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.5"
+    or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.6"
 
 local function Print(msg) print(C.PREFIX .. msg) end
 local function Secret(v) return issecretvalue and issecretvalue(v) end
@@ -377,10 +363,27 @@ local function ZoneData(mapID)
     return z
 end
 
+-- Distance along a walking stroke to each point (3.7.6), in map widths
+-- (every zone map is 3:2, so this is the same on any view). Saved as s.d and
+-- worked out from the points as recorded, before simplification, so the
+-- trail's dashes keep their places on the ground when a stroke is closed.
+local ASPECT = 668 / 1002
+local function StrokeArc(s)
+    local n = #s / 2
+    local d = s.d
+    if not d then d = { 0 } s.d = d end
+    for i = #d + 1, n do
+        local dx, dy = s[2 * i - 1] - s[2 * i - 3], (s[2 * i] - s[2 * i - 2]) * ASPECT
+        d[i] = math.floor((d[i - 1] + math.sqrt(dx * dx + dy * dy)) * 100000 + 0.5) / 100000
+    end
+    return d
+end
+
 -- Douglas-Peucker on a flat {x1,y1,x2,y2,...} stroke, in place. A stroke's
--- per-point times (s.ts, seconds since s.t) are kept in step.
+-- per-point times (s.ts, seconds since s.t) and distances (s.d) are kept in step.
 local function Simplify(s)
     local n = #s / 2
+    if not s.k and n >= 2 then StrokeArc(s) end
     if n < 3 then return end
     local keep = { [1] = true, [n] = true }
     local stack = { 1, n }
@@ -408,17 +411,19 @@ local function Simplify(s)
             stack[#stack + 1] = wi; stack[#stack + 1] = b
         end
     end
-    local out, ots, ts = {}, {}, s.ts
+    local out, ots, ods, ts, ds = {}, {}, {}, s.ts, s.d
     for i = 1, n do
         if keep[i] then
             out[#out + 1] = s[2 * i - 1]
             out[#out + 1] = s[2 * i]
             if ts then ots[#ots + 1] = ts[i] or ts[#ts] end
+            if ds then ods[#ods + 1] = ds[i] or ds[#ds] end
         end
     end
     for i = #s, 1, -1 do s[i] = nil end
     for i = 1, #out do s[i] = out[i] end
     if ts then s.ts = ots end
+    if ds then s.d = ods end
 end
 
 -- Time of point i of a stroke, or nil when the stroke has no per-point times.
@@ -458,28 +463,6 @@ end
 local function Long(e)
     if not e.l or e.l <= 0 then return 0 end
     return e.l * math.exp(-C.LN2 * (PlayNow() - e.tl) / (db.longDays * C.DAY))
-end
-
--- Footstep look by time since you last walked there: alpha, size scale,
--- vividness (1 = just walked: pure faction colour with a dark rim) and
--- depth (1 = the deep, darker faction colour of older steps).
--- 3.6.3: steps fade slowly over the whole trail length instead of dropping
--- to a faint floor within 30 minutes. With a 24-hour trail: 90% at 1 hour,
--- 75% at 6, 55% at 12, 35% at 18, gone at 24. Shorter trails scale the same.
-local function StepLook(e, now)
-    local age = now - (e.tp or e.tr or now)
-    local vivid = 0
-    if age < C.STEP_VIVID then vivid = 0.5 * (1 + math.cos(math.pi * age / C.STEP_VIVID)) end
-    local life = (cfg.trailHours or 7) * 3600
-    if age >= life then return 0, 1, 0, 1, age end
-    -- two stages, with a 5-minute blend so nothing pops
-    local d = math.max(0, math.min(1, (age - C.STEP_RECENT) / 300))
-    local alpha = C.STEP_RECENT_A + (C.STEP_EARLIER_A - C.STEP_RECENT_A) * d
-    -- the trail's end fades out over its last hour (a quarter, for short trails)
-    local tail = math.min(3600, life * 0.25)
-    if age > life - tail then alpha = alpha * (life - age) / tail end
-    local k = age < C.STEP_FADE and 0.5 * (1 + math.cos(math.pi * age / C.STEP_FADE)) or 0
-    return alpha, 0.9 + 0.25 * k, vivid, d, age
 end
 
 -- Short memory's half-life from the trail setting: a stretch walked once
@@ -925,8 +908,8 @@ ns.Recent = Recent
 ns.RunSeconds = RunSeconds
 ns.Secret = Secret
 ns.Simplify = Simplify
+ns.StrokeArc = StrokeArc
 ns.Sound = Sound
-ns.StepLook = StepLook
 ns.UISound = UISound
 ns.VERSION = VERSION
 ns.Waypoint = Waypoint

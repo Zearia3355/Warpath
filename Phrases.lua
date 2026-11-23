@@ -72,9 +72,31 @@ P.pools = {
         "{name}'s run ends at {n} in {zone}.",
         "{killer} ends {name}'s streak at {n} in {zone}.",
         "{name} falls after {n} straight in {zone}.",
+        "{killer} snaps {name}'s streak of {n} in {zone}.",
+        "{name}'s {n}-kill run is over in {zone}.",
     },
-    died = { "{name} was killed in {zone}." },
-    took = { "{name} fell in {zone}, but took {victim} down with them." },
+    -- 3.7.6: deaths get their own wording too (the first line is the fallback)
+    died = {
+        "{name} was killed in {zone}.",
+        "{name} fell in {zone}.",
+        "{name} bit the dust in {zone}.",
+        "{name} is face down in {zone}.",
+        "{zone} claims {name}.",
+        "{name} is off to the spirit healer from {zone}.",
+        "{name} went down swinging in {zone}.",
+        "{killer} cut down {name} in {zone}.",
+        "{killer} sends {name} to the graveyard from {zone}.",
+        "{name} ran into {killer} in {zone}, and lost.",
+        "{killer} got the better of {name} in {zone}.",
+        "{name} has a new score to settle with {killer} in {zone}.",
+    },
+    took = {
+        "{name} fell in {zone}, but took {victim} down with them.",
+        "{name} and {victim} trade lives in {zone}.",
+        "{name} died in {zone}, but not before taking {victim} along.",
+        "{victim} and {name} both hit the dirt in {zone}.",
+        "{name} goes down in {zone}, and {victim} goes with them.",
+    },
 }
 
 -- Lines that need a placeholder only some events have.
