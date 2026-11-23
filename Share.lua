@@ -82,8 +82,13 @@ local function FullSender(sender)
 end
 ns.FullSender = FullSender
 
+-- 3.7.8: guildmates' messages are received everywhere, battlegrounds,
+-- arenas, dungeons and raids included, so you hear about their open-world
+-- kills and deaths while you're inside and their pins are waiting on your
+-- map when you come out. Inside, Warpath still sends nothing and records
+-- nothing of yours.
 local function OnComm(prefix, text, channel, sender)
-    if prefix ~= C.COMM or not cfg.share or S.inInstance then return end
+    if prefix ~= C.COMM or not cfg.share then return end
     if Secret(text) or Secret(sender) or type(text) ~= "string" or type(sender) ~= "string" then return end
     if sender == myFull or Ambiguate(sender, "short") == myName or ns.IsMe(sender) or ns.IsEcho(text, sender) then return end
     -- battle-haze sync (3.7): hellos and history

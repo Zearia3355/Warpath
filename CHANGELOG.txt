@@ -1,6 +1,25 @@
 Warpath changelog
 
 =====================================================================
+3.7.8
+=====================================================================
+
+- Guildmates' kills and deaths reach you everywhere. Inside a
+  battleground, arena, dungeon or raid you now still get their chat
+  lines ("Bob scored a triple kill in Felwood!"), and their pins and
+  battle haze are saved, waiting on your map when you come out. Before,
+  everything they sent while you were inside was thrown away.
+- Inside, Warpath still sends nothing and records nothing of yours: no
+  banners, sounds, screenshots or map drawing, as before.
+- A guildmate who asks for your battle history while you're inside gets
+  it the next time either of you logs in.
+
+- Your saved data: everything is kept. Nothing about your data changes.
+- No new files: a /reload loads it (the version number shown stays
+  3.7.5 until you next restart the game).
+- Includes 3.7.0 to 3.7.7.
+
+=====================================================================
 3.7.7
 =====================================================================
 
