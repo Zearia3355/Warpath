@@ -159,6 +159,15 @@ local function Usable(pool, have)
     return ok
 end
 
+-- 3.7.11: can any line of this pool be said with these values? A pool where
+-- every line names the victim ("grudge") can't be said without one.
+function P.CanSay(pool, vars)
+    if not P.pools[pool] then return false end
+    local have = {}
+    for k, v in pairs(vars) do if v ~= nil and v ~= "" then have[k] = true end end
+    return #Usable(pool, have) > 0
+end
+
 -- Deal the next line number from a pool. have: { killer = true, ... }.
 function P.Deal(pool, have)
     local list = P.pools[pool]

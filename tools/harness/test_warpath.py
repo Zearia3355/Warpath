@@ -175,18 +175,19 @@ class Lines(unittest.TestCase):
                         line = self.text(pool, i, **vars_)
                         self.assertNotRegex(line, self.HOLE)
 
-    @unittest.expectedFailure
     def test_grudge_kill_from_the_network_without_a_victim(self):
-        """KNOWN GAP (found 2026-11-23, not yet fixed in the addon).
-
-        The receiver trusts the sender's pool code and victim name separately.
-        An honest 3.7 sender always names a grudge victim, but a garbled or
-        hand-made message ("g" with an empty victim) prints "settled a grudge
-        in Felwood:  falls!". Fix in Feats.GuildKillLine by falling back to the
-        plain kill pool when a pool needs a victim it wasn't given; then delete
-        the decorator."""
+        """Found by this harness on 2026-11-23, fixed in 3.7.11: a garbled
+        message with the grudge wording but no victim printed "settled a
+        grudge in Felwood:  falls!". It now falls back to a plain kill line."""
         line = self.wow.eval("ns.Feats.GuildKillLine('Bob', 'Felwood', 'g', '1', '1', '', '', '', '', '', '')")
         self.assertNotRegex(line, self.HOLE)
+        self.assertIn("Bob", line)
+        self.assertNotIn("grudge", line)
+
+    def test_grudge_kill_with_a_victim_still_names_them(self):
+        line = self.wow.eval("ns.Feats.GuildKillLine('Bob', 'Felwood', 'g', '1', '1', '', '', '', '', '', 'Thrall')")
+        self.assertIn("Thrall", line)
+        self.assertIn("grudge", line)
 
     def test_old_sender_kill_line(self):
         # A 3.6 sender sends no tier or feat fields.

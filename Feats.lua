@@ -209,6 +209,9 @@ function Feats.GuildKillLine(from, zone, bk, pi, n, ek, ei, a1, a2, cry, victim)
     local pool = CODE_POOL[bk or ""] or "kill"
     n = tonumber(n) or 1
     local vars = { name = from, zone = zone, n = n, victim = victim ~= "" and victim or nil }
+    -- 3.7.11: a garbled message can name the grudge wording but no victim,
+    -- which printed "settled a grudge in Felwood:  falls!". Say a plain kill.
+    if not P.CanSay(pool, vars) then pool, pi = "kill", nil end
     local line = P.Text(pool, pi, vars)
     local extra
     if ek == "s" then

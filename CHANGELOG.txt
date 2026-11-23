@@ -1,6 +1,24 @@
 Warpath changelog
 
 =====================================================================
+3.7.11
+=====================================================================
+
+- A guildmate's grudge kill could print with a gap where the name
+  should be ("settled a grudge in Felwood:  falls!") if the message
+  arrived garbled. It now prints as a plain kill instead.
+- Warpath is now on CurseForge, as "Warpath Forever" (the plain name
+  was taken). Once CurseForge approves it, you can install and update
+  it from the CurseForge app instead of copying folders by hand.
+- Only your copy changes; guildmates don't need it.
+
+- Your saved data: everything is kept. Nothing about your data changes.
+- No new files the game loads: a /reload loads it. (There is one new
+  file, LICENSE, a text file the game ignores.) The version number
+  shown stays at the old one until you next restart the game.
+- Includes 3.7.0 to 3.7.10.
+
+=====================================================================
 3.7.10
 =====================================================================
 

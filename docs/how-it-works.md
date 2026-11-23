@@ -202,3 +202,4 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-22 | No waypoint on pin click | Joe |
 | 2026-11-22 | Upgrade rule; versioning rule (3.7.x for tinkering) | Joe |
 | 2026-11-22 | Declined: receiver-side multi-kill counting for guildmates on 3.6 | Joe |
+| 2026-11-23 | 3.7.11: a guild kill whose wording can't be said with the fields it carried (grudge, no victim) prints as a plain kill, with our own pick of line. General (`Phrases.CanSay`), not a grudge special case | Claude |

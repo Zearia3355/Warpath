@@ -4,7 +4,14 @@ Only open things live here. Close items when Joe confirms them; move shipped wor
 
 ---
 
-## Built and tagged, not installed
+## Built, not tagged or installed
+
+**3.7.11** (built 2026-11-23). Carries 3.7.10, which never reached the game, plus:
+- Garbled guild grudge messages fall back to plain kill wording (`Phrases.CanSay`, used in `Feats.GuildKillLine`). Found by the test harness.
+- `## X-Curse-Project-ID: 1826632` in the TOC, and a `LICENSE` file (MIT, not loaded by the game).
+- Changed from 3.7.10: `Phrases.lua`, `Feats.lua`, `Warpath.toc`, `Warpath.lua` (version comment), `CHANGELOG.txt`, new `LICENSE`.
+
+## Built and tagged, superseded by 3.7.11
 
 **3.7.10 — receive diagnostics for guild sharing.** Receiver-only; guildmates don't need it. Patch notes **are** written and are in `CHANGELOG.txt` (the handoff said otherwise; the code and changelog disagreed with it). The TOC and the `Warpath.lua` header both read 3.7.10. It reaches the game only on a rev.
 
@@ -24,7 +31,7 @@ Opened 2026-11-22. This is the one piece of live work.
 
 ## Found by the test harness
 
-- **Grudge line with no victim** (found 2026-11-23). A guild message carrying the grudge pool code but an empty victim prints "settled a grudge in Felwood:  falls!". Honest 3.7 senders always name the victim, so only a garbled or hand-made message hits it. Fix in `Feats.GuildKillLine`: fall back to the plain kill pool when the chosen pool needs a field it wasn't given. Recorded as an `expectedFailure` in `tools/harness/test_warpath.py`; remove the decorator with the fix. Addon code, so it ships in a versioned release.
+- ~~Grudge line with no victim~~: fixed in 3.7.11, now a regular test.
 - **Map drawing is switched off on Joe's account** (`cfg.shown = false` in `WarpathGlobal`, seen 2026-11-23). Probably deliberate via the map button, but worth a glance if the map ever "shows nothing".
 
 ## Waiting on in-game confirmation

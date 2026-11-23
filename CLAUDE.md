@@ -12,10 +12,10 @@ Migrated from a claude.ai Project on 2026-11-23. Everything before that is in `C
 
 ## Current state (2026-11-23)
 
-- **`main`** is at 3.7.10 plus the repo's own tooling. Tag `3.7.10` is the newest release.
-- **Installed in the game:** 3.7.9. 3.7.10 is built and tagged but **not installed** — it reaches the AddOns folder only when Joe says "rev".
+- **`main`** is at **3.7.11, built but not tagged**: the 3.7.10 diagnostics, the grudge-line fix, the CurseForge project id and the licence. Tag `3.7.10` (the old project's zip) is the newest tag.
+- **Installed in the game:** 3.7.9. 3.7.10 never reached the game; 3.7.11 replaces it. On Joe's "rev": tag `3.7.11`, push the tag (CI tests, then publishes to CurseForge), run `tools/install.ps1`. It will be the first release through the new pipeline.
 - **Saved-data version:** `db.v` = 9 (since 3.7.1).
-- **Open investigation:** guildmates' kills don't reach Joe inside battlegrounds. 3.7.10 exists to diagnose it. See `docs/open-items.md`.
+- **Open investigation:** guildmates' kills don't reach Joe inside battlegrounds. 3.7.10's diagnostics (in 3.7.11) exist to diagnose it. See `docs/open-items.md`.
 - **Nothing else is queued.**
 
 ## The repo
@@ -162,6 +162,6 @@ Lesson: a render that *looks* like a map proves nothing. Check new render featur
 
 Verified against in-game screenshots on 2026-11-23 (Lethality's data): Felwood (road shape and skull positions) and Kalimdor (northern skull cluster, the blue blade marks east of it, the trail south). Joe confirmed both. Map art and icon textures exist only in the client, so the ground is an olive stand-in and icons are simple glyphs. **Final looks are always checked in game.**
 
-Known gap recorded as an `expectedFailure`: a garbled guild message with the grudge pool code and no victim prints "settled a grudge in Felwood:  falls!". Honest 3.7 senders always name the victim. Fix in `Feats.GuildKillLine`, then remove the decorator.
+The harness's first real catch: a garbled guild message with the grudge wording and no victim printed "settled a grudge in Felwood:  falls!". Fixed in 3.7.11; now a regular test.
 
 **Steadiness** (`Steadiness` tests) guards the "anchored to the ground, only fade" rule: walk, stop, then as time passes no trail ink may appear where there was none. It deliberately does *not* compare segment centres, as the old project's test did — a dash crossing a bend is several segments whose split point changes as it shortens, so centres move even when the dash doesn't. A companion test proves the check catches a 3 px crawl. Not yet covered: steadiness *while walking* (strokes extended at the open end).
