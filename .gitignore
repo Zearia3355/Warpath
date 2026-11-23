@@ -1,3 +1,7 @@
+# Machine-specific notes: paths, account name, character names. Claude Code
+# reads this alongside CLAUDE.md, but it does not belong in a public repo.
+CLAUDE.local.md
+
 # Build output from the packager
 /.release/
 
