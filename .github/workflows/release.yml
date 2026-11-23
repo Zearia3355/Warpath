@@ -1,16 +1,24 @@
 name: Release
 
-# Fires on a bare version tag, e.g. 3.7.11 -- no "v" prefix, because the
-# packager uses the tag verbatim as the version string, so a tag of "v3.7.11"
-# would publish on CurseForge as "v3.7.11".
+# Two ways in:
 #
-# The imported tags for 3.3.5 through 3.7.10 point at commits made before this
-# file existed. GitHub reads the workflow from the tagged ref, so pushing that
-# history triggers nothing and cannot re-upload old releases.
+#   Push a bare version tag (3.7.11)  -> package and publish.
+#     No "v" prefix: the packager uses the tag verbatim as the version string,
+#     so a tag of "v3.7.11" would publish on CurseForge as "v3.7.11".
+#     The imported tags for 3.3.5 to 3.7.10 point at commits made before this
+#     file existed, and GitHub reads the workflow from the tagged ref, so
+#     pushing that history triggers nothing and cannot re-upload old releases.
+#
+#   Run it by hand (workflow_dispatch) -> package and upload NOTHING.
+#     Passes -d, which skips every upload, and keeps the zip as an artifact so
+#     the build can be checked before CurseForge exists. The packager still
+#     hard-fails on a bad .pkgmeta, a missing TOC or a missing interface
+#     version, which is the point of running it.
 on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
 
 permissions:
   contents: write # create the GitHub release
@@ -25,11 +33,25 @@ jobs:
           fetch-depth: 0 # full history: the packager needs it for changelogs
 
       - uses: BigWigsMods/packager@v2
+        with:
+          args: ${{ github.event_name == 'workflow_dispatch' && '-d' || '' }}
         env:
           # Set CF_API_TOKEN in the repo's secrets once the CurseForge project
           # exists, and put its project id in Warpath.toc as
           # ## X-Curse-Project-ID: <id>
+          # Until both exist the CurseForge step is skipped with a warning
+          # rather than failing.
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          # Provided automatically by Actions; uploads the zip to the GitHub
-          # release as well, so there is always a copy outside CurseForge.
+          # Provided automatically by Actions; also attaches the zip to the
+          # GitHub release, so there is always a copy outside CurseForge.
           GH_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Keep the package for inspection
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: warpath-validation-build
+          path: .release/*.zip
+          # Fail the run if the packager produced no zip: silence would
+          # otherwise look like success.
+          if-no-files-found: error
