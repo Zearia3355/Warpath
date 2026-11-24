@@ -17,12 +17,13 @@ manual-changelog:
 # These versions were picked to work on the Forever client (LibDBIcon r56,
 # taken from Questie's repo); externals would silently upgrade them on every
 # build, which is exactly the kind of change that cannot be tested outside the
-# game. Declaring them here still tells CurseForge what is embedded.
-embedded-libraries:
-  - LibStub
-  - CallbackHandler-1.0
-  - LibDataBroker-1.1
-  - LibDBIcon-1.0
+# game.
+#
+# No `embedded-libraries` list: it becomes "embedded library" relations on the
+# CurseForge upload, which must be CurseForge project slugs, and a bad one
+# fails the whole upload. The first 3.7.11 publish died on exactly that
+# ("Invalid slug in project relations: 'libdbicon-1.0'"). The relations are
+# cosmetic; the libraries ship inside the addon either way.
 
 # Repo-only files: never shipped to players.
 ignore:
