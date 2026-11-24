@@ -332,6 +332,53 @@ class Steadiness(unittest.TestCase):
             with self.subTest(minutes_later=minutes):
                 self.assertEqual(self.new_ink(first, later), [], "trail ink appeared where there was none: a dash moved")
 
+    def test_dashes_stay_put_when_you_walk_on_after_a_stop(self):
+        # 3.8 smooths the path the dashes follow. Near the end of the trail
+        # the smoothing window is narrower; stop long enough for that end to
+        # turn to dashes, then walk on round a tight bend: the old dashes must
+        # not shift (at 2 slots of smoothing they do, by about 1.7 px).
+        import math
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        for i in range(120):
+            a = i / 120 * math.pi
+            wow.H.player.x, wow.H.player.y = 0.40 + 0.08 * math.cos(a), 0.50 + 0.08 * math.sin(a)
+            wow.advance(1)
+        wow.advance(5 * 60)
+        first = self.segments(wow)
+        for i in range(1, 30):
+            a = math.pi + i / 120 * math.pi
+            wow.H.player.x, wow.H.player.y = 0.40 + 0.08 * math.cos(a), 0.50 + 0.08 * math.sin(a)
+            wow.advance(1)
+        later = [s for s in self.segments(wow) if min(s[1], s[3]) > 0.50 * 668 + 3]  # the old curve only
+        self.assertEqual(self.new_ink(first, later), [], "dashes moved when you walked on")
+
+    def test_dashes_and_arrows_are_evenly_spaced(self):
+        # Joe, 3.8: with the shorter arrow, the gap before each arrow was about
+        # four times the others. Walk a straight line, let it turn to dashes,
+        # and measure the gaps between marks along it.
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        for i in range(150):
+            wow.H.player.x, wow.H.player.y = 0.20 + i * 0.004, 0.50
+            wow.advance(1)
+        wow.advance(4 * 60)                              # all of it past the solid line, still fresh
+        y0 = 0.50 * 668
+        on = sorted((min(x1, x2), max(x1, x2)) for x1, y1, x2, y2 in self.segments(wow)
+                    if abs(y1 - y0) < 0.3 and abs(y2 - y0) < 0.3 and abs(x2 - x1) > 0.01)
+        marks = []
+        for a, b in on:                                  # join the pieces of one mark
+            if marks and a - marks[-1][1] < 0.3:
+                marks[-1][1] = max(marks[-1][1], b)
+            else:
+                marks.append([a, b])
+        gaps = [b[0] - a[1] for a, b in zip(marks, marks[1:])]
+        inner = gaps[2:-2]                               # leave the ends of the trail out
+        self.assertGreater(len(inner), 10)
+        # neighbours match; along the trail gaps grow slowly as older marks shorten
+        jumps = [abs(b - a) for a, b in zip(inner, inner[1:])]
+        self.assertLess(max(jumps), 0.6, f"uneven gaps: {[round(g, 1) for g in inner]}")
+
     def test_the_check_catches_a_crawl(self):
         # Guard against a test that can't fail: shift every dash 3 px along x.
         wow = Wow().login()
@@ -593,6 +640,262 @@ class RoadFading(unittest.TestCase):
             Put(30, 40, 31, 40, 1.9)
             for y = 30, 36 do Put(24, y, 24, y + 1, 1.5) end
         """)
+
+
+class Lingering(unittest.TestCase):
+    """Where you lingered becomes an outlined area (3.8).
+
+    Questing tangles the trail into scribble. Staying a few minutes in one
+    place forms an area that grows while you're in it and freezes when you
+    leave; the trail inside is replaced by the outline."""
+
+    MAP = 1448
+
+    def setUp(self):
+        from render import COLLECT
+        self.COLLECT = COLLECT
+        self.wow = Wow().login()
+        self.wow.run(f"ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = {self.MAP}")
+
+    def go(self, x, y):
+        self.wow.H.player.x, self.wow.H.player.y = x, y
+        self.wow.advance(1)
+
+    def quest(self, cx, cy, seconds, r=0.025, phase=0.0):
+        import math
+        for i in range(seconds):
+            t = i * 0.05 + phase
+            self.go(cx + r * math.sin(t * 1.3) * math.cos(t * 0.7), cy + r * 1.4 * math.sin(t * 0.9))
+
+    def walk(self, x0, y0, x1, y1, step=0.004):
+        n = max(1, int(((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 / step))
+        for i in range(1, n + 1):
+            self.go(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n)
+
+    def areas(self):
+        return self.wow.eval(f"#(WarpathDB.maps[{self.MAP}].areas or {{}})")
+
+    def live(self):
+        return self.wow.eval("ns.Linger.Live() ~= nil")
+
+    def visits(self, i=1):
+        return self.wow.eval(f"#WarpathDB.maps[{self.MAP}].areas[{i}].v")
+
+    def spent(self, i=1):
+        return self.wow.eval(f"""(function() local n = 0
+            for _, v in ipairs(WarpathDB.maps[{self.MAP}].areas[{i}].v) do n = n + v.t end return n end)()""")
+
+    def outline_px(self, i=1):
+        flat = self.wow.eval(f"table.concat(ns.Linger.Outline(WarpathDB.maps[{self.MAP}].areas[{i}]), ',')")
+        v = [float(t) for t in flat.split(",")]
+        return [(v[j] * 1002, v[j + 1] * 668) for j in range(0, len(v), 2)]
+
+    def lines(self):
+        self.wow.eval("ns.Redraw()")
+        out = []
+        for p in self.wow.run(self.COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L":
+                out.append(tuple(float(v) for v in f[6:10]))
+        return out
+
+    def test_questing_forms_an_area_that_freezes_when_you_leave(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.assertEqual(self.areas(), 0, "walking somewhere is not lingering")
+        self.quest(0.40, 0.50, 6 * 60)
+        self.assertEqual(self.areas(), 1)
+        self.assertTrue(self.live())
+        before = self.wow.eval(f"table.concat(WarpathDB.maps[{self.MAP}].areas[1].h, ',')")
+        self.walk(0.40, 0.50, 0.70, 0.50)
+        self.assertFalse(self.live(), "walking away leaves the area")
+        after = self.wow.eval(f"table.concat(WarpathDB.maps[{self.MAP}].areas[1].h, ',')")
+        xs = [float(v) for v in after.split(",")[0::2]]
+        self.assertLess(max(xs), 0.40 + 0.025 + 0.035, "the walk out joined the area")
+        self.assertGreater(len(before), 0)
+        self.assertGreater(self.spent(), 5 * 60)
+
+    def test_standing_still_is_not_lingering(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        for _ in range(15 * 60):
+            self.go(0.40, 0.50)
+        self.assertEqual(self.areas(), 0)
+
+    def test_a_short_trip_past_the_edge_does_not_split_the_area(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.40, 0.62)          # out past the edge...
+        self.walk(0.40, 0.62, 0.40, 0.50)          # ...and straight back
+        self.quest(0.40, 0.50, 6 * 60, phase=2.0)
+        self.assertEqual(self.areas(), 1)
+
+    def test_a_return_visit_adds_its_time_to_the_same_area(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        first = self.spent()
+        self.walk(0.40, 0.50, 0.80, 0.30)
+        self.quest(0.80, 0.30, 6 * 60)             # somewhere else for a while
+        self.walk(0.80, 0.30, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60, phase=1.0)
+        self.assertEqual(self.areas(), 2)
+        self.assertEqual(self.visits(1), 2)
+        self.assertGreater(self.spent(1), first + 5 * 60)
+
+    def inside_ink(self, poly, lines, margin=2.0):
+        """Points of drawn lines well inside an area's outline (not on it)."""
+        def inside(x, y):
+            c = False
+            for (x1, y1), (x2, y2) in zip(poly, poly[1:]):
+                if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+                    c = not c
+            return c
+        bad = []
+        for x1, y1, x2, y2 in lines:
+            for t in (0.25, 0.5, 0.75):
+                x, y = x1 + (x2 - x1) * t, y1 + (y2 - y1) * t
+                if inside(x, y) and min(Steadiness.dist(x, y, (a[0], a[1], b[0], b[1]))
+                                        for a, b in zip(poly, poly[1:])) > margin:
+                    bad.append((round(x), round(y)))
+        return bad
+
+    def test_after_you_leave_the_trail_stops_at_the_outline(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 8 * 60)
+        self.walk(0.40, 0.50, 0.70, 0.50)
+        self.wow.advance(3 * 60)
+        poly = self.outline_px()
+        lines = self.lines()
+        self.assertTrue(lines)
+        self.assertEqual(self.inside_ink(poly, lines), [], "trail drawn inside an area you've left")
+        # and the check can fail: without the cut, the tangle is still there
+        self.wow.run("ns.Linger.Clip = function(_, _, _, _, _, out) out(0, 1, 1) end")
+        self.assertNotEqual(self.inside_ink(poly, self.lines()), [])
+
+    def hull_xs(self, i=1):
+        h = self.wow.eval(f"table.concat(WarpathDB.maps[{self.MAP}].areas[{i}].h, ',')")
+        return [float(v) for v in h.split(",")[0::2]]
+
+    def room(self, cx, cy, seconds, rx, ry):
+        import math
+        for i in range(seconds):
+            t = i * 0.05
+            self.go(cx + rx * math.sin(t * 1.3) * math.cos(t * 0.7), cy + ry * math.sin(t * 0.9))
+
+    def test_areas_are_measured_in_yards(self):
+        # Joe, test3: in the Undercity the area by the lift covered only part
+        # of where he lingered. Distances were fractions of the map, and a
+        # city map covers a few times less ground than a zone map. The same
+        # room-sized wander (about 60 yards across a 1000-yard city map)...
+        self.wow = Wow()                                # a map's width is read once, at its first sample
+        self.wow.run(f"__H.mapYards = {{ [{self.MAP}] = 1000 }}")
+        self.wow.login()
+        self.wow.run(f"ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = {self.MAP}")
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.room(0.40, 0.50, 6 * 60, 0.06, 0.08)
+        self.assertEqual(self.areas(), 1, "a room in a city is somewhere you lingered")
+        # ...on a zone map is ground four times wider, and isn't one place
+        other = Lingering()
+        other.setUp()
+        other.walk(0.20, 0.50, 0.40, 0.50)
+        other.room(0.40, 0.50, 6 * 60, 0.06, 0.08)
+        self.assertEqual(other.areas(), 0)
+
+    def test_a_short_trip_past_the_edge_joins_the_area(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.45, 0.50)             # out past the edge (90 yd)...
+        for _ in range(30):                           # ...about a bit there, within 150 yd...
+            self.go(0.45, 0.505)
+            self.go(0.45, 0.495)
+        self.walk(0.45, 0.50, 0.40, 0.50)             # ...and straight back
+        self.quest(0.40, 0.50, 60, phase=2.0)
+        self.assertEqual(self.areas(), 1)
+        self.assertGreater(max(self.hull_xs()), 0.445, "the trip's ground didn't join")
+
+    def test_trail_from_just_before_an_area_forms_joins_it(self):
+        self.walk(0.20, 0.50, 0.385, 0.50)
+        self.room(0.387, 0.50, 3 * 60, 0.003, 0.02)   # milling about on one side...
+        self.walk(0.387, 0.50, 0.52, 0.50)            # ...off east for a bit...
+        self.room(0.52, 0.50, 90, 0.003, 0.01)
+        self.walk(0.52, 0.50, 0.42, 0.50)             # ...and back in from the east
+        self.room(0.42, 0.50, 5 * 60, 0.012, 0.02)    # ...then long enough beside it to form
+        self.assertEqual(self.areas(), 1)
+        self.assertLess(min(self.hull_xs()), 0.392, "the earlier wandering didn't join")
+
+    def test_the_hidden_trail_stays_hidden_when_you_leave(self):
+        # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes
+        # hidden while you were inside came back for a minute. With the solid
+        # line short, nothing at all may be drawn inside just after leaving.
+        self.wow.run("ns.C.LINE_SOLID = 5")
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 8 * 60)
+        # inside the area you're in: only your last seconds, around you
+        px, py = self.wow.H.player.x * 1002, self.wow.H.player.y * 668
+        before = [(x, y) for x, y in self.inside_ink(self.outline_px(), self.lines())
+                  if (x - px) ** 2 + (y - py) ** 2 > 15 ** 2]
+        self.assertEqual(before, [], "trail drawn inside the area you're in")
+        self.walk(0.40, 0.50, 0.52, 0.50)              # just out: seconds after leaving
+        self.assertFalse(self.live())
+        self.assertEqual(self.inside_ink(self.outline_px(), self.lines()), [],
+                         "hidden trail came back when you left")
+
+    def test_areas_and_links_only_fade_as_time_passes(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.60, 0.35)
+        self.quest(0.60, 0.35, 6 * 60, r=0.02)
+        self.walk(0.60, 0.35, 0.75, 0.60)
+        self.wow.advance(6 * 60)
+        st = Steadiness()
+        first = st.segments(self.wow)
+        self.assertGreater(len(first), 20)
+        for minutes in (1, 5, 15, 30):
+            self.wow.advance(60 * minutes)
+            with self.subTest(minutes_later=minutes):
+                self.assertEqual(st.new_ink(first, st.segments(self.wow)), [], "ink appeared as time passed")
+
+    def test_the_trail_between_visits_still_shows_when_you_come_back(self):
+        # Found on a render (3.8.0-test2): coming back into an area stretched
+        # every earlier visit's hidden span to "now", so the whole trail in
+        # between vanished. Out to a loop well away from the area and back in:
+        # the loop's dashes must still be drawn.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.40, 0.20)
+        self.walk(0.40, 0.20, 0.70, 0.20)
+        self.walk(0.70, 0.20, 0.40, 0.50)              # back inside, within 10 minutes
+        self.quest(0.40, 0.50, 7 * 60, phase=1.0)      # long enough that the loop is all dashes
+        self.assertEqual(self.wow.eval("ns.Linger.Live() ~= nil"), True)
+        far = [l for l in self.lines() if min(l[1], l[3]) < 0.30 * 668]
+        self.assertGreater(len(far), 10, "the trail out and back vanished")
+
+    def test_the_trail_reaches_you_between_redraws(self):
+        # The trail is redrawn every 2 s at most and points are recorded every
+        # few steps, but your arrow moves all the time: the trail must still
+        # run right up to it, with no gap behind you (Joe, 3.8.0-test1).
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.lines()                                   # a redraw
+        self.wow.H.player.x = 0.4025                   # a step on, not yet sampled or drawn
+        self.wow.run("ns.UpdateTail()")
+        ends = [(x2, y2) for x1, y1, x2, y2 in self.collect()]
+        px, py = 0.4025 * 1002, 0.50 * 668
+        self.assertTrue(any(abs(x - px) < 0.6 and abs(y - py) < 0.6 for x, y in ends),
+                        "no line reaches where you are")
+
+    def collect(self):
+        out = []
+        for p in self.wow.run(self.COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L":
+                out.append(tuple(float(v) for v in f[6:10]))
+        return out
+
+    def test_areas_go_with_the_trail_after_a_day(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.70, 0.50)
+        self.wow.H.now = self.wow.H.now + 25 * 3600
+        self.wow.run("ns.Prune()")
+        self.assertEqual(self.areas(), 0)
 
 
 class Upgrades(unittest.TestCase):

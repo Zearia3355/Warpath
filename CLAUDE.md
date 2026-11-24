@@ -10,13 +10,15 @@ Migrated from a claude.ai Project on 2026-11-23. Everything before that is in `C
 
 ---
 
-## Current state (2026-11-23)
+## Current state (2026-11-24)
 
-- **3.7.11 is released**: tagged, published to CurseForge (pending the project's moderation) and GitHub Releases, and installed in Joe's game. The published zip is byte-identical to the installed copy. It was the first release through the pipeline.
-- **Installed in the game:** 3.7.11 (installed 2026-11-23).
-- **Saved-data version:** `db.v` = 9 (since 3.7.1).
+- **3.7.11 is released**: tagged, published to CurseForge (pending the project's moderation) and GitHub Releases. It was installed in Joe's game (byte-identical to the published zip) until the road test builds replaced it. It was the first release through the pipeline.
+- **Installed before that:** **3.7.12-test2** (2026-11-24), a prototype of the roads rework from branch `roads-snap`, not `main`. Installed under its own label because installed files never change under an existing version number. Joe checked it in game: "a lot better initially"; everything is still silver, and he is watching how gilding arrives as he plays. SavedVariables backups: `tools/out/savedvars-backup-2026-11-23/` (before the first test build) and `-2026-11-24/`.
+- **Saved-data version:** `db.v` = 10 on Joe's characters (the test build's road merge). **Never reinstall 3.7.11 over it:** 3.7.11's `Migrate()` doesn't know version 10 and would rerun `MigrateToV4`, which recounts kills and deaths from pins and inflates totals. To go back, restore a backup with the game closed.
 - **Open investigation:** guildmates' kills don't reach Joe inside battlegrounds. 3.7.10's diagnostics (in 3.7.11) exist to diagnose it. See `docs/open-items.md`.
-- **Nothing else is queued.**
+- **3.8.0 "Roads, trails and flights"** (Joe, 2026-11-24): the roads rework, the trail rework and a coming flight-path rework ship together as a feature release.
+- **Installed in the game: 3.8.0-test4** (2026-11-24, from branch `trail-areas`): the trail rework on top of the roads prototype. test2 joined the trail to your arrow; test3 makes the line solid for 2.5 min with a small colour jump, and fixes trail vanishing on a return to an area and loops looking new; test4 adds dash smoothing, even dash/arrow spacing, hidden trail staying hidden on leaving, and areas measured in yards with short trips and recent trail joining. SavedVariables backups: `tools/out/savedvars-backup-2026-11-24-test1/` (before the trail rework), `-test2/`, `-test3/`, `-test4/`. It adds `z.areas` only; going back to 3.7.12-test2 is safe (it ignores the key). See `docs/open-items.md` (Trail rework).
+- **Roads rework (3.7.12 prototype, now part of 3.8.0):** built and in game test; what's left before release is in `docs/open-items.md` (Roads rework). The design, thresholds and decisions are in `docs/how-it-works.md` (Roads, decision log).
 
 ## The repo
 
@@ -65,7 +67,7 @@ A new project is invisible to others and its files do not sync until a moderator
 - Every release's patch notes carry a **"Your saved data:"** line.
 - Before installing, say when a reload or restart will drop anything held only in memory. (3.7.4's install dropped unsaved guild pins and Joe noticed.) Live enemy-sighting crests are still memory-only.
 - Upgrades run inside `pcall`; on error, print one chat line and start the new feature empty rather than breaking.
-- Saved-data versions: `db.v` 4 (3.3.x) → 5 (3.4) → 6 → 7 (3.6.0) → 8 (3.7.0) → 9 (3.7.1). One `MigrateToV<n>` function each, in `Warpath.lua`.
+- Saved-data versions: `db.v` 4 (3.3.x) → 5 (3.4) → 6 → 7 (3.6.0) → 8 (3.7.0) → 9 (3.7.1) → 10 (3.7.12, on `roads-snap`). One `MigrateToV<n>` function each, in `Warpath.lua` (`MigrateToV10` calls `ns.MergeLanes` in `Record.lua`).
 
 ### Upgrading from hand-copied installs (verified 2026-11-23)
 
@@ -101,7 +103,7 @@ Moving a hand-copied install to the CurseForge app: saved data lives in `WTF`, n
 
 Lua 5.1, one shared addon namespace (`ns`). Load order is `Warpath.toc`, which is the dependency graph — check it there, not here:
 
-`Warpath.lua` (constants `ns.C`, state `ns.S`, helpers, migrations, version) · `Phrases.lua` · `Foes.lua` · `Share.lua` (guild comms: `OnComm` → `Receive`, send queue, diagnostics) · `Sync.lua` · `Grudge.lua` · `Overlay.lua` · `Feats.lua` · `Ground.lua` · `Record.lua` · `Campaign.lua` · `Zone.lua` · `Map.lua` (drawing, replay) · `MapButton.lua` · `Minimap.lua` · `Hud.lua` (war table) · `Chronicle.lua` (book window) · `Options.lua` (tabbed window) · `Commands.lua` (command table, help, aliases) · `Events.lua`
+`Warpath.lua` (constants `ns.C`, state `ns.S`, helpers, migrations, version) · `Phrases.lua` · `Foes.lua` · `Share.lua` (guild comms: `OnComm` → `Receive`, send queue, diagnostics) · `Sync.lua` · `Grudge.lua` · `Overlay.lua` · `Feats.lua` · `Ground.lua` · `Record.lua` · `Linger.lua` (lingering areas: recording, outline geometry, clipping; 3.8) · `Campaign.lua` · `Zone.lua` · `Map.lua` (drawing, replay) · `MapButton.lua` · `Minimap.lua` · `Hud.lua` (war table) · `Chronicle.lua` (book window) · `Options.lua` (tabbed window) · `Commands.lua` (command table, help, aliases) · `Events.lua`
 
 Libraries in `Libs\`: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0 r56 (taken from Questie's repo).
 
@@ -151,13 +153,14 @@ Prefix-based addon messages (`WARPATH`, proto `1`). Old versions safely ignore u
 | `python tools/harness/test_warpath.py` | Boot, slash commands, an hour of simulated play, guild sharing and the 3.7.10 diagnostics, every chat line at every index, map drawing. |
 | `WARPATH_WTF=<account dir> python tools/harness/test_warpath.py` | Also boots every real character (`RealData`): no Lua errors, nothing lost, SavedVariables checksummed before and after to prove they are never written. |
 | `python tools/harness/upgrade_matrix.py [tags]` | For every release tag: that release plays a session and saves, then the working copy upgrades the data. Prints what survived. Also runs as the `Upgrades` test (CI checks out tags for it). |
-| `python tools/harness/render.py --wtf <account dir> --char Name-Realm [--map ID] [--ref A --ref B] [--layers roads,trail]` | Renders the map from real saved data with the addon's own `Map.lua`. Repeated `--ref` renders each git ref side by side: the before/after Joe picks from. Defaults to the zone with most roads, as of the character's last logout. |
+| `python tools/harness/render.py --wtf <account dir> --char Name-Realm [--map ID] [--ref A --ref B] [--layers roads,trail]` | Renders the map from real saved data with the addon's own `Map.lua`. Repeated `--ref` renders each git ref side by side: the before/after Joe picks from. `--ref work` is the uncommitted working copy. Defaults to the zone with most roads, as of the character's last logout. |
 
 How the stub behaves, so you know what a failure means:
 - **Widgets accept any method** as a recorded no-op; methods whose results matter (sizes, points, text, colours, line endpoints, blend, draw layer) are implemented.
 - **Unknown globals stay nil**, as in the client, because Warpath guards optional APIs with `if C_X and C_X.Y`. A missing stub fails loudly with a traceback naming it: add the stub, don't make globals magic.
 - A test failure can be the stub's fault. Two were found while building it (an animation type mistaken for a frame name, which invented a global called `Alpha`; `SetAllPoints` not inheriting size, which made the map silently draw nothing). Check that before blaming the addon.
 - Time is controlled: `wow.H.now` (wall clock), `wow.advance(s)` runs `C_Timer` callbacks in order.
+- World positions: every map is 4000 yards wide unless a test sets `__H.mapYards[id]` (a city such as the Undercity is about 1000). Set it before `login()`: `Linger.lua` reads a map's width once, at its first sample.
 
 Renders are trustworthy for geometry, colour, alpha, thickness, fade and draw order; tests pin orientation (a kill at 0.25, 0.75 draws at exactly that point) and placement of other zones.
 
@@ -171,4 +174,14 @@ Verified against in-game screenshots on 2026-11-23 (Lethality's data): Felwood (
 
 The harness's first real catch: a garbled guild message with the grudge wording and no victim printed "settled a grudge in Felwood:  falls!". Fixed in 3.7.11; now a regular test.
 
-**Steadiness** (`Steadiness` tests) guards the "anchored to the ground, only fade" rule: walk, stop, then as time passes no trail ink may appear where there was none. It deliberately does *not* compare segment centres, as the old project's test did — a dash crossing a bend is several segments whose split point changes as it shortens, so centres move even when the dash doesn't. A companion test proves the check catches a 3 px crawl. Not yet covered: steadiness *while walking* (strokes extended at the open end).
+**Steadiness** (`Steadiness` tests) guards the "anchored to the ground, only fade" rule: walk, stop, then as time passes no trail ink may appear where there was none. It deliberately does *not* compare segment centres, as the old project's test did — a dash crossing a bend is several segments whose split point changes as it shortens, so centres move even when the dash doesn't. A companion test proves the check catches a 3 px crawl. 3.8 added: dashes stay put when you walk on after a stop (dash smoothing narrows near a stroke's end; 2 slots of smoothing fails it), and dashes and arrows are evenly spaced at every age.
+
+**Lingering** (`Lingering` tests, 3.8) covers the areas: forming and freezing, not from standing still, not split by short trips, return visits, yards vs map fractions, short trips and recent trail joining, the trail stopping at the outline (and staying hidden when you leave), areas and links only fading, the trail reaching your arrow between redraws, and pruning. Each was checked by switching its feature off (or putting the bug back): several first versions passed against the bug, usually because they checked too late or the old thresholds happened to cover the case. `ns.Linger.State()` exposes the live recording state for tests.
+
+**Road fading** (`RoadFading` tests, 3.7.12) extends that rule to roads: play-days pass with nothing walked, and no road ink may appear or get more opaque from one day to the next. Simulate play-days by setting `ns.db.play.days` *and* nudging `wow.H.now` by a second: `PlayNow()` caches per second, so without the nudge the clock silently doesn't move. Any rule that looks at neighbours (joins, scraps, loops, threads, smoothing) can break only-fade even when each piece fades correctly; the 3.7.12 prototype did exactly that and only a time-lapse showed it. `Roads` tests cover snapping, the lane merge, gap joins and loop folding.
+
+Lessons from the 3.7.12 road work, worth keeping:
+- **Prove each new test can fail** by briefly reintroducing the bug. Three road tests passed against the bug on their first version (a test compared against its own setting; one never reached the state it checked; one was masked by another rule).
+- **Measure on drawn lines, not pixels.** A pixel-brightness check counted gold fading to silver as "brightening", because silver is paler.
+- **Look renders:** to render zoomed in, set `WarpathOverlay.__w/__h` after login (the overlay copies the canvas size once). For colour progressions, a synthetic swatch (one test road per strength) beats real data, which has few strong roads; label rows by habit or days of use, not raw strength. To preview levels real roads haven't reached, scale every `e.l` and say so on the render.
+- **Normal map size decides.** A road is 4–6 px wide at default zoom; any detail smaller than that (gems, rims) becomes specks. Judge every look at normal size as well as zoomed.

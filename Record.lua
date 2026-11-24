@@ -284,10 +284,12 @@ local function Sample()
     local mapID, x, y = PlayerPos()
     if not mapID then
         CloseStroke()
+        if ns.Linger then ns.Linger.Reset() end
         return
     end
     local mode = Mode()
     Visit(mapID, x, y, mode)
+    if ns.Linger then ns.Linger.Step(mapID, x, y, mode) end
 
     if mapID ~= cur.map or not cur.stroke then return NewStroke(mapID, x, y, mode) end
 

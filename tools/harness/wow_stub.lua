@@ -367,7 +367,12 @@ local function vec(x, y)
 end
 CreateVector2D = vec
 C_Map.GetPlayerMapPosition = function(id, u) if isPlayer(u) then return vec(H.player.x, H.player.y) end end
-C_Map.GetWorldPosFromMapPos = function(id, pos) return 0, vec(pos.x * 1000, pos.y * 1000) end
+-- Every map 4000 yards wide (about a zone) unless a test says otherwise
+-- (H.mapYards[id], e.g. a city): Linger.lua measures areas in yards.
+C_Map.GetWorldPosFromMapPos = function(id, pos)
+    local w = (H.mapYards and H.mapYards[id]) or 4000
+    return 0, vec(pos.x * w, pos.y * w * 2 / 3)
+end
 -- Where one map sits on another. Map.lua draws EVERY zone with data onto
 -- the viewed map through this, so a wrong answer stacks other zones' trails
 -- on top of the one you're looking at. (The first version of this stub

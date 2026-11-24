@@ -1,4 +1,4 @@
-# How Warpath works today (3.7.9 installed, 3.7.10 built)
+# How Warpath works today (3.7.11 released; 3.7.12-test2 installed from branch `roads-snap`)
 
 Reconstructed on 2026-11-23 from the claude.ai project's patch notes, release queue, backlog and build plan. **Where this file and the code disagree, the code wins:** fix this file when you find a mismatch. Keep it current on every release (that's the point of it: the old project had no single "how it works now" doc, so changes went unnoticed).
 
@@ -24,16 +24,79 @@ Master switch: `cfg.shown` (shared by all characters). Map button left-click, `/
 - **Footsteps were removed in 3.7.6** (`StepLook`, `STEP_*` gone). Road "walked today" is still recorded (`/warpath zone`).
 - History of this one feature, for context (it changed six times in two days): 3.4 5-min line fading into footsteps → 3.5 trail-length setting (2–24 h) → 3.6.3 footsteps fade over trail length → 3.7.5 15-min line + two-tone footsteps (jumped; rejected) → 3.7.6 dashes 5–15 min, no footsteps, length setting removed (Joe picked "option 2" from renders) → 3.7.7 length setting back, 15 min–24 h, default 1 h.
 
-### Roads (long memory)
-- Built from where you choose to travel. One mark per day of use. Flights and corpse runs never count (`Visit()` skips them).
-- **Silver** from `roadMin × SILVER_SHARE` (= 1.5 days of use, i.e. two separate days). **Gold** threshold `db.roadMin` default 2.5 (`/warpath roads <days>`).
-- Gradual gilding: silver → warm silver → pale gold → light gold → gold, smoothstep between stops, over roughly 1.8–5 days of use. Width grows smoothly to `ROAD_FULL` 12.
-- Worn gold: three stacked lines (outline, gold body, warm-yellow centre stripe that brightens with wear, never white); outline warms near-black → dark bronze.
-- **Shimmer** (`cfg.shimmer`, can be turned off): warm band travelling diagonally across each zone every 7 s; centre-stripe colour capped at (1.00, 0.90, 0.50). Runs only while the map is open.
-- **Glints**: amber four-point stars (`Interface\Cooldown\star4`, additive), ≤6 per zone, most-worn roads only.
-- Joe's road style: "C" — gold roads with dark casing.
-- `/warpath roads` counts ("N stretches of gold, M of silver") still use the thresholds, not the blend.
-- Budget: roads stop 800 lines short of `LINE_BUDGET` (5000).
+### Trail rework (3.8.0) — built on branch `trail-areas`, installed as 3.8.0-test4 on 2026-11-24
+
+Why: on a friend's single hour of questing in Silithus, the trail was a red scribble. Every step is drawn, all dashes look alike, and the fade is linear over the trail length, so age can't be read ("where was I" works, "when" doesn't). The intent, in Joe's words: show recent travel, be readable in time, and stay out of the way of using the map to navigate. Picked from Python concept sketches on synthetic data (`trail_sketch*.py`, scratchpad only, not in the repo). Built in `Linger.lua` (recording, outline geometry, clipping) and `Map.lua` (`DrawToday`: `AreaScene`, `DrawWalkLine`, `DrawTrail`/`StrokeDashes`, `DrawAreas`, `DrawHere`, tags). Thresholds are first guesses; tune on real data.
+
+**Lingering areas** (Joe's idea: tangles become "zoned areas" with trails between them)
+- An area forms once you've stayed within `FORM_R` 0.05 map widths of the centre for `FORM_T` 4 min. Until then it's ordinary trail.
+- While you're in it, it grows: a trail point joins 45 s after it's made if you're still inside, and its piece of trail fades out over ~90 s. The outline only moves outward.
+- **Distances are in yards** (test4): each map's width in yards comes from the game (`C_Map.GetWorldPosFromMapPos`, cached per map; 4000 if it can't say). Map fractions made city areas (the Undercity) several times tighter than zone areas. Forming: within `FORM_YD` 150 yd of the centre for 4 min. Leaving: `MARGIN_YD` 90 yd outside. Stops growing past `SPAN_YD` 1200 yd. On a typical zone these are close to the earlier fractions; in a city they are several times roomier. (Joe asked for the lift room to be covered; the values are Claude's call, kept under the radius of an Undercity lap, about 160 yd, so a lap doesn't become one area.)
+- **Short trips join:** leaving keeps the walk out; if you're back inside within 2 min (`TRIP_T`) and never more than 150 yd out (`TRIP_YD`), the ground the trip covered joins the area.
+- **Recent trail joins:** when an area forms, your trail from the last 10 min (`RECENT`) within 150 yd of its centre joins it (the wandering before the 4 minutes were up).
+- Forming needs movement through the 4 minutes (points in at least 3 of the 4 one-minute slices): standing still, or a few steps then standing, is not lingering.
+- Leaving = more than `MARGIN` 0.03 outside the outline. The walk out never joined, so it stays a link. The outline then freezes and never changes. A 10-min trail gap (logged off) also closes it; an area stops growing past 0.30 across.
+- Stepping back inside within 10 min (`REENTER`) reopens it with a new visit record. Every re-entry is its own record, so a visit's times cover only time inside; the tooltip shows visits under 2 min apart as one.
+- Time counts per sample (twice a second) while inside, AFK included: `/afk` is often on while you're still playing (Joe).
+- **Return visits:** lingering again on or next to an area that's still on the trail reopens it. One outline, the label shows **total** time there; hovering lists the visits ("18m at 2:10 pm, 9m at 2:48 pm"). The area's age follows the latest visit, so revisiting refreshes it. (Joe)
+- **Shape:** C — follows the perimeter of the ground covered (convex hull, padded and rounded). Label above it: time spent, e.g. "26m", "2.7h".
+- **After you leave, it's clean:** links stop at the outline and nothing inside is drawn. Dashes inside are hidden from the start (in the area you're in too) and stay hidden; only the solid line, which shows inside while you're there, fades out over ~1 min after you leave. (Joe's sketch; in test3 the hidden dashes came back for that minute, fixed)
+- **Saved** as `z.areas` (per zone): `h` the convex hull (flat, quantized), `v` visits `{ s, e, t }`, `e` last time inside, `w` a change counter for the outline cache. Recomputing from strokes wouldn't be stable (`Simplify()` changes points when a stroke closes). Pruned with the trail after 24 h (`KEEP_HOURS`). Not shared; old versions ignore the key. No `db.v` bump.
+- Live state (the window, pending steps, which area you're in) is memory only. After a `/reload` inside an area, the next sample re-enters it as a new visit.
+- **Drawing cost:** trail from a visit is inside the outline by construction (every step taken during a visit joined it), so hidden trail is skipped by its time alone (`hide` spans: each visit trimmed 20 s at the start and `LAG` + 20 s at the end) before any cutting; the rest is cut exactly against the outline (`Linger.Clip`, with a fits-inside circle as a fast path). Timed in the harness on a 3-hour synthetic session: 6.5 ms per redraw at a 1 h trail (3.8 before), 8 ms at 4 h and 24 h (10-13 before), with a fifth of the lines.
+
+**Links (lines between areas) and age**
+- Last **2.5 min**: solid line (`LINE_SOLID` 150; was 5 min: a lap of the Undercity stayed all solid). After that, dashes anchored to the ground, as today, starting with a small jump along the colour gradient (`TRAIL_STEP` 0.15) so the change is noticeable early; then the slow fade. (Joe)
+- **Colour:** one continuous gradient, faction colour → faction `deep` → dusk (desaturated, darker; never paler), on a time scale that moves fast early (5 m, 15 m, 1 h, 4 h, 24 h roughly evenly spaced). Opacity eases off along it and fades to nothing over the last quarter of the trail length. (Joe: gradient, not steps)
+- **Rhythm:** long dashes → short dashes → dots, in three bands on the same scale, crossing over gently.
+- **Area outlines share the rhythm and colour of their age**, so a link never looks weaker than the area it leads to. The area you're in: solid, full colour.
+- **Links hold:** a link stays at least as visible as the older of the two areas it joins, so areas don't hang off faded links. Revisiting an area can strengthen its old links again (an event, not time passing).
+- **Dusk** is the faction's `deep` colour 60% of the way to earth brown (0.36, 0.27, 0.18): reddish brown for the Horde, slate for the Alliance.
+- **Smoothing:** dashes follow the path smoothed along its own length (`TRAIL_SMOOTH` 1.0 dash slot either side, weighted 1-2-3-2-1), so recording kinks don't read as jaggies; the solid line stays exact. It depends only on ground already walked; the window narrows evenly near a stroke's ends. Worst shift when you stop, let the end turn to dashes and walk on round a tight bend: 0.43 px at 1.0 (1.7 px at 2.0, a visible crawl), tested. (Joe: medium)
+- **Spacing:** the marks repeat every 4 dash slots as dash, dash, arrow with three equal gaps (laid out at a fresh dash's length). As marks shorten with age, the dashes give up more on the side facing the arrow (the arrow only shortens from its back), so all three gaps grow alike. Before this, the shorter arrow left a gap about four times the others before each arrow. (Joe)
+- **Direction:** about every third dash is an arrow. Its shaft takes in the slot before it, at **75%** of that length (option C), with a head 0.6 × a dash. Arrows scale with map zoom, so they read zoomed in; at normal size the colour gradient carries old → new. An arrow's tip is fixed on the ground (it only shortens from the back as it ages); whether it's skipped for a bend (over 35° under it) is judged at full length, so arrows can't switch on as they age. The trail runs right up to your arrow: one line (`tail`) from the end of the trail as last drawn to where you are, updated every 0.05 s while the map is open (the trail itself redraws every 2 s at most, and points are recorded every few steps). The arrowhead at your position in 3.8.0-test1 was dropped: a gap opened behind your arrow while it waited for the next point (Joe). Comets (tapered dashes) were dropped: Joe read the tail as the arrow tip.
+
+### Roads (long memory) — reworked in 3.7.12 (branch `roads-snap`, installed as 3.7.12-test2)
+
+**Recording** (`Record.lua`, `Visit`)
+- Built from where you choose to travel. One credit per stretch per calendar day of use, only while travelling (`Travelling()`: 3 cells net in 30 s). Flights and corpse runs never count.
+- Stretches join cells of a 96×64 grid. **Snapping (3.7.12):** where you stand is matched to the best-worn road point within one cell (`Snap`, `PointWear`), counting only wear from earlier days (otherwise a new road keeps pulling you back onto the point you just left). A route walked on different days with a cell of drift builds one road, not parallel lanes. Before this, 92% of Lethality's 8,900 stretches had one day of credit and routes showed broken, doubled and late.
+- A cell's road point (`z.cx`, `z.cy`) moves only while you travel, so standing about (quest givers, mailboxes) no longer bends roads.
+
+**Upgrade to `db.v` 10** (`MergeLanes`, `MigrateToV10`)
+- Side-by-side lanes recorded before snapping fold into one road: points taken best-worn first take over weaker points across their road (never along it), stretches are re-joined between the points that remain.
+- Lanes landing on one stretch add their days; a shared last day counts once (`L / e.l`). Rungs between lanes fold to nothing. A rung the fold would stretch past two cells across its road stays unfolded where walked (it would draw as a long spoke; first seen in Undercity).
+- The roads as they were are kept, hidden, as `z.roadOld`. Lethality's save grew from 1.67 to 2.26 MB because of it; dropping it later brings the file well below where it started.
+
+**What's drawn** (`Map.lua`: `RoadChains`, `Bridge`, `Bubbles`, `Lynchpins`, `DrawGround`)
+- Roads are chains between junctions and ends, corners cut a quarter of the way (Chaikin). Pieces overlap slightly at joins while fully drawn, so the dark edge doesn't notch through at bends.
+- Hidden, never deleted: scraps (a piece of `ROAD_SCRAP` 2 stretches or fewer on its own); stubs (dead ends of `ROAD_SPUR` 3 or fewer off a road, unless gold); the weaker side of a loop of `ROAD_BUBBLE` 10 stretches or fewer all round.
+- Gaps joined through ground walked at least `ROAD_WALKED` 0.3 (one day, ~24 days played): up to `ROAD_BRIDGE` 4 stretches onto any road, up to `ROAD_BRIDGE_END` 12 where two road ends face each other. A join may step between walked cells that touch. Joins never start or end at scraps (they chained one-day wandering into roads). A join takes the look of the weaker road it joins.
+- **Frozen layout:** everything above is decided on strengths as of your last travel in the zone; between visits the whole layout fades by one shared factor. Decided on today's strengths instead, the network rewired and brightened as it faded (found by time-lapse; 273 popped and 480 brightened points on day 6 in Un'Goro).
+- **Lynchpin threads** (Joe's idea): stretches on the strongest route between two strong fragments (the strongest spanning tree) stay at least `ROAD_THREAD` 0.5 visible while the strongest stretch on each side is still drawn, so a fading network keeps its fragments joined. Dead ends are never held.
+- A road's look (colour, width, tier) is averaged along it over `ROAD_SMOOTH` 3 stretches either side, so whole stretches gild together; whether and how much a piece shows still comes from its own strength.
+- Opacity fades from full at silver (1.5) all the way to nothing at 1.2 (it used to stop at a quarter and vanish).
+- The remaining fragments in a fade are the most-walked stretches on their own record (checked: the 10 strongest are always among them). Joe likes the fragment look.
+
+**The look: gilt** (`ROAD_STYLE` "gilt"; "plate" is the flat 3.7 look)
+- Raised metal like Blizzard's gold frame trim: dark edge, body, shade on the far side, warm highlight towards the light (top left). `GILT_RELIEF` 1.0 (deep, Joe's pick). Shine stays warm, never white.
+- Staged gilding: pewter, then a gold thread along the lit edge, then the body turns gold; the edge goes iron to bronze. No blend through cream.
+- **Levels by habit**, not by how long anyone has played: a road used every k days played settles at 1 / (1 − 2^(−k/14)) (ceiling 20.7). At the default gold threshold (`db.roadMin` 2.5; `/warpath roads` scales all of them):
+
+| Look | Strength | Daily use from scratch | Habit it holds at (of days played) |
+|---|---|---|---|
+| silver | 1.5 | day 2 | two recent days |
+| gold thread begins | 5.7 (2.28×) | day 6.5 | about twice a week |
+| full gold | 9.6 (3.82×) | day 12.5 | every 2 to 2.5 days |
+| faction tier 1 | 12 | day 17.5 | about 4 days in 7 |
+| faction tier 2 | 16.4 | day 31.5 | about 4 days in 5 |
+| end of band | 20 (8×) | — | every day |
+
+- **Faction mark** (`FACTION_MARK` "streak", in the faction's `deep` colour): tier 1 a thin streak down the gold; tier 2 the shaded side too. Trial alternatives still selectable: "enamel" (wider streak with gold wires), "banded" (edge in faction colour), "embossed" (shade from tier 1).
+- Glints (amber stars, ≤6 per zone) and shimmer still run on the most worn roads.
+- Tried and dropped on renders: cartographer's ink (vanishes on dark maps), trodden earth, gold rims and an engraved groove beyond gold (rims read as rail track; red-gold reads as bronze), and gems (rubies, sapphires, emeralds: at normal map size a road is 4–6 px, so stones read as specks).
+- `/warpath roads` counts ("N stretches of gold, M of silver", `Zone.lua`) still use the old thresholds (1.5 and 2.5), not the new bands. See open items.
+- Budget: roads stop 800 lines short of `LINE_BUDGET` (5000). A gilt piece draws 4 lines (5 with the streak).
 
 ### Long memory and the play clock (3.5.0)
 - Roads, battle haze and flight routes fade on **days played**, not calendar days ("a weekend away costs nothing"). Joe's decision.
@@ -167,7 +230,7 @@ Full list (`/warpath help all`): built from one table of `{command, description,
 Principles: noun-first names; every toggle takes `on|off` or toggles bare and replies with the new state; unknown command → one line + "Did you mean…"; old names stay as hidden aliases (`toggle`→`map`, `hud`→`table`, `revenge`/`lastkill`→`waypoint death|kill`, `heat`→`battle`, `recent`→`trail`, `shared`→`guild`).
 
 ## Saved data
-- `db.v` history: 4 (3.3.x) → 5 (3.4) → 6 → 7 (3.6.0) → 8 (3.7.0) → 9 (3.7.1). One `MigrateToV<n>` function each, in `Warpath.lua`; version 6 was missing from this list before 2026-11-23.
+- `db.v` history: 4 (3.3.x) → 5 (3.4) → 6 → 7 (3.6.0) → 8 (3.7.0) → 9 (3.7.1) → 10 (3.7.12, lane merge; old roads kept as `z.roadOld`). One `MigrateToV<n>` function each, in `Warpath.lua`; version 6 was missing from this list before 2026-11-23.
 - Known deleting behaviour (all intentional and disclosed): 3.6.0 deleted `z.heat`; `Prune()` drops long-memory entries faded below 0.05; 3.6.1–3.6.3 `TownSweep()` wiped town cells (fixed 3.6.4, unrecoverable); 3.7.1 dropped guild layers filed under your own name; mark caps drop oldest past 300 per zone.
 
 ---
@@ -205,3 +268,25 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-23 | 3.7.11: a guild kill whose wording can't be said with the fields it carried (grudge, no victim) prints as a plain kill, with our own pick of line. General (`Phrases.CanSay`), not a grudge special case | Claude |
 | 2026-11-23 | No `embedded-libraries` in `.pkgmeta`: CurseForge rejected the upload over a library slug; the relations are cosmetic | Claude |
 | 2026-11-24 | Moved the `3.7.11` tag to the packaging fix rather than cutting 3.7.12: no shipped file changed and nothing had been published under 3.7.11 | Joe |
+| 2026-11-23 | Roads snap to the best-worn road within a cell; lanes merged on upgrade (`db.v` 10) | Joe (asked for the prototype) |
+| 2026-11-23 | Merged lanes add their days, a shared last day counted once | Claude (open to veto) |
+| 2026-11-23 | Old roads kept hidden as `z.roadOld` (save grows ~0.6 MB until dropped) | Claude (open to veto) |
+| 2026-11-23 | Prototype installed under its own label (3.7.12-test, then -test2), not as 3.7.11 | Claude |
+| 2026-11-23 | Hide scraps (≤2), stubs (≤3 unless gold); fold loops of ≤10; join gaps of ≤4, or ≤12 end to end, through ground walked ≥0.3 | Claude (thresholds); Joe (asked for continuity and loop folding) |
+| 2026-11-24 | Road layout frozen between visits so roads only fade; fade all the way out | Joe (approved fix) |
+| 2026-11-24 | Keep the fragment look; lynchpin threads at 0.5 | Joe |
+| 2026-11-24 | Gilt look, deep relief; staged gilding; look smoothed along each road | Joe (picks); Claude (smoothing) |
+| 2026-11-24 | Levels set by habit; gold thread day 6.5, full gold day 12.5 (middle ground), faction tiers at 2.5 and 4.5 weeks of daily use | Joe |
+| 2026-11-24 | Gems scrapped; faction mark "streak" (streak, then embossed shade) | Joe |
+| 2026-11-24 | Trail rework design: lingering areas that form live, grow, freeze on leaving; outline follows the ground covered (C), label = total time, visits on hover; links stop at the outline once you've left | Joe |
+| 2026-11-24 | Link age: continuous colour gradient + dash rhythm; arrows about every third dash, 75% shaft | Joe |
+| 2026-11-24 | Area thresholds (form 4 min within 0.05, join after 45 s, leave at 0.03 outside, 10-min gap closes, max 0.30 across, return merges); log time scale; area outlines share the rhythm; a link holds at the older area's level; live area solid; arrowhead at your position | Claude (open to veto) |
+| 2026-11-24 | Time in an area counts while AFK too (`/afk` is often on while playing) | Joe |
+| 2026-11-24 | No arrowhead at your position; the trail always joins your arrow (live tail line) | Joe |
+| 2026-11-24 | Solid line 2.5 min (about a lap of the Undercity), then a small jump along the gradient | Joe |
+| 2026-11-24 | Dashes smoothed along the path, medium (1.0 slot); dash, dash, arrow evenly spaced at every age | Joe |
+| 2026-11-24 | Areas cover where you lingered: distances in yards, short trips past the edge join, recent trail joins on forming | Joe |
+| 2026-11-24 | Area distances: form 150 yd, leave 90 yd, trips 2 min / 150 yd, recent 10 min, max 1200 yd; 4000 yd when the game can't give a map's width | Claude (open to veto) |
+| 2026-11-24 | Link holding keeps visibility only (colour and dashes show the link's own age); a loop back into the same area isn't held | Claude (open to veto) |
+| 2026-11-24 | Roads, trail and flight-path rework ship together as **3.8.0**, "Roads, trails and flights" (a feature release: `NEW_IN` entry, options window opens once) | Joe |
+| 2026-11-24 | Built: forming needs movement in 3 of the 4 minutes; every re-entry is its own visit record (tooltip merges those under 2 min apart); dusk = faction deep 60% towards earth brown; hidden trail skipped by visit time; arrow bend judged at full length, tip fixed | Claude (open to veto) |

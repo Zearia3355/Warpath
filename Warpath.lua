@@ -1,5 +1,5 @@
 
--- Warpath 3.7.12-test2
+-- Warpath 3.8.0-test4
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -61,8 +61,10 @@ local C = {
     DWELL_SAMPLES   = 40,      -- samples (20 s) in one cell = lingering there
     HIST            = 60,      -- samples (30 s) of position history
     TRAVEL_CELLS    = 3,       -- net cells moved in that time = travelling
-    LINE_SOLID      = 300,     -- today's trail: a solid line for your last 5 minutes, then dashes
-                               -- fading out over the trail length (cfg.trailMin, 3.7.7)
+    LINE_SOLID      = 150,     -- today's trail: a solid line for your last 2.5 minutes (3.8; was 5),
+                               -- then dashes fading out over the trail length (cfg.trailMin, 3.7.7)
+    TRAIL_STEP      = 0.15,    -- where it turns to dashes, a small jump along the colour gradient (3.8)
+    TRAIL_SMOOTH    = 1.0,     -- dashes follow the path smoothed over this many dash slots either side (3.8)
     TRAIL_MIN_CHOICES = { 15, 30, 60, 240, 720, 1440 }, -- trail lengths offered, in minutes
     DASH_PERIOD     = 5,       -- one dash every 5 x thin (about 10 px on a zone map)
     DASH_BUDGET     = 4000,    -- past this the oldest (faintest) dashes are dropped
@@ -615,6 +617,13 @@ local function Prune()
             if s.e >= cutoff then kept[#kept + 1] = s end
         end
         z.strokes = kept
+        if z.areas then -- where you lingered goes with the trail it replaced (3.8)
+            kept = {}
+            for _, a in ipairs(z.areas) do
+                if a.e and a.e >= cutoff then kept[#kept + 1] = a end
+            end
+            z.areas = kept
+        end
         kept = {}
         for _, s in ipairs(z.runs) do
             if now - s.e < RunSeconds(s.k) then kept[#kept + 1] = s end

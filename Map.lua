@@ -13,6 +13,8 @@ end)
 
 local overlay, head
 local lines, dots, glows, pins, labels, steps, rims, glints = {}, {}, {}, {}, {}, {}, {}, {}
+local tags, activeTags = {}, 0   -- time labels on lingering areas (3.8)
+local TagAnchor                  -- defined with the tags, used when pins rescale
 local replay = { active = false }
 local shimmer, twinkle = {}, {}   -- rebuilt on every draw, animated while the map is open
 
@@ -243,6 +245,7 @@ local function RescalePins()
             f.halo:SetSize(f.px * 1.9 / k, f.px * 1.9 / k)
         end
     end
+    for i = 1, activeTags do if tags[i] then TagAnchor(tags[i]) end end
 end
 
 local function GetPin(i)
@@ -284,6 +287,69 @@ local function GetLabel(i)
         labels[i] = f
     end
     return f
+end
+
+-- Time spent in a lingering area (3.8), above its outline. Steady on screen
+-- like the pins; hover for the visits.
+local function TagEnter(self)
+    local a = self.ar and self.ar.a
+    if not a then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:AddLine(self.text:GetText() .. " here", 1, 0.82, 0)
+    -- visits under 2 minutes apart read as one (a step outside and back)
+    local shown = {}
+    for _, v in ipairs(a.v) do
+        local last = shown[#shown]
+        if last and v.s - last.e < 120 then
+            last.e, last.t = v.e, last.t + (v.t or 0)
+        else
+            shown[#shown + 1] = { s = v.s, e = v.e, t = v.t or 0 }
+        end
+    end
+    for i = math.max(1, #shown - 5), #shown do
+        local v = shown[i]
+        local mins = math.max(1, math.floor(v.t / 60 + 0.5))
+        GameTooltip:AddLine(("%d min from %s"):format(mins, date("%H:%M", v.s)), 0.8, 0.8, 0.8)
+    end
+    if self.ar.live then
+        GameTooltip:AddLine("You're here", faction.r, faction.g, faction.b)
+    else
+        GameTooltip:AddLine("Left " .. Ago(a.e), 0.8, 0.8, 0.8)
+    end
+    GameTooltip:Show()
+end
+
+function TagAnchor(f)
+    local k = MapScale()
+    f:SetScale(1 / k)
+    f:ClearAllPoints()
+    f:SetPoint("BOTTOM", overlay, "TOPLEFT", f.px * k, f.py * k + 2)
+end
+
+local function GetTag(i)
+    local f = tags[i]
+    if not f then
+        f = CreateFrame("Frame", nil, overlay)
+        f:SetSize(36, 14)
+        f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        f.text:SetPoint("CENTER")
+        f:EnableMouse(true)
+        if f.SetMouseClickEnabled then f:SetMouseClickEnabled(false) end
+        f:SetScript("OnEnter", TagEnter)
+        f:SetScript("OnLeave", GameTooltip_Hide)
+        tags[i] = f
+    end
+    return f
+end
+
+function ns.PlaceTag(i, ar, text, r, g, b, a, px, py)
+    local f = GetTag(i)
+    f.ar, f.px, f.py = ar, px, py
+    f.text:SetText(text)
+    f.text:SetTextColor(r, g, b, a)
+    f:SetFrameLevel(overlay:GetFrameLevel() + 1)
+    TagAnchor(f)
+    f:Show()
 end
 
 local function At(obj, p, x, y, w, h)
@@ -976,16 +1042,129 @@ local function DrawGround(D, scene)
     end
 end
 
--- The line: your last 5 minutes, solid (3.7.6). After that the trail
--- breaks into dashes (DrawTrail). Trail recorded before 3.4 has no point
--- times and isn't drawn.
+---------------------------------------------------------------------------
+-- Today's trail (3.8): where you lingered becomes an outlined area; the
+-- trail between areas shows its age by colour and dash rhythm, and which
+-- way you went by arrows. Everything is anchored to the ground and only
+-- fades (an area grows only while you're in it).
+---------------------------------------------------------------------------
+
+local Linger = ns.Linger
+local EARTH = { 0.36, 0.27, 0.18 }   -- old trail sinks towards the map's own browns, never paler
+
+-- Where an age sits between the solid line's end and the trail's end, on a scale that
+-- moves fast early: 5 m, 15 m, 1 h, 4 h and 24 h are about evenly spaced.
+local function TrailG(age, life)
+    if age <= C.LINE_SOLID then return 0 end
+    -- TRAIL_STEP: a jump along the gradient where the solid line turns to
+    -- dashes, so the change is noticeable early; then the slow fade
+    local step = C.TRAIL_STEP or 0
+    return Clamp(step + (1 - step) * math.log(age / C.LINE_SOLID) / math.log(life / C.LINE_SOLID))
+end
+
+-- Colour, opacity, thickness and dash fill for trail of a given age.
+-- Colour runs faction -> faction deep -> dusk in one gradient; the dashes
+-- go long -> short -> dots; everything fades out over the last quarter.
+local function TrailLook(age, life)
+    local g, d = TrailG(age, life), faction.deep
+    local r, gg, b
+    if g < 0.55 then
+        local t = g / 0.55
+        r, gg, b = Lerp(faction.r, d[1], t), Lerp(faction.g, d[2], t), Lerp(faction.b, d[3], t)
+    else
+        local t = (g - 0.55) / 0.45
+        r, gg, b = Lerp(d[1], Lerp(d[1], EARTH[1], 0.6), t), Lerp(d[2], Lerp(d[2], EARTH[2], 0.6), t),
+            Lerp(d[3], Lerp(d[3], EARTH[3], 0.6), t)
+    end
+    local tail = 1 - Smooth((age - life * 0.75) / (life * 0.25))
+    local fill = 0.85 - 0.35 * Smooth((g - 0.27) / 0.12) - 0.25 * Smooth((g - 0.60) / 0.12)
+    return r, gg, b, (0.95 - 0.35 * g) * tail, 1 - 0.1 * g, fill
+end
+
+-- Each zone's areas as drawn now, the clips they put on the trail, and
+-- their visits in time order (for holding links). Kept on the scene entry.
+local function AreaScene(e, now, life)
+    local list, solid, dash, visits, hide = {}, {}, {}, {}, {}
+    -- Linger.lua is new in 3.8: after a /reload without a restart the game
+    -- hasn't loaded it, so draw the trail without areas rather than fail
+    if not Linger then e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide } return end
+    local live = Linger.Live()
+    for _, a in ipairs(e.z.areas or {}) do
+        local isLive = a == live
+        local age = isLive and 0 or now - (a.e or 0)
+        if age < life and a.h and #a.h >= 2 and a.v and #a.v > 0 then
+            local poly, box = Linger.Outline(a)
+            list[#list + 1] = { a = a, poly = poly, box = box, age = age, live = isLive }
+            -- Dashes inside are hidden, in the area you're in and after you
+            -- leave alike: they were never shown there, so they mustn't come
+            -- back when you go. Only the solid line, which shows inside while
+            -- you're there, fades out over a minute after you leave.
+            dash[#dash + 1] = { poly = poly, box = box, k = 0 }
+            if not isLive then
+                solid[#solid + 1] = { poly = poly, box = box, k = 1 - Smooth((now - a.e) / 60) }
+            end
+            for _, v in ipairs(a.v) do visits[#visits + 1] = { s = v.s, e = v.e, age = age, a = a } end
+            -- Every step taken during a visit joined the area, so trail from
+            -- then is inside the outline: once hidden, skip it by its time
+            -- alone, before any cutting (most of a tangle is here).
+            do
+                for vi, v in ipairs(a.v) do
+                    -- only the visit you're in runs to now; earlier ones end
+                    -- when they ended (or the trail between them vanishes)
+                    local open = isLive and vi == #a.v
+                    local hs, he = v.s + 20, (open and now or v.e) - Linger.LAG - 20
+                    if he > hs then hide[#hide + 1] = hs hide[#hide + 1] = he end
+                end
+            end
+        end
+    end
+    table.sort(visits, function(x, y) return x.s < y.s end)
+    e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide }
+end
+
+-- A link between two different areas stays at least as visible as the
+-- older of them, so an area never hangs off a link that faded first. Only
+-- its visibility is held: its colour and dashes still show its own age. A
+-- loop out of an area and back into the same one isn't held (it joins
+-- nothing else, and the area being live would hold it as new).
+local function HeldAge(visits, t, age)
+    local prev, nxt
+    for _, v in ipairs(visits) do
+        if v.e <= t then prev = v elseif v.s >= t then nxt = v break end
+    end
+    if prev and nxt and prev.a ~= nxt.a then return math.min(age, math.max(prev.age, nxt.age)) end
+    return age
+end
+
+-- One piece of trail in zone coordinates, cut where it crosses an area's
+-- outline: inside, it's drawn at that area's k (often not at all).
+local ink = {}
+local function InkPart(t0, t1, k)
+    local q = ink
+    local D = q.D
+    if D.nl >= C.LINE_BUDGET or (q.count and D.ndash >= C.DASH_BUDGET) then return end
+    local x1, y1 = q.x1 + (q.x2 - q.x1) * t0, q.y1 + (q.y2 - q.y1) * t0
+    local x2, y2 = q.x1 + (q.x2 - q.x1) * t1, q.y1 + (q.y2 - q.y1) * t1
+    D.nl = D.nl + 1
+    if q.count then D.ndash = D.ndash + 1 end
+    local p = q.p
+    PutLine(D.nl, q.sub, "BLEND", q.thick, q.r, q.g, q.b, q.a * k,
+        (p.ox + x1 * p.sx) * D.w, -(p.oy + y1 * p.sy) * D.h, (p.ox + x2 * p.sx) * D.w, -(p.oy + y2 * p.sy) * D.h)
+end
+local function Ink(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
+    ink.D, ink.p, ink.sub, ink.thick, ink.r, ink.g, ink.b, ink.a = D, p, sub, thick, r, g, b, a
+    ink.x1, ink.y1, ink.x2, ink.y2, ink.count = x1, y1, x2, y2, count
+    if Linger then Linger.Clip(clips, x1, y1, x2, y2, InkPart) else InkPart(0, 1, 1) end
+end
+
+-- The line: your last minutes, solid (LINE_SOLID: 2.5 min in 3.8). Trail recorded before 3.4
+-- has no point times and isn't drawn.
 local function DrawWalkLine(D, scene)
-    local w, h, now = D.w, D.h, D.now
+    local w, now = D.w, D.now
     local cutoff = now - C.LINE_SOLID
     for _, e in ipairs(scene.zones) do
         local p, strokes = e.p, e.z.strokes
         local thick = p.far and w * 0.0012 or w * 0.0022
-        local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
         for si = #strokes, 1, -1 do -- newest first, so the budget drops the oldest
             local s = strokes[si]
             if s.e < cutoff or D.nl >= C.LINE_BUDGET then break end
@@ -1000,83 +1179,298 @@ local function DrawWalkLine(D, scene)
                         local k = (cutoff - t1) / (t2 - t1)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
                     end
-                    D.nl = D.nl + 1
-                    PutLine(D.nl, 7, "BLEND", thick, faction.r, faction.g, faction.b, 0.95,
-                        ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy))
+                    Ink(D, p, e.lg.solid, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
                 end
             end
         end
     end
 end
 
--- How a dash looks at a given age: how much of its slot it fills, its
--- thickness and its opacity. Long dashes where the solid line hands over,
--- shortening, thinning and fading evenly to nothing at the trail's end, so
--- the oldest part is the faintest (3.7.7: over the trail length you pick).
-local function DashLook(age, life)
-    local u = Clamp((age - C.LINE_SOLID) / math.max(1, life - C.LINE_SOLID))
-    return Lerp(0.85, 0.5, Smooth(u)), Lerp(1, 0.55, u), 0.95 * (1 - u)
+-- The trail runs right up to you (3.8): one line from the end of the
+-- trail as last drawn to where you are now, kept up to date while the map
+-- is open (the trail itself is redrawn every 2 seconds at most), so no gap
+-- opens behind your arrow as you move.
+local tail = {}
+local function UpdateTail()
+    local l = tail.line
+    if not l then return end
+    local p = tail.p
+    if not p or tail.stroke ~= cur.stroke or cur.mode then l:Hide() return end
+    local mapID, x, y = ns.PlayerPos()
+    if mapID ~= cur.map then l:Hide() return end
+    local w, h = overlay:GetWidth(), overlay:GetHeight()
+    l:SetStartPoint("TOPLEFT", overlay, (p.ox + tail.x * p.sx) * w, -(p.oy + tail.y * p.sy) * h)
+    l:SetEndPoint("TOPLEFT", overlay, (p.ox + x * p.sx) * w, -(p.oy + y * p.sy) * h)
+    l:Show()
 end
 
--- Today's trail after the solid line (3.7.6): from 5 minutes old it breaks
--- into dashes that fade out over the trail length (3.7.7), then it's gone. Each dash has a fixed
--- place on the ground, measured along the stroke from where it began (s.d),
--- so walking on and time passing never move a dash: it only shortens and
--- fades where it is.
+local function SetTail(D, scene)
+    local s = cur.stroke
+    if not s or cur.mode or #s < 4 or not tail.line then return end -- a trail, not a lone point
+    for _, e in ipairs(scene.zones) do
+        if e.p.mapID == cur.map then
+            tail.stroke, tail.p, tail.x, tail.y = s, e.p, s[#s - 1], s[#s]
+            tail.line:SetThickness(e.p.far and D.w * 0.0012 or D.w * 0.0022)
+            tail.line:SetColorTexture(faction.r, faction.g, faction.b, 0.95)
+            return
+        end
+    end
+end
+
+-- Positions along a stroke by distance (s.d), and the time there.
+local function SegAt(d, a)
+    local lo, hi = 1, #d - 1
+    while lo < hi do
+        local m = math.floor((lo + hi + 1) / 2)
+        if d[m] <= a then lo = m else hi = m - 1 end
+    end
+    return lo
+end
+local function OnStroke(s, d, a)
+    local i = SegAt(d, a)
+    local f = d[i + 1] > d[i] and Clamp((a - d[i]) / (d[i + 1] - d[i])) or 0
+    local t1 = PointTime(s, i)
+    return s[2 * i - 1] + (s[2 * i + 1] - s[2 * i - 1]) * f, s[2 * i] + (s[2 * i + 2] - s[2 * i]) * f,
+        t1 + (PointTime(s, i + 1) - t1) * f, i
+end
+
+-- Dashes are drawn along the path smoothed along its own length (3.8):
+-- each point is a weighted average of the path a little either side of it
+-- (TRAIL_SMOOTH dash slots), so small kinks from recording don't read as
+-- jaggies. It depends only on ground already walked, never on the time, so
+-- dashes stay anchored. The window narrows evenly near a stroke's ends,
+-- which on a straight path changes nothing as the stroke grows.
+local SMOOTH_AT, SMOOTH_WT = { -1, -0.5, 0, 0.5, 1 }, { 1, 2, 3, 2, 1 }
+local smoothW = 0
+local function PathAt(s, d, a)
+    local w = math.min(smoothW, a, d[#d] - a)
+    if w <= 0 then
+        local x, y = OnStroke(s, d, a)
+        return x, y
+    end
+    local sx, sy, sw = 0, 0, 0
+    for i = 1, 5 do
+        local x, y = OnStroke(s, d, a + SMOOTH_AT[i] * w)
+        local k = SMOOTH_WT[i]
+        sx, sy, sw = sx + x * k, sy + y * k, sw + k
+    end
+    return sx / sw, sy / sw
+end
+
+-- The trail from distance a0 to a1, following its bends; returns the last
+-- piece's ends (for an arrowhead).
+local function Stretch(D, p, clips, thick, r, g, b, a, s, d, a0, a1)
+    if smoothW > 0 then
+        local n = math.max(1, math.ceil((a1 - a0) / (smoothW * 0.35)))
+        local x0, y0 = PathAt(s, d, a0)
+        local x1, y1
+        for i = 1, n do
+            x1, y1 = PathAt(s, d, a0 + (a1 - a0) * i / n)
+            Ink(D, p, clips, 6, thick, r, g, b, a, x0, y0, x1, y1, true)
+            if i < n then x0, y0 = x1, y1 end
+        end
+        return x0, y0, x1, y1
+    end
+    local x0, y0, _, j = OnStroke(s, d, a0)
+    local px, py, qx, qy
+    while true do
+        local stop = math.min(a1, d[j + 1])
+        local x1, y1 = OnStroke(s, d, stop)
+        Ink(D, p, clips, 6, thick, r, g, b, a, x0, y0, x1, y1, true)
+        px, py, qx, qy = x0, y0, x1, y1
+        if stop >= a1 or j >= #d - 1 then break end
+        x0, y0, j = x1, y1, j + 1
+    end
+    return px, py, qx, qy
+end
+
+-- Arrows: every third mark. The marks repeat in a fixed pattern on the
+-- ground, every PERIOD dash slots: dash, dash, arrow, with even gaps
+-- between all three (laid out at a fresh dash's length). An arrow's shaft is
+-- 75% of a slot plus a dash (Joe's pick); its tip is fixed, so as it ages it
+-- only shortens from the back, while dashes shorten about their centres.
+-- None where the path bends sharply under it: a plain dash instead.
+local ARROW_SHAFT, ARROW_HEAD, ARROW_BEND = 0.75, 0.6, math.cos(math.rad(35))
+local PERIOD = 4                                       -- in dash slots
+local SHAFT0 = ARROW_SHAFT * (1 + 0.85)                -- a fresh arrow's shaft, in slots
+local GAP0 = (PERIOD - 2 * 0.85 - SHAFT0) / 3          -- the even gap
+local MARKS = { PERIOD - SHAFT0 / 2, GAP0 * 2 + 0.85 * 1.5, GAP0 + 0.85 / 2 } -- centres: arrow, dash, dash
+local GROW = (2 + ARROW_SHAFT) / 3                    -- each gap's share as marks shorten
+local SHRINK = { 0.5, 2 * GROW - 1, GROW }           -- share lost at each mark's back (arrow fallback: even)
+
+local function ArrowSpan(s, d, tip, slot, fill)
+    if tip > d[#d] then return end
+    local a0 = math.max(0, tip - ARROW_SHAFT * (slot + fill * slot))
+    -- the bend is judged over the arrow at full length, which never changes,
+    -- so an arrow can't switch on as it ages
+    local full = math.max(0, tip - SHAFT0 * slot)
+    local q = (tip - full) * 0.3
+    local x0, y0 = PathAt(s, d, full)
+    local x1, y1 = PathAt(s, d, full + q)
+    local x2, y2 = PathAt(s, d, tip - q)
+    local x3, y3 = PathAt(s, d, tip)
+    local ux, uy, vx, vy = x1 - x0, (y1 - y0) * 668 / 1002, x3 - x2, (y3 - y2) * 668 / 1002
+    local lu, lv = math.sqrt(ux * ux + uy * uy), math.sqrt(vx * vx + vy * vy)
+    if lu == 0 or lv == 0 or (ux * vx + uy * vy) / (lu * lv) < ARROW_BEND then return end
+    return a0, tip
+end
+
+local HEAD_WINGS = { 2.6, -2.6 }
+local function ArrowHead(D, p, clips, thick, r, g, b, a, px, py, qx, qy, size)
+    local sx, sy = p.sx * D.w, p.sy * D.h
+    local dx, dy = (qx - px) * sx, (qy - py) * sy
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len == 0 then return end
+    local ux, uy = dx / len, dy / len
+    local wing = math.max(size, thick * 1.6)
+    for _, sg in ipairs(HEAD_WINGS) do
+        local c, sn = math.cos(sg), math.sin(sg)
+        Ink(D, p, clips, 6, thick, r, g, b, a, qx, qy,
+            qx + (ux * c - uy * sn) * wing / sx, qy + (ux * sn + uy * c) * wing / sy, true)
+    end
+end
+
+-- One stroke's dashes, newest first. Each dash has a fixed place on the
+-- ground, measured along the stroke from where it began (s.d), so walking
+-- on and time passing never move it: it only shortens and fades.
+local function Buried(hide, t)
+    for i = 1, #hide, 2 do
+        if t >= hide[i] and t <= hide[i + 1] then return true end
+    end
+end
+
+local function MarkAge(D, e, s, d, at, life)
+    if at > d[#d] then return end
+    local _, _, t = OnStroke(s, d, at)
+    if Buried(e.lg.hide, t) then return end
+    local age = D.now - t
+    if age < C.LINE_SOLID then return end
+    local held = HeldAge(e.lg.visits, t, age)
+    if held >= life then return false end
+    return held, age
+end
+
+local function StrokeDashes(D, e, s, life, slot, line)
+    local p, clips = e.p, e.lg.dash
+    local d = StrokeArc(s)
+    local last = d[#d]
+    smoothW = (C.TRAIL_SMOOTH or 0) * slot
+    for m = math.floor(last / (PERIOD * slot)), 0, -1 do
+        local base = m * PERIOD * slot
+        for i = 1, #MARKS do -- newest first: the arrow, then the two dashes
+            if D.ndash >= C.DASH_BUDGET then return end
+            local at = base + MARKS[i] * slot
+            local held, age = MarkAge(D, e, s, d, at, life)
+            if held == false then return end -- older than the trail: the rest is too
+            if held then
+                local r, g, b, _, tk, fill = TrailLook(age, life)   -- how it looks: its own age
+                local _, _, _, a = TrailLook(held, life)              -- how visible: held by its areas
+                local a0, tip
+                if i == 1 then a0, tip = ArrowSpan(s, d, base + PERIOD * slot, slot, fill) end
+                if a0 then
+                    local px, py, qx, qy = Stretch(D, p, clips, line * tk, r, g, b, a, s, d, a0, tip)
+                    ArrowHead(D, p, clips, line * tk, r, g, b, a, px, py, qx, qy, fill * slot * p.sx * D.w * ARROW_HEAD)
+                else
+                    -- as marks shorten, every gap grows alike: the arrow loses
+                    -- length at its back, so the dashes give up more at the
+                    -- side facing it (front dash: SHRINK[2], back: SHRINK[3])
+                    local lose = (0.85 - fill) * slot
+                    local k = SHRINK[i]
+                    Stretch(D, p, clips, line * tk, r, g, b, a, s, d,
+                        math.max(0, at - 0.425 * slot + lose * k), math.min(last, at + 0.425 * slot - lose * (1 - k)))
+                end
+            end
+        end
+    end
+end
+
 local function DrawTrail(D, scene)
-    local w, h, now = D.w, D.h, D.now
+    local w, now = D.w, D.now
     local life = TrailSeconds()
     local oldest = now - life
-    local fr, fg, fb = faction.r, faction.g, faction.b
     for _, e in ipairs(scene.zones) do
         local p, strokes = e.p, e.z.strokes
         local line = p.far and w * 0.0012 or w * 0.0022
         local thin = p.far and w * 0.0011 or w * 0.0020
-        local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
-        local slot = C.DASH_PERIOD * thin / sx -- one dash slot, in map widths
-        -- the point at distance a along stroke s, on segment i
-        local function Along(s, d, i, a)
-            local f = d[i + 1] > d[i] and (a - d[i]) / (d[i + 1] - d[i]) or 0
-            return s[2 * i - 1] + (s[2 * i + 1] - s[2 * i - 1]) * f, s[2 * i] + (s[2 * i + 2] - s[2 * i]) * f, f
-        end
+        local slot = C.DASH_PERIOD * thin / (p.sx * w) -- one dash slot, in map widths
         for si = #strokes, 1, -1 do -- newest first
             local s = strokes[si]
             if s.e < oldest or D.ndash >= C.DASH_BUDGET then break end
-            local n = #s / 2
-            if s.ts and n >= 2 then
-                local d = StrokeArc(s)
-                local i = n - 1
-                for k = math.floor(d[n] / slot), 0, -1 do
-                    local mid = (k + 0.5) * slot
-                    while i > 1 and d[i] > mid do i = i - 1 end
-                    if mid <= d[n] then
-                        local _, _, f = Along(s, d, i, mid)
-                        local t1 = PointTime(s, i)
-                        local age = now - (t1 + (PointTime(s, i + 1) - t1) * f)
-                        if age >= life or D.ndash >= C.DASH_BUDGET then break end
-                        if age >= C.LINE_SOLID then
-                            local fill, tk, alpha = DashLook(age, life)
-                            -- the dash, from mid - half to mid + half, following the path's bends
-                            local half = fill * slot / 2
-                            local a0, a1 = math.max(0, mid - half), math.min(d[n], mid + half)
-                            local j = i
-                            while j > 1 and d[j] > a0 do j = j - 1 end
-                            local x0, y0 = Along(s, d, j, a0)
-                            while j <= n - 1 and D.ndash < C.DASH_BUDGET do
-                                local stop = math.min(a1, d[j + 1])
-                                local x1, y1 = Along(s, d, j, stop)
-                                D.ndash, D.nl = D.ndash + 1, D.nl + 1
-                                PutLine(D.nl, 6, "BLEND", line * tk, fr, fg, fb, alpha,
-                                    ox + x0 * sx, -(oy + y0 * sy), ox + x1 * sx, -(oy + y1 * sy))
-                                if stop >= a1 then break end
-                                x0, y0, j = x1, y1, j + 1
-                            end
-                        end
-                    end
-                end
-            end
+            if s.ts and #s >= 4 then StrokeDashes(D, e, s, life, slot, line) end
         end
     end
+end
+
+-- The outlines: the area you're in solid, the rest dashed in the rhythm and
+-- colour of their age, with the time spent there above each.
+local function Spent(sec)
+    if sec < 3600 then return math.max(1, math.floor(sec / 60 + 0.5)) .. "m" end
+    return (("%.1f"):format(sec / 3600):gsub("%.0$", "")) .. "h"
+end
+
+local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap)
+    local pos = 0
+    for i = 1, #poly / 2 - 1 do
+        local x1, y1, x2, y2 = poly[2 * i - 1], poly[2 * i], poly[2 * i + 1], poly[2 * i + 2]
+        local L = math.sqrt((x2 - x1) ^ 2 + ((y2 - y1) * 668 / 1002) ^ 2)
+        local u = 0
+        while u < L and D.nl < C.LINE_BUDGET do
+            local ph = gap > 0 and (pos + u) % (dash + gap) or 0
+            if gap == 0 or ph < dash then
+                local v = gap == 0 and L or math.min(L, u + math.max(dash - ph, 1e-7))
+                local f0, f1 = u / L, v / L
+                D.nl = D.nl + 1
+                PutLine(D.nl, 6, "BLEND", thick, r, g, b, a,
+                    (p.ox + (x1 + (x2 - x1) * f0) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f0) * p.sy) * D.h,
+                    (p.ox + (x1 + (x2 - x1) * f1) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f1) * p.sy) * D.h)
+                u = v
+            else
+                u = u + math.max(dash + gap - ph, 1e-7)
+            end
+        end
+        pos = pos + L
+    end
+end
+
+local function AreaTag(D, p, ar, r, g, b, a)
+    local total = 0
+    for _, v in ipairs(ar.a.v) do total = total + (v.t or 0) end
+    local poly, top, ty = ar.poly, 1, math.huge
+    for i = 2, #poly, 2 do if poly[i] < ty then top, ty = i - 1, poly[i] end end
+    D.ntag = D.ntag + 1
+    ns.PlaceTag(D.ntag, ar, Spent(total), Lerp(r, 1, 0.35), Lerp(g, 0.8, 0.35), Lerp(b, 0.3, 0.35),
+        math.min(1, a + 0.2), (p.ox + poly[top] * p.sx) * D.w, -(p.oy + ty * p.sy) * D.h)
+end
+
+local function DrawAreas(D, scene)
+    local w = D.w
+    local life = TrailSeconds()
+    for _, e in ipairs(scene.zones) do
+        local p = e.p
+        local line = p.far and w * 0.0012 or w * 0.0022
+        local thin = p.far and w * 0.0011 or w * 0.0020
+        local slot = C.DASH_PERIOD * thin / (p.sx * w)
+        for _, ar in ipairs(e.lg.areas) do
+            local r, g, b, a, tk, fill
+            if ar.live then
+                r, g, b, a = faction.r, faction.g, faction.b, 0.95
+                DrawOutline(D, p, ar.poly, line * 1.05, r, g, b, a, 1, 0)
+            else
+                r, g, b, a, tk, fill = TrailLook(math.max(ar.age, C.LINE_SOLID + 1), life)
+                DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, fill * slot, (1 - fill) * slot)
+            end
+            if not p.far and a > 0.05 then AreaTag(D, p, ar, r, g, b, a) end
+        end
+    end
+end
+
+local function DrawToday(D, scene)
+    local life = TrailSeconds()
+    for _, e in ipairs(scene.zones) do AreaScene(e, D.now, life) end
+    DrawWalkLine(D, scene)
+    DrawTrail(D, scene)
+    DrawAreas(D, scene)
+    SetTail(D, scene)
 end
 
 -- Dashes from (x1,y1) to (x2,y2), continuing the pattern from phase.
@@ -1320,8 +1714,9 @@ local EMPTY = { proj = {}, zones = {} }
 -- limit: number of trail points to draw (replay); nil = live view.
 local function Draw(scene, limit)
     local D = { w = overlay:GetWidth(), h = overlay:GetHeight(), now = time(), replay = limit and true,
-        nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0 }
+        nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0, ntag = 0 }
     local L = cfg.layers
+    tail.stroke, tail.p = nil, nil
     for i = #shimmer, 1, -1 do shimmer[i] = nil end
     for i = #twinkle, 1, -1 do twinkle[i] = nil end
 
@@ -1334,10 +1729,7 @@ local function Draw(scene, limit)
     else
         if L.roads then DrawGround(D, scene) end
         if L.runs then DrawRuns(D, scene) end
-        if L.recent then
-            DrawWalkLine(D, scene)
-            DrawTrail(D, scene)
-        end
+        if L.recent then DrawToday(D, scene) end
     end
     DrawMarks(D, scene, from, upTo)
 
@@ -1347,10 +1739,13 @@ local function Draw(scene, limit)
     for i = D.np + 1, #pins do pins[i]:Hide() end
     activePins = D.np
     for i = D.nb + 1, #labels do labels[i]:Hide() end
+    for i = D.ntag + 1, #tags do tags[i]:Hide() end
+    activeTags = D.ntag
     for i = D.ns + 1, #steps do steps[i]:Hide() end
     for i = D.nr + 1, #rims do rims[i]:Hide() end
     for i = D.ngl + 1, #glints do glints[i]:Hide() end
     overlay:SetScript("OnUpdate", (#shimmer > 0 or #twinkle > 0) and Animate or nil)
+    UpdateTail()
 
     if hx then
         head:SetSize(D.w * 0.035, D.w * 0.035)
@@ -1446,7 +1841,11 @@ local function SetupMap()
     head:SetBlendMode("ADD")
     head:SetVertexColor(1, 0.9, 0.5)
     head:Hide()
-    -- keep pins steady while the map zooms or is rescaled
+    tail.line = overlay:CreateLine(nil, "ARTWORK")
+    tail.line:SetDrawLayer("ARTWORK", 7)
+    tail.line:Hide()
+    -- keep pins steady while the map zooms or is rescaled; keep the trail
+    -- joined to you
     local watcher = CreateFrame("Frame", nil, overlay)
     watcher.acc, watcher.k = 0, 0
     watcher:SetScript("OnUpdate", function(self, elapsed)
@@ -1455,6 +1854,7 @@ local function SetupMap()
         self.acc = 0
         local k = MapScale()
         if math.abs(k - self.k) > 0.001 then self.k = k RescalePins() end
+        UpdateTail()
     end)
     WorldMapFrame:HookScript("OnShow", Redraw)
     hooksecurefunc(WorldMapFrame, "OnMapChanged", Redraw)
@@ -1463,6 +1863,7 @@ end
 
 -- Shared with the other files.
 ns.Redraw = Redraw
+ns.UpdateTail = UpdateTail
 ns.RescalePins = RescalePins
 ns.SetupMap = SetupMap
 ns.StartReplay = StartReplay
