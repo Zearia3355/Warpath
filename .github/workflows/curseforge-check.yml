@@ -18,10 +18,12 @@ jobs:
         run: |
           if [ -z "$CF_API_TOKEN" ]; then echo "CF_API_TOKEN secret is empty or missing"; exit 1; fi
           echo "token length: ${#CF_API_TOKEN}"
+          ok=0
           for site in https://wow.curseforge.com https://legacy.curseforge.com; do
             code=$(curl -s -o body.json -w '%{http_code}' -H "x-api-token: $CF_API_TOKEN" "$site/api/game/wow/versions")
             echo "== $site/api/game/wow/versions -> HTTP $code, $(wc -c < body.json) bytes"
             if jq -e 'type == "array"' body.json >/dev/null 2>&1; then
+              ok=1
               echo "versions: $(jq length body.json); WoW Forever (type 88568): $(jq -c '[.[] | select(.gameVersionTypeID == 88568) | .name]' body.json)"
             else
               echo "not a version list; first 300 bytes:"; head -c 300 body.json; echo
@@ -29,3 +31,7 @@ jobs:
             code=$(curl -s -o /dev/null -w '%{http_code}' "$site/api/game/wow/versions")
             echo "   same call with NO token -> HTTP $code (for comparison)"
           done
+          # Red unless CurseForge actually accepted the token: a green run
+          # that only mentions an error in its log is how this went unnoticed.
+          if [ "$ok" != 1 ]; then echo "::error::CurseForge did not accept CF_API_TOKEN"; exit 1; fi
+          echo "CurseForge accepted the token."
