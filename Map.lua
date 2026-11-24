@@ -350,8 +350,304 @@ local function RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
     end
 end
 
+-- Roads as chains (3.7.12): runs of stretches from one junction or end to
+-- the next, so a road is drawn as one line with its corners eased, not as
+-- separate sticks meeting at angles. Built from saved strengths alone, never
+-- from the clock, so nothing moves while you look. A scrap of road on its own
+-- (C.ROAD_SCRAP stretches or fewer, touching nothing) is a fragment, not a
+-- road: it isn't drawn, but stays saved.
+-- Gaps: where a road stops and another starts a few steps on (or a road's
+-- end faces another road's end further on), and you have walked between them
+-- (even on just one day), the road goes on through: you
+-- obviously travel it, so the map shouldn't show a break. The way across is
+-- ground you actually walked, never a straight-line guess, and it takes the
+-- look of the weaker of the two roads it joins. Adds to adj and nodes.
+local function Bridge(adj, weak, deg, nodes)
+    -- Which road each point is on, and how long that road is. Scraps (see
+    -- RoadChains) neither start nor end a join, or one-day wandering would
+    -- chain scrap to scrap into roads that aren't there.
+    local comp, size = {}, {}
+    for _, n in ipairs(nodes) do
+        if not comp[n] then
+            local stack, ends = { n }, 0
+            comp[n] = n
+            while #stack > 0 do
+                local u = table.remove(stack)
+                ends = ends + deg[u]
+                for v in pairs(adj[u]) do
+                    if not comp[v] then comp[v] = n stack[#stack + 1] = v end
+                end
+            end
+            size[n] = ends / 2
+        end
+    end
+    local add = {}
+    for _, d in ipairs(nodes) do
+        if deg[d] == 1 and size[comp[d]] > C.ROAD_SCRAP then
+            local from, frontier, found = { [d] = d }, { d }, nil
+            for step = 1, math.max(C.ROAD_BRIDGE, C.ROAD_BRIDGE_END) do
+                local ahead = {}
+                for _, u in ipairs(frontier) do
+                    -- Walked steps from here, and walked ground touching it
+                    -- (a cell away), which a fold or a sharp bend can leave
+                    -- without a recorded step between.
+                    local out, ux, uy = {}, u % C.GW, math.floor(u / C.GW)
+                    for v in pairs(weak[u] or {}) do out[#out + 1] = v end
+                    for y = uy - 1, uy + 1 do
+                        for x = ux - 1, ux + 1 do
+                            local v = y * C.GW + x
+                            if x >= 0 and x < C.GW and v ~= u and weak[v] and not (weak[u] and weak[u][v]) then
+                                out[#out + 1] = v
+                            end
+                        end
+                    end
+                    table.sort(out)
+                    for _, v in ipairs(out) do
+                        if not from[v] then
+                            from[v] = u
+                            -- Onto any road within the short reach; further
+                            -- on, only end to end: two roads stopping short of
+                            -- each other along one walked line are one road.
+                            if comp[v] and comp[v] ~= comp[d] and size[comp[v]] > C.ROAD_SCRAP
+                                and (step <= C.ROAD_BRIDGE or deg[v] == 1) then
+                                found = v break
+                            end
+                            if not comp[v] or size[comp[v]] <= C.ROAD_SCRAP then ahead[#ahead + 1] = v end
+                        end
+                    end
+                    if found then break end
+                end
+                if found then break end
+                frontier = ahead
+            end
+            if found then
+                local far = 0
+                for _, L in pairs(adj[found]) do if L > far then far = L end end
+                local s = math.min(adj[d][next(adj[d])], far)
+                local v = found
+                while v ~= d do
+                    local u = from[v]
+                    add[#add + 1] = { u, v, math.max(s, weak[u] and weak[u][v] or 0) }
+                    v = u
+                end
+            end
+        end
+    end
+    for _, e in ipairs(add) do
+        local a, b, L = e[1], e[2], e[3]
+        if not adj[a] then adj[a] = {} nodes[#nodes + 1] = a end
+        if not adj[b] then adj[b] = {} nodes[#nodes + 1] = b end
+        if (adj[a][b] or 0) < L then adj[a][b], adj[b][a] = L, L end
+    end
+    table.sort(nodes)
+end
+
+-- Bubbles: a short side path that leaves a road and rejoins it a few steps
+-- on (the line you took once or twice instead of the usual one) makes a thin
+-- loop or a sliver of a triangle beside the road. Where the whole loop is
+-- C.ROAD_BUBBLE stretches or fewer, it's one road: the weaker side isn't
+-- drawn. Loops bigger than that (two ways round a hill) stay. Weakest
+-- runs are settled first, so a road is never dropped in favour of its own
+-- sliver. Takes edges out of adj.
+local function Bubbles(adj, deg, nodes)
+    local runs, seen = {}, {}
+    local function Key(a, b) return math.min(a, b) * 10000 + math.max(a, b) end
+    local function Run(a, b)
+        local r = { a = a, edges = {}, sum = 0 }
+        local prev, at = a, b
+        while true do
+            seen[Key(prev, at)] = true
+            r.edges[#r.edges + 1] = prev
+            r.edges[#r.edges + 1] = at
+            r.sum = r.sum + adj[prev][at]
+            if deg[at] ~= 2 or at == a then break end
+            local nxt
+            for m in pairs(adj[at]) do if m ~= prev then nxt = m end end
+            if seen[Key(at, nxt)] then break end
+            prev, at = at, nxt
+        end
+        r.b, r.n = at, #r.edges / 2
+        r.mean = r.sum / r.n
+        runs[#runs + 1] = r
+    end
+    for pass = 1, 2 do
+        for _, n in ipairs(nodes) do
+            if pass == 2 or deg[n] ~= 2 then
+                local out = {}
+                for m in pairs(adj[n]) do out[#out + 1] = m end
+                table.sort(out)
+                for _, m in ipairs(out) do
+                    if not seen[Key(n, m)] then Run(n, m) end
+                end
+            end
+        end
+    end
+    table.sort(runs, function(p, q)
+        if p.mean ~= q.mean then return p.mean < q.mean end
+        return p.edges[1] * 10000 + p.edges[2] < q.edges[1] * 10000 + q.edges[2]
+    end)
+    local function Drop(r)
+        for i = 1, #r.edges, 2 do
+            local a, b = r.edges[i], r.edges[i + 1]
+            adj[a][b], adj[b][a] = nil, nil
+        end
+    end
+    for _, r in ipairs(runs) do
+        if r.n <= C.ROAD_BUBBLE and adj[r.edges[1]][r.edges[2]] then
+            if r.a == r.b then
+                Drop(r)
+            else
+                -- Another way from one end to the other, short enough to
+                -- close a small loop, and at least as worn.
+                local mine = {}
+                for i = 1, #r.edges, 2 do mine[Key(r.edges[i], r.edges[i + 1])] = true end
+                local from, frontier, found = { [r.a] = r.a }, { r.a }, false
+                for _ = 1, C.ROAD_BUBBLE - r.n do
+                    local ahead = {}
+                    for _, u in ipairs(frontier) do
+                        local out = {}
+                        for v in pairs(adj[u]) do
+                            if not mine[Key(u, v)] and not from[v] then out[#out + 1] = v end
+                        end
+                        table.sort(out)
+                        for _, v in ipairs(out) do
+                            if not from[v] then
+                                from[v] = u
+                                if v == r.b then found = true break end
+                                ahead[#ahead + 1] = v
+                            end
+                        end
+                        if found then break end
+                    end
+                    if found or #ahead == 0 then break end
+                    frontier = ahead
+                end
+                if found then
+                    local sum, n, v = 0, 0, r.b
+                    while v ~= r.a do
+                        sum, n = sum + adj[from[v]][v], n + 1
+                        v = from[v]
+                    end
+                    if r.mean <= sum / n then Drop(r) end
+                end
+            end
+        end
+    end
+end
+
+local function RoadChains(z, faint, gold)
+    local adj, weak, nodes = {}, {}, {}
+    for edge, rec in pairs(z.road) do
+        local L = Long(rec)
+        local a, b = math.floor(edge / 10000), edge % 10000
+        if L >= C.ROAD_WALKED then
+            weak[a], weak[b] = weak[a] or {}, weak[b] or {}
+            weak[a][b], weak[b][a] = L, L
+        end
+        if L >= faint then
+            if not adj[a] then adj[a] = {} nodes[#nodes + 1] = a end
+            if not adj[b] then adj[b] = {} nodes[#nodes + 1] = b end
+            adj[a][b], adj[b][a] = L, L
+        end
+    end
+    table.sort(nodes)
+    local deg, comp, size = {}, {}, {}
+    local function Degrees()
+        local kept = {}
+        for _, n in ipairs(nodes) do
+            local d = 0
+            for _ in pairs(adj[n]) do d = d + 1 end
+            deg[n] = d
+            if d > 0 then kept[#kept + 1] = n end
+        end
+        nodes = kept
+    end
+    Degrees()
+    if C.ROAD_BRIDGE > 0 then
+        Bridge(adj, weak, deg, nodes)
+        Degrees()
+    end
+    if C.ROAD_BUBBLE > 0 then
+        Bubbles(adj, deg, nodes)
+        Degrees()
+    end
+    -- Stubs: a dead end of C.ROAD_SPUR stretches or fewer leaving a road,
+    -- where you stepped aside for a quest or a herb, isn't drawn unless some
+    -- of it is gold (somewhere you keep going). Decided in one pass over the
+    -- saved roads, so it can't eat a road inward from its end.
+    if C.ROAD_SPUR > 0 then
+        local cut = {}
+        for _, n in ipairs(nodes) do
+            if deg[n] == 1 then
+                local path, prev, at, strong = {}, n, next(adj[n]), false
+                while true do
+                    path[#path + 1] = prev
+                    path[#path + 1] = at
+                    if adj[prev][at] >= gold then strong = true end
+                    if deg[at] ~= 2 or #path > 2 * C.ROAD_SPUR then break end
+                    local nxt
+                    for m in pairs(adj[at]) do if m ~= prev then nxt = m end end
+                    prev, at = at, nxt
+                end
+                if deg[at] >= 3 and #path <= 2 * C.ROAD_SPUR and not strong then
+                    for i = 1, #path do cut[#cut + 1] = path[i] end
+                end
+            end
+        end
+        for i = 1, #cut, 2 do
+            adj[cut[i]][cut[i + 1]], adj[cut[i + 1]][cut[i]] = nil, nil
+        end
+        Degrees()
+    end
+    for _, n in ipairs(nodes) do
+        if not comp[n] then
+            local stack, ends = { n }, 0
+            comp[n] = n
+            while #stack > 0 do
+                local u = table.remove(stack)
+                ends = ends + deg[u]
+                for v in pairs(adj[u]) do
+                    if not comp[v] then comp[v] = n stack[#stack + 1] = v end
+                end
+            end
+            size[n] = ends / 2
+        end
+    end
+    local used, chains = {}, {}
+    local function Walk(a, b)
+        local pts, vals = { a }, {}
+        local prev, at = a, b
+        while true do
+            used[math.min(prev, at) * 10000 + math.max(prev, at)] = true
+            vals[#vals + 1] = adj[prev][at]
+            pts[#pts + 1] = at
+            if deg[at] ~= 2 or at == a then break end
+            local nxt
+            for m in pairs(adj[at]) do if m ~= prev then nxt = m end end
+            if used[math.min(at, nxt) * 10000 + math.max(at, nxt)] then break end
+            prev, at = at, nxt
+        end
+        chains[#chains + 1] = { pts = pts, vals = vals }
+    end
+    -- Ends and junctions first, then loops (from their lowest point).
+    for pass = 1, 2 do
+        for _, n in ipairs(nodes) do
+            if size[comp[n]] > C.ROAD_SCRAP and (pass == 2 or deg[n] ~= 2) then
+                local out = {}
+                for m in pairs(adj[n]) do out[#out + 1] = m end
+                table.sort(out)
+                for _, m in ipairs(out) do
+                    if not used[math.min(n, m) * 10000 + math.max(n, m)] then Walk(n, m) end
+                end
+            end
+        end
+    end
+    return chains
+end
+
 local function DrawGround(D, scene)
     local L, w, h, now = cfg.layers, D.w, D.h, D.now
+    if not L.roads then return end
     local gold = db.roadMin
     local silver = gold * C.SILVER_SHARE
     local faint = silver * 0.8           -- roads fade in before silver
@@ -364,34 +660,52 @@ local function DrawGround(D, scene)
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
         local thin = p.far and w * 0.0011 or w * 0.0020
         local candidates = {}
-        for edge, rec in pairs(z.road) do
-            local long = L.roads and Long(rec, now) or 0
-            if long >= faint then
-                local a, b = math.floor(edge / 10000), edge % 10000
-                local ax, ay = z.cx[a], z.cy[a]
-                local bx, by = z.cx[b], z.cy[b]
-                if not ax then ax, ay = CellXY(a, C.GW, C.GH) end
-                if not bx then bx, by = CellXY(b, C.GW, C.GH) end
-                local x1, y1, x2, y2 = ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy)
-                if D.nl < roadCap then
-                    local g = Clamp((long - gStart) / (gEnd - gStart))
-                    local wear = Clamp((long - silver) / (full - silver))
-                    local worn = long >= gEnd and Clamp((long - gEnd) / (full - gEnd)) or 0
-                    local alpha = long >= silver and 1 or 0.25 + 0.75 * (long - faint) / (silver - faint)
-                    local stripe, r, gg, bb = RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
-                    if stripe and worn > 0.05 and shine then
-                        shimmer[#shimmer + 1] = { l = stripe, u = (ax + bx) * 0.5 + (ay + by) * 0.3,
-                            worn = worn, r = r, g = gg, b = bb }
-                        if worn > 0.6 then
-                            candidates[#candidates + 1] = { x = (ax + bx) / 2, y = (ay + by) / 2, worn = worn }
-                        end
-                    end
+        -- One piece of a chain, from map point (ax, ay) to (bx, by).
+        local function Piece(long, ax, ay, bx, by)
+            if D.nl >= roadCap then return end
+            local x1, y1, x2, y2 = ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy)
+            local g = Clamp((long - gStart) / (gEnd - gStart))
+            local wear = Clamp((long - silver) / (full - silver))
+            local worn = long >= gEnd and Clamp((long - gEnd) / (full - gEnd)) or 0
+            local alpha = long >= silver and 1 or 0.25 + 0.75 * (long - faint) / (silver - faint)
+            local stripe, r, gg, bb = RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
+            if stripe and worn > 0.05 and shine then
+                shimmer[#shimmer + 1] = { l = stripe, u = (ax + bx) * 0.5 + (ay + by) * 0.3,
+                    worn = worn, r = r, g = gg, b = bb }
+                if worn > 0.6 then
+                    candidates[#candidates + 1] = { x = (ax + bx) / 2, y = (ay + by) / 2, worn = worn }
                 end
+            end
+        end
+        for _, ch in ipairs(RoadChains(z, faint, gold)) do
+            local px, py = {}, {}
+            for i, c in ipairs(ch.pts) do
+                px[i], py[i] = z.cx[c], z.cy[c]
+                if not px[i] then px[i], py[i] = CellXY(c, C.GW, C.GH) end
+            end
+            -- Corners cut a quarter of the way along each side (Chaikin):
+            -- each stretch is drawn straight through its middle half, and
+            -- each bend as a short piece blending the two stretches it joins.
+            -- Junctions and ends stay exactly where they are.
+            local n, vals = #ch.vals, ch.vals
+            local lx, ly
+            for i = 1, n do
+                local sx0, sy0 = px[i], py[i]
+                if i > 1 then sx0, sy0 = 0.75 * px[i] + 0.25 * px[i + 1], 0.75 * py[i] + 0.25 * py[i + 1] end
+                local ex, ey = px[i + 1], py[i + 1]
+                if i < n then ex, ey = 0.25 * px[i] + 0.75 * px[i + 1], 0.25 * py[i] + 0.75 * py[i + 1] end
+                if lx then Piece((vals[i - 1] + vals[i]) / 2, lx, ly, sx0, sy0) end
+                Piece(vals[i], sx0, sy0, ex, ey)
+                lx, ly = ex, ey
             end
         end
         -- Amber glints on the most worn roads, sparse.
         if #candidates > 0 then
-            table.sort(candidates, function(a, b) return a.worn > b.worn end)
+            table.sort(candidates, function(a, b)
+                if a.worn ~= b.worn then return a.worn > b.worn end
+                if a.x ~= b.x then return a.x < b.x end
+                return a.y < b.y
+            end)
             local placed = {}
             for _, c in ipairs(candidates) do
                 if #placed >= C.GLINT_CAP then break end

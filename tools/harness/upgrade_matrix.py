@@ -61,13 +61,17 @@ __saved = {
 # layout changes between versions (corpse runs moved out of strokes in 3.4).
 MEASURE = r"""
 local db, gdb = WarpathDB or {}, WarpathGlobal or {}
-local m = { zones = 0, marks = 0, trail = 0, roads = 0, yards = 0, gmarks = 0 }
+local m = { zones = 0, marks = 0, trail = 0, roads = 0, roadsNow = 0, yards = 0, gmarks = 0 }
 for _, z in pairs(db.maps or {}) do
     m.zones = m.zones + 1
     m.marks = m.marks + #(z.marks or {})
     m.gmarks = m.gmarks + #(z.gmarks or {})
     m.trail = m.trail + #(z.strokes or {}) + #(z.runs or {})
-    for _ in pairs(z.road or {}) do m.roads = m.roads + 1 end
+    -- Road pieces as recorded. From 3.7.12 (db.v 10) side-by-side lanes are
+    -- merged into one road, so there are fewer pieces by design; the pieces
+    -- as they were are kept hidden in z.roadOld, and that's what must survive.
+    for _ in pairs(z.roadOld or z.road or {}) do m.roads = m.roads + 1 end
+    for _ in pairs(z.road or {}) do m.roadsNow = m.roadsNow + 1 end
     m.yards = m.yards + (z.yards or 0)
 end
 m.kills, m.deaths = db.kills or 0, db.deaths or 0
@@ -85,7 +89,7 @@ KEYS = ["zones", "marks", "trail", "roads", "yards", "kills", "deaths", "grudges
 def measure(wow):
     wow.run(MEASURE)
     m = wow.lua.globals()["__m"]
-    return {k: float(m[k] or 0) for k in KEYS + ["v"]}
+    return {k: float(m[k] or 0) for k in KEYS + ["v", "roadsNow"]}
 
 
 def try_cmd(wow, cmd):
@@ -147,6 +151,8 @@ def upgrade(ref, workdir):
     after = measure(new)
     errors = [l for l in new.chat if "hit an error" in l]
     lost = [k for k in KEYS if after[k] < before[k] - (0.5 if k == "yards" else 0)]
+    if before["roads"] > 0 and after["roadsNow"] == 0:
+        lost.append("roads (merged to nothing)")
     return before, after, errors, lost
 
 

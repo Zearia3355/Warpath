@@ -72,6 +72,12 @@ local C = {
     HEAT_MIN        = 1.5,     -- long-memory strength before heat shows
     HEAT_FULL       = 10,
     ROAD_FULL       = 12,
+    ROAD_SCRAP      = 2,       -- a road piece this short (stretches), on its own, is a scrap: not drawn
+    ROAD_SPUR       = 3,       -- a dead-end stub this short (stretches) off a road is not drawn, unless gold
+    ROAD_BRIDGE     = 4,       -- a gap between two roads this short (stretches), walked even once, is drawn as road
+    ROAD_BRIDGE_END = 12,      -- ...and this long where two road ends face each other along one walked line
+    ROAD_WALKED     = 0.3,     -- ...counting ground walked at least this much (one day, within about 24 days played)
+    ROAD_BUBBLE     = 10,      -- a loop this short all round (stretches) is one road: its weaker side is not drawn
     LN2             = math.log(2),
     LOG2_5          = math.log(5) / math.log(2), -- short memory 1 -> 0.2 (RECENT_MIN) takes this many half-lives
     SILVER_SHARE    = 0.6,     -- silver appears at this share of the gold threshold
@@ -853,8 +859,22 @@ local function MigrateToV9()
     db.v = 9
 end
 
+-- 3.7.12 (db.v 10): roads recorded as side-by-side lanes are folded into one
+-- road each (ns.MergeLanes, in Record.lua). The roads as they were are kept,
+-- hidden, as z.roadOld.
+local function MigrateToV10()
+    local now = time()
+    for _, z in pairs(db.maps) do
+        if z.road and next(z.road) then
+            if z.roadOld == nil then z.roadOld = z.road end
+            ns.MergeLanes(z, now)
+        end
+    end
+    db.v = 10
+end
+
 local function Migrate()
-    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 and db.v ~= 8 and db.v ~= 9 then MigrateToV4() end
+    if db.v ~= 4 and db.v ~= 5 and db.v ~= 6 and db.v ~= 7 and db.v ~= 8 and db.v ~= 9 and db.v ~= 10 then MigrateToV4() end
     if db.v == 4 then
         local ok, err = pcall(MigrateToV5)
         if not ok then
@@ -874,6 +894,14 @@ local function Migrate()
     if db.v == 8 then
         local ok, err = pcall(MigrateToV9)
         if not ok then Print("the 3.7.1 haze rebuild hit an error, so the haze is as it was: " .. tostring(err)) db.v = 9 end
+    end
+    if db.v == 9 then
+        local ok, err = pcall(MigrateToV10)
+        if not ok then
+            for _, z in pairs(db.maps) do if z.roadOld then z.road = z.roadOld end end
+            Print("the 3.7.12 road upgrade hit an error, so your roads are as they were: " .. tostring(err))
+            db.v = 10
+        end
     end
     for _, z in pairs(db.maps) do ZoneFields(z) end
     db.campaigns = db.campaigns or {}

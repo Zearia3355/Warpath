@@ -2,7 +2,8 @@
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Cell, Credit, FullName, MapName, Notice, PlayerPos = ns.Cell, ns.Credit, ns.FullName, ns.MapName, ns.Notice, ns.PlayerPos
-local Print, Q, Recent, Secret, Simplify, Sound = ns.Print, ns.Q, ns.Recent, ns.Secret, ns.Simplify, ns.Sound
+local PlayNow = ns.PlayNow
+local Long, Print, Q, Recent, Secret, Simplify, Sound = ns.Long, ns.Print, ns.Q, ns.Recent, ns.Secret, ns.Simplify, ns.Sound
 local WorldXY, ZoneData, cur, killCallbacks, recentSight, session = ns.WorldXY, ns.ZoneData, ns.cur, ns.killCallbacks, ns.recentSight, ns.session
 local Foes, Victim, Share = ns.Foes, ns.Victim, ns.Share
 
@@ -96,6 +97,141 @@ local function Travelling(mapID, x, y)
     return dx * dx + dy * dy >= need * need
 end
 
+-- Roads follow the road you already have (3.7.12). Nobody walks a route on
+-- exactly the same line twice: a day later you pass a cell to one side,
+-- which used to start a second lane beside the first, so the route's days
+-- were split between lanes and it showed late, broken and doubled. Now where
+-- you stand is matched to the best-worn road point within a cell of you, and
+-- steps run between matched points, so a route keeps gaining days on one line.
+
+-- How worn a road point was before today: its best stretch. Today's own
+-- steps don't count, or a new road would keep pulling you back onto the
+-- point you just left.
+local function PointWear(z, n, today)
+    local GW, best = C.GW, 0
+    local nx, ny = n % GW, math.floor(n / GW)
+    for y = ny - 2, ny + 2 do
+        for x = nx - 2, nx + 2 do
+            if x >= 0 and x < GW and y >= 0 and (x ~= nx or y ~= ny) then
+                local m = y * GW + x
+                local e = z.road[math.min(n, m) * 10000 + math.max(n, m)]
+                if e then
+                    local L = Long(e) - (e.d == today and 1 or 0)
+                    if L > best then best = L end
+                end
+            end
+        end
+    end
+    return best
+end
+
+-- The road point for a cell: the best-worn one in reach, or the cell itself
+-- when nothing nearby is more worn than it.
+local function Snap(z, c, today)
+    local GW = C.GW
+    local cx, cy = c % GW, math.floor(c / GW)
+    local best, bestW = c, PointWear(z, c, today)
+    for y = cy - 1, cy + 1 do
+        for x = cx - 1, cx + 1 do
+            if x >= 0 and x < GW and y >= 0 and (x ~= cx or y ~= cy) then
+                local n = y * GW + x
+                local w = PointWear(z, n, today)
+                if w > bestW then best, bestW = n, w end
+            end
+        end
+    end
+    return best
+end
+
+-- The 3.7.12 upgrade: fold the side-by-side lanes recorded before roads
+-- followed themselves into one road each. Points are taken best-worn first;
+-- each keeps its place and takes over the weaker points beside it (across
+-- its road, never along it). Stretches are then re-joined between the
+-- points that remain, and lanes that land on the same stretch add up their
+-- days. Rungs between two lanes of one road fold to nothing and go.
+local function MergeLanes(z, now)
+    local GW = C.GW
+    local wear, dx, dy, nodes = {}, {}, {}, {}
+    local function Note(n, m, L)
+        if not wear[n] then nodes[#nodes + 1] = n wear[n] = -1 end
+        if L > wear[n] then
+            local vx, vy = m % GW - n % GW, math.floor(m / GW) - math.floor(n / GW)
+            local vl = math.sqrt(vx * vx + vy * vy)
+            wear[n], dx[n], dy[n] = L, vx / vl, vy / vl
+        end
+    end
+    for edge, e in pairs(z.road) do
+        local a, b = math.floor(edge / 10000), edge % 10000
+        local L = Long(e)
+        Note(a, b, L)
+        Note(b, a, L)
+    end
+    table.sort(nodes, function(p, q)
+        if wear[p] ~= wear[q] then return wear[p] > wear[q] end
+        return p < q
+    end)
+    -- Kept points with a point m across their road within a cell: the
+    -- nearest one (straight across before diagonal), then the best worn.
+    local kept = {}
+    local function Beside(m)
+        local mx, my = m % GW, math.floor(m / GW)
+        local best, bd
+        for y = my - 1, my + 1 do
+            for x = mx - 1, mx + 1 do
+                local n = y * GW + x
+                if x >= 0 and x < GW and n ~= m and kept[n] then
+                    local vx, vy = mx - x, my - y
+                    local d = vx * vx + vy * vy
+                    if math.abs(vx * dx[n] + vy * dy[n]) / math.sqrt(d) <= 0.75
+                        and (not best or d < bd or (d == bd and wear[n] > wear[best])) then
+                        best, bd = n, d
+                    end
+                end
+            end
+        end
+        return best
+    end
+    local root = {}
+    for _, n in ipairs(nodes) do
+        local into = Beside(n)
+        if into then root[n] = into else kept[n], root[n] = true, n end
+    end
+    local road = {}
+    for edge, e in pairs(z.road) do
+        local a0, b0 = math.floor(edge / 10000), edge % 10000
+        local a, b = root[a0], root[b0]
+        -- A stretch the fold would pull out past two cells, running across
+        -- its road rather than along it, was a rung between lanes that came
+        -- apart (common in cities, where lanes are packed tight): folded, it
+        -- would draw as a long straight spoke. It stays where it was walked
+        -- instead, unfolded; on its own it is a scrap and isn't drawn, but a
+        -- gap can still be joined across it.
+        local key = a ~= b and math.min(a, b) * 10000 + math.max(a, b)
+        if key and math.max(math.abs(a % GW - b % GW), math.abs(math.floor(a / GW) - math.floor(b / GW))) > 2 then
+            local vx, vy = b0 % GW - a0 % GW, math.floor(b0 / GW) - math.floor(a0 / GW)
+            if math.abs(vx * dx[a] + vy * dy[a]) / math.sqrt(vx * vx + vy * vy) < 0.7 then key = edge end
+        end
+        if key then
+            local r = road[key]
+            if not r then r = { l = 0, tl = PlayNow(), r = 0, tr = now, days = {} } road[key] = r end
+            local L = Long(e)
+            r.l = r.l + L
+            -- Lanes last walked on the same day (there and back) count that
+            -- day once. What the last day still adds is L / e.l.
+            if e.d and e.l and e.l > 0 then
+                local last = L / e.l
+                local seen = r.days[e.d]
+                if seen then r.l = r.l - math.min(seen, last) end
+                r.days[e.d] = math.max(seen or 0, last)
+            end
+            r.r = math.max(r.r, Recent(e, now))
+            if e.d and (not r.d or e.d > r.d) then r.d = e.d end
+        end
+    end
+    for _, r in pairs(road) do r.days = nil end
+    z.road = road
+end
+
 -- Feed both memories. See the header for what each one counts.
 local function Visit(mapID, x, y, mode)
     if mode then -- flights and corpse runs are not choices
@@ -106,20 +242,29 @@ local function Visit(mapID, x, y, mode)
     local travelling = Travelling(mapID, x, y)
     local c = Cell(x, y, C.GW, C.GH)
     local z = ZoneData(mapID)
+    -- Where a road bends in this cell: the average of where you travel
+    -- through it. Standing about (a quest giver, a mailbox) no longer pulls
+    -- the road towards you (3.7.12).
     local ox, oy = z.cx[c], z.cy[c]
-    z.cx[c] = ox and Q(ox + (x - ox) * 0.2) or Q(x)
-    z.cy[c] = oy and Q(oy + (y - oy) * 0.2) or Q(y)
+    if not ox then
+        z.cx[c], z.cy[c] = Q(x), Q(y)
+    elseif travelling then
+        z.cx[c], z.cy[c] = Q(ox + (x - ox) * 0.2), Q(oy + (y - oy) * 0.2)
+    end
     local now, today = time(), tonumber(date("%y%j"))
 
     local key = mapID * 10000 + c
     if key == cur.cell then return end
 
     local prev = cur.rc
-    if prev and cur.cell and math.floor(cur.cell / 10000) == mapID then
-        local dx = math.abs(prev % C.GW - c % C.GW)
-        local dy = math.abs(math.floor(prev / C.GW) - math.floor(c / C.GW))
+    local same = prev and cur.cell and math.floor(cur.cell / 10000) == mapID
+    local rc = Snap(z, c, today)
+    if same and rc == prev then cur.cell = key return end
+    if same then
+        local dx = math.abs(prev % C.GW - rc % C.GW)
+        local dy = math.abs(math.floor(prev / C.GW) - math.floor(rc / C.GW))
         if dx <= 2 and dy <= 2 then
-            local edge = math.min(prev, c) * 10000 + math.max(prev, c)
+            local edge = math.min(prev, rc) * 10000 + math.max(prev, rc)
             local e = z.road[edge]
             if not e then e = { l = 0, tl = now, r = 0, tr = now } z.road[edge] = e end
             local seenKey = mapID .. ":" .. edge
@@ -128,12 +273,11 @@ local function Visit(mapID, x, y, mode)
                 roadSeen[seenKey] = clock
                 e.r, e.tr = math.min(C.RECENT_CAP, Recent(e, now) + 1), now
             end
-            e.tp = now
             if travelling then Credit(e, now, today) end
             S.dirty = true
         end
     end
-    cur.cell, cur.rc, cur.dwell = key, c, 0
+    cur.cell, cur.rc, cur.dwell = key, rc, 0
 end
 
 local function Sample()
@@ -738,6 +882,7 @@ end
 function ns.ForgetFields(mapID) ns.Ground.Forget(mapID) end
 
 -- Shared with the other files.
+ns.MergeLanes = MergeLanes
 ns.AddFlightRoute = AddFlightRoute
 ns.CloseStroke = CloseStroke
 ns.FinishShot = FinishShot

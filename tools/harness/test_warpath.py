@@ -26,7 +26,7 @@ def lua_count(wow, expr):
 class Boot(unittest.TestCase):
     def test_fresh_character_reaches_current_saved_data_version(self):
         wow = Wow().login()
-        self.assertEqual(wow.eval("WarpathDB.v"), 9)
+        self.assertEqual(wow.eval("WarpathDB.v"), 10)
 
     def test_version_comes_from_the_toc(self):
         wow = Wow()
@@ -347,6 +347,133 @@ class Steadiness(unittest.TestCase):
         self.assertNotEqual(self.new_ink(first, shifted), [])
 
 
+class Roads(unittest.TestCase):
+    """A route walked on several days is one road (3.7.12).
+
+    Nobody walks the same line twice. Before 3.7.12 each day's drift of a
+    cell started a lane beside the last, so a route's days were split and it
+    came out broken, doubled and late to gild."""
+
+    CELL_Y = 1 / 64
+
+    def walk_days(self, offsets):
+        wow = Wow().login()
+        for off in offsets:
+            for i in range(200):                       # west to east across Felwood
+                wow.H.player.x = 0.20 + i * 0.002
+                wow.H.player.y = 0.40 + off + 0.002 * ((i // 7) % 2)
+                wow.advance(0.5)
+            wow.H.player.x = 0.9                        # leave, so the next day starts fresh
+            wow.advance(30)
+            wow.H.now = wow.H.now + 86400
+            wow.advance(1)
+        return wow
+
+    def strengths(self, wow):
+        return [float(v) for v in wow.eval("""(function()
+            local t = {} for _, e in pairs(WarpathDB.maps[1448].road) do t[#t + 1] = ns.Long(e) end
+            return table.concat(t, ",") end)()""").split(",")]
+
+    def test_a_drifting_route_builds_one_road(self):
+        one = self.walk_days([0])
+        lane = len(self.strengths(one))
+        wow = self.walk_days([0, self.CELL_Y, -0.6 * self.CELL_Y, 0.8 * self.CELL_Y])
+        L = self.strengths(wow)
+        self.assertLess(len(L), lane * 1.5, "each day's drift started a new lane")
+        gold = sum(1 for v in L if v >= 2.5)
+        self.assertGreater(gold, lane * 0.6, "four days on one route should gild most of it")
+
+    def drawn_near(self, walked_gap):
+        """Two roads along one row with a 3-stretch gap between them; is ink
+        drawn in the middle of the gap?"""
+        from render import COLLECT
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.roads = true")
+        wow.run(f"""
+            local z, GW, now = ns.ZoneData(1448), ns.C.GW, ns.PlayNow()
+            z.road = {{}}
+            local function Put(x, l) local a = 30 * GW + x z.road[a * 10000 + a + 1] = {{ l = l, tl = now }} end
+            for x = 10, 15 do Put(x, 3) end          -- a road walked on three days
+            for x = 19, 24 do Put(x, 3) end          -- and its continuation
+            if {str(walked_gap).lower()} then for x = 16, 18 do Put(x, 1) end end  -- the gap, walked once
+        """)
+        D = wow.eval("ns.Redraw()")
+        px, py = 17.5 / 96 * float(D["w"]), 30.5 / 64 * float(D["h"])
+        for p in wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L" and Steadiness.dist(px, py, tuple(float(v) for v in f[6:10])) < 2:
+                return True
+        return False
+
+    def test_a_short_walked_gap_between_roads_is_joined(self):
+        self.assertTrue(self.drawn_near(walked_gap=True), "the road should run on through ground you walked")
+
+    def test_a_gap_never_walked_is_left_open(self):
+        self.assertFalse(self.drawn_near(walked_gap=False), "a join must follow ground you walked, not guess")
+
+    def ink_at(self, setup, x, y):
+        """Build roads with the given Lua, draw them, and say whether any
+        line passes within 2 px of cell (x, y)."""
+        from render import COLLECT
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.roads = true")
+        wow.run("""
+            local z, GW, now = ns.ZoneData(1448), ns.C.GW, ns.PlayNow()
+            z.road = {}
+            function Put(ax, ay, bx, by, l)
+                local a, b = ay * GW + ax, by * GW + bx
+                z.road[math.min(a, b) * 10000 + math.max(a, b)] = { l = l, tl = now }
+            end
+        """ + setup)
+        D = wow.eval("ns.Redraw()")
+        px, py = (x + 0.5) / 96 * float(D["w"]), (y + 0.5) / 64 * float(D["h"])
+        for p in wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L" and Steadiness.dist(px, py, tuple(float(v) for v in f[6:10])) < 2:
+                return True
+        return False
+
+    def test_a_sliver_beside_a_road_is_one_road(self):
+        # a gold road along row 30, and a silver side path out to row 32 and back
+        setup = """
+            for x = 10, 25 do Put(x, 30, x + 1, 30, 3) end
+            Put(14, 30, 15, 32, 2) Put(15, 32, 16, 32, 2) Put(16, 32, 17, 32, 2) Put(17, 32, 18, 30, 2)
+        """
+        self.assertTrue(self.ink_at(setup, 16, 30), "the road itself must stay")
+        self.assertFalse(self.ink_at(setup, 16, 32), "a short side path beside the road should fold into it")
+
+    def test_a_big_loop_keeps_both_sides(self):
+        # two ways round, 12 stretches each: a real choice of route, not a sliver
+        setup = """
+            for x = 10, 22 do Put(x, 30, x + 1, 30, 3) end
+            Put(10, 30, 10, 36, 2.5) Put(23, 30, 23, 36, 2.5)
+            for x = 10, 22 do Put(x, 36, x + 1, 36, 2.5) end
+        """
+        self.assertTrue(self.ink_at(setup, 16, 36), "a long way round is a road of its own")
+
+    def test_upgrade_folds_side_by_side_lanes(self):
+        wow = Wow().login()
+        wow.run("""
+            local z, GW = ns.ZoneData(1448), ns.C.GW
+            local now = ns.PlayNow()
+            z.road = {}
+            local function Put(a, b, l, d) z.road[math.min(a, b) * 10000 + math.max(a, b)] = { l = l, tl = now, d = d } end
+            for x = 10, 20 do
+                Put(30 * GW + x, 30 * GW + x + 1, 2, 1)   -- a lane walked on two days, last on day 1
+                Put(31 * GW + x, 31 * GW + x + 1, 1, 2)   -- the lane beside it, one other day
+                Put(29 * GW + x, 29 * GW + x + 1, 1, 1)   -- and one walked the same day as the first
+            end
+            Put(30 * GW + 15, 31 * GW + 15, 1, 2)          -- a rung between lanes
+            ns.MergeLanes(z, time())
+        """)
+        L = self.strengths(wow)
+        self.assertEqual(len(L), 11, "three lanes and a rung should fold into one road of 11 stretches")
+        for v in L:
+            self.assertAlmostEqual(v, 3.0, places=3)        # 2 + 1, and the shared day counted once
+
+
 class Upgrades(unittest.TestCase):
     """Saved data from every past release upgrades with nothing lost.
 
@@ -367,7 +494,7 @@ class Upgrades(unittest.TestCase):
                 before, after, errors, lost = upgrade(tag, work)
                 self.assertEqual(errors, [])
                 self.assertEqual(lost, [], f"upgrading from {tag} lost: {lost}")
-                self.assertEqual(after["v"], 9)
+                self.assertEqual(after["v"], 10)
 
 
 class RealData(unittest.TestCase):
@@ -405,7 +532,7 @@ class RealData(unittest.TestCase):
                 }
                 before_counts = {k: lua_count(wow, v) for k, v in counts.items()}
                 wow.login(settle=60)
-                self.assertEqual(wow.eval("WarpathDB.v"), 9)
+                self.assertEqual(wow.eval("WarpathDB.v"), 10)
                 for k, v in counts.items():
                     self.assertGreaterEqual(lua_count(wow, v), before_counts[k], f"login lost {k}")
                 self.assertFalse([l for l in wow.chat if "upgrade hit an error" in l or "rebuild hit an error" in l])

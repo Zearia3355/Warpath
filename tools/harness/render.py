@@ -4,6 +4,7 @@
     python tools/harness/render.py --wtf "<WTF\\Account\\NAME>" --char Name-Realm
     python tools/harness/render.py ... --map 1448 --out felwood.png
     python tools/harness/render.py ... --ref 3.7.5 --ref main      # before / after
+    python tools/harness/render.py ... --ref main --ref work       # main vs uncommitted
 
 This is the "render before/after from his real saved data before building"
 step: run the addon's own Map.lua against a character's SavedVariables, catch
@@ -293,7 +294,9 @@ def main():
     ap.add_argument("--char", required=True, help="character folder name, e.g. Name-Realm")
     ap.add_argument("--map", type=int, help="uiMapID to view (default: the zone with the most roads)")
     ap.add_argument("--at", help="unix time to render at (default: the character's last logout)")
-    ap.add_argument("--ref", action="append", help="git ref to render instead of the working copy; repeat for before/after")
+    ap.add_argument("--ref", action="append",
+                    help="git ref to render instead of the working copy; repeat for before/after. "
+                         "'work' is the working copy, e.g. --ref main --ref work")
     ap.add_argument("--layers", help="comma list to show only these, e.g. roads,trail")
     ap.add_argument("--out", default="warpath-render.png")
     args = ap.parse_args()
@@ -323,6 +326,8 @@ def main():
     refs = args.ref or [None]
     panels = []
     for ref in refs:
+        if ref == "work":
+            ref = None
         addon_dir = addon_from_ref(ref) if ref else REPO
         img, stats, wow = render(addon_dir, saved, account, name, map_id, at, layers)
         zone = wow.eval(f"ns.MapName({map_id})")
