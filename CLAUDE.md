@@ -12,8 +12,8 @@ Migrated from a claude.ai Project on 2026-11-23. Everything before that is in `C
 
 ## Current state (2026-11-23)
 
-- **3.7.11 is tagged and installed** (installed files verified byte-identical to the tag). **Not yet on CurseForge or GitHub Releases:** its release run (45261632007) failed at upload because the token secret was wrong; nothing was published. Once a valid token is set, re-run that run.
-- **Installed in the game:** 3.7.11, installed 2026-11-23 (needs `/reload`; the version shown updates after a restart).
+- **3.7.11 is released**: tagged, published to CurseForge (pending the project's moderation) and GitHub Releases, and installed in Joe's game. The published zip is byte-identical to the installed copy. It was the first release through the pipeline.
+- **Installed in the game:** 3.7.11 (installed 2026-11-23).
 - **Saved-data version:** `db.v` = 9 (since 3.7.1).
 - **Open investigation:** guildmates' kills don't reach Joe inside battlegrounds. 3.7.10's diagnostics (in 3.7.11) exist to diagnose it. See `docs/open-items.md`.
 - **Nothing else is queued.**
@@ -37,7 +37,7 @@ The project exists as of 2026-11-23: **Warpath Forever**, project id **1826632**
 
 **The CurseForge project is named "Warpath Forever"; the addon is still "Warpath".** The plain name was already taken on CurseForge by an abandoned 2024 travel tracker, and names are global. `package-as: Warpath` in `.pkgmeta` keeps the folder, the slash commands and the saved data untouched, so this is a storefront name only. Don't "fix" the mismatch.
 
-**Token status: invalid as of 2026-11-23.** The first publish (3.7.11) failed: the secret held the text of the `gh secret set` command instead of the token (CurseForge's error echoed it back). The packager's `[token set]` only means the secret is non-empty, so it is **not** evidence the token works. Verify with the **CurseForge check** workflow (Actions → CurseForge check → Run): a good token returns HTTP 200 and a list including WoW Forever versions; a bad one returns 400 with `API token is malformed`. Tokens are made at `https://authors.curseforge.com/#/settings/api-tokens` (Author Settings → API Tokens; the portal uses hash routes, so the older `/account/api-tokens` path that third-party guides cite lands on Not Found) and set with `gh secret set CF_API_TOKEN --repo Zearia3355/Warpath`, pasting only the token at the prompt. A failed publish is re-run with `gh run rerun <id>`; the tag doesn't need to move.
+**Token status: valid** (2026-11-24; the CurseForge check returns HTTP 200 and lists WoW Forever 1.60.1). Getting there took four tries, all for one reason: the clipboard held the `gh secret set` command, not the token, when it was pasted at `gh`'s hidden prompt. Opening a terminal with a command already typed in, or a Run button, appears to replace the clipboard. **Copy the token only after the prompt is waiting.** The packager's `[token set]` only means the secret is non-empty; verify with the **CurseForge check** workflow (Actions → CurseForge check → Run), which goes red unless CurseForge returns a version list. Tokens are made at `https://authors.curseforge.com/#/settings/api-tokens` (Author Settings → API Tokens; the portal uses hash routes, so the older `/account/api-tokens` path that third-party guides cite lands on Not Found). A token pasted anywhere else, chat included, is exposed: revoke it and make a new one. A failed publish is re-run with `gh run rerun <id>`, but a re-run builds from the tag's commit, so a fix to packaging config needs the tag moved (see the decision log).
 
 A new project is invisible to others and its files do not sync until a moderator approves it. CurseForge reviews roughly 2,000 new projects a week and rejections come back with a reason.
 

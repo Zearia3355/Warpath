@@ -4,12 +4,9 @@ Only open things live here. Close items when Joe confirms them; move shipped wor
 
 ---
 
-## Installed, not yet published
+## Released, waiting on CurseForge moderation
 
-**3.7.11** (tagged and installed 2026-11-23; CurseForge upload failed on a bad token secret, nothing published; re-run release run 45261632007 once the token is fixed). Carries 3.7.10, which never reached the game, plus:
-- Garbled guild grudge messages fall back to plain kill wording (`Phrases.CanSay`, used in `Feats.GuildKillLine`). Found by the test harness.
-- `## X-Curse-Project-ID: 1826632` in the TOC, and a `LICENSE` file (MIT, not loaded by the game).
-- Changed from 3.7.10: `Phrases.lua`, `Feats.lua`, `Warpath.toc`, `Warpath.lua` (version comment), `CHANGELOG.txt`, new `LICENSE`.
+**3.7.11** (released 2026-11-23/24): on CurseForge as "Warpath Forever" (project 1826632) and GitHub Releases, installed in Joe's game. The CurseForge file and project aren't visible to others until a moderator approves the project.
 
 ## Built and tagged, superseded by 3.7.11
 

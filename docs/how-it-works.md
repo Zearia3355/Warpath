@@ -203,3 +203,5 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-22 | Upgrade rule; versioning rule (3.7.x for tinkering) | Joe |
 | 2026-11-22 | Declined: receiver-side multi-kill counting for guildmates on 3.6 | Joe |
 | 2026-11-23 | 3.7.11: a guild kill whose wording can't be said with the fields it carried (grudge, no victim) prints as a plain kill, with our own pick of line. General (`Phrases.CanSay`), not a grudge special case | Claude |
+| 2026-11-23 | No `embedded-libraries` in `.pkgmeta`: CurseForge rejected the upload over a library slug; the relations are cosmetic | Claude |
+| 2026-11-24 | Moved the `3.7.11` tag to the packaging fix rather than cutting 3.7.12: no shipped file changed and nothing had been published under 3.7.11 | Joe |
