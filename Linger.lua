@@ -414,7 +414,7 @@ local function Step(mapID, x, y, mode)
 end
 
 ns.Linger = {
-    LAG = LAG,
+    LAG = LAG, MapYards = MapYards,
     Step = Step, Reset = Reset, Outline = Outline, Clip = Clip, InPoly = InPoly,
     Live = function() return st.live end,
     State = function() return st end, -- for tests

@@ -22,6 +22,7 @@ Feats.lua
 Ground.lua
 Record.lua
 Linger.lua
+Flights.lua
 Campaign.lua
 Zone.lua
 Map.lua

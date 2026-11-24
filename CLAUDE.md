@@ -103,7 +103,7 @@ Moving a hand-copied install to the CurseForge app: saved data lives in `WTF`, n
 
 Lua 5.1, one shared addon namespace (`ns`). Load order is `Warpath.toc`, which is the dependency graph — check it there, not here:
 
-`Warpath.lua` (constants `ns.C`, state `ns.S`, helpers, migrations, version) · `Phrases.lua` · `Foes.lua` · `Share.lua` (guild comms: `OnComm` → `Receive`, send queue, diagnostics) · `Sync.lua` · `Grudge.lua` · `Overlay.lua` · `Feats.lua` · `Ground.lua` · `Record.lua` · `Linger.lua` (lingering areas: recording, outline geometry, clipping; 3.8) · `Campaign.lua` · `Zone.lua` · `Map.lua` (drawing, replay) · `MapButton.lua` · `Minimap.lua` · `Hud.lua` (war table) · `Chronicle.lua` (book window) · `Options.lua` (tabbed window) · `Commands.lua` (command table, help, aliases) · `Events.lua`
+`Warpath.lua` (constants `ns.C`, state `ns.S`, helpers, migrations, version) · `Phrases.lua` · `Foes.lua` · `Share.lua` (guild comms: `OnComm` → `Receive`, send queue, diagnostics) · `Sync.lua` · `Grudge.lua` · `Overlay.lua` · `Feats.lua` · `Ground.lua` · `Record.lua` · `Linger.lua` (lingering areas: recording, outline geometry, clipping; 3.8) · `Flights.lua` (flight legs: recording, conversion from routes; 3.8) · `Campaign.lua` · `Zone.lua` · `Map.lua` (drawing, replay) · `MapButton.lua` · `Minimap.lua` · `Hud.lua` (war table) · `Chronicle.lua` (book window) · `Options.lua` (tabbed window) · `Commands.lua` (command table, help, aliases) · `Events.lua`
 
 Libraries in `Libs\`: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon-1.0 r56 (taken from Questie's repo).
 

@@ -898,6 +898,146 @@ class Lingering(unittest.TestCase):
         self.assertEqual(self.areas(), 0)
 
 
+class Flights(unittest.TestCase):
+    """Flight legs (3.8): the paths you fly most, etched into the map.
+
+    Flight paths are point to point through hubs you pass on every trip, so
+    drawing every flight spins a web. A flight is laid onto the legs already
+    flown (snapped within 100 yd, so a return flight beside the outbound one
+    is the same leg), each point gains a day of memory, and only legs flown
+    on about two days are drawn. The old routes, matched by their two ends,
+    split one path into several records and none ever showed."""
+
+    def setUp(self):
+        self.wow = Wow().login()
+        self.wow.run("__H.taxi = false; UnitOnTaxi = function() return __H.taxi end")
+        self.wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        self.wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.runs = true")
+
+    def fly(self, pts, dy=0.0):
+        w = self.wow
+        w.H.player.x, w.H.player.y = pts[0][0], pts[0][1] + dy
+        w.advance(1)
+        w.run("__H.taxi = true")
+        for (ax, ay), (bx, by) in zip(pts, pts[1:]):
+            n = max(1, int(((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5 / 0.004))
+            for i in range(1, n + 1):
+                w.H.player.x, w.H.player.y = ax + (bx - ax) * i / n, ay + (by - ay) * i / n + dy
+                w.advance(0.5)
+        w.run("__H.taxi = false")
+        w.advance(2)                                    # landing closes the flight
+
+    def next_day(self):
+        self.wow.H.now += 86400
+        self.wow.advance(1)
+
+    def lines(self):
+        from render import COLLECT
+        self.wow.eval("ns.Redraw()")
+        out = []
+        for p in self.wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L" and float(f[5]) > 0.02:
+                out.append((float(f[5]),) + tuple(float(v) for v in f[6:10]))
+        return out
+
+    def inked(self, x, y, tol=6):
+        px, py = x * 1002, y * 668
+        return any(Steadiness.dist(px, py, tuple(seg)) <= tol for _, *seg in self.lines())
+
+    def legs(self):
+        return int(self.wow.eval("#(WarpathDB.maps[1448].air or {})"))
+
+    PATH = [(0.10, 0.50), (0.90, 0.50)]
+
+    def test_a_flight_flown_once_draws_nothing(self):
+        self.fly(self.PATH)
+        self.assertGreater(self.legs(), 0, "the flight wasn't recorded")
+        self.assertEqual(self.lines(), [], "a leg flown once (or today's flight) was drawn")
+
+    def test_a_leg_flown_on_two_days_is_etched_once(self):
+        self.fly(self.PATH)
+        self.next_day()
+        self.fly(list(reversed(self.PATH)), dy=0.02)    # the way back, ~50 yd to one side
+        self.assertEqual(self.legs(), 1, "the return flight started a second leg beside the first")
+        for x in (0.2, 0.5, 0.8):
+            self.assertTrue(self.inked(x, 0.50), f"no etching at x={x}")
+
+    def test_flights_from_different_places_build_the_shared_leg(self):
+        self.fly([(0.10, 0.20), (0.50, 0.50), (0.90, 0.50)])
+        self.next_day()
+        self.fly([(0.10, 0.80), (0.50, 0.50), (0.90, 0.50)])
+        for x in (0.6, 0.8):
+            self.assertTrue(self.inked(x, 0.50), f"shared leg not etched at x={x}")
+        self.assertFalse(self.inked(0.30, 0.35), "a branch flown once was etched")
+        self.assertFalse(self.inked(0.30, 0.65), "a branch flown once was etched")
+
+    def test_legs_only_fade(self):
+        self.fly(self.PATH)
+        self.next_day()
+        self.fly(self.PATH)
+        first = prev = self.lines()
+        self.assertGreater(len(prev), 0)
+        base = int(self.wow.eval("ns.db.play.days"))
+        for d in range(1, 21):
+            self.wow.run(f"ns.db.play.days = {base + d}")
+            self.wow.H.now += 1
+            cur = self.lines()
+            with self.subTest(play_day=d):
+                # against yesterday, and against the first day: a slow creep
+                # brightens each day by less than the check's tolerance
+                self.assertEqual(RoadFading.brighter(None, prev, cur), [], "leg ink appeared or brightened")
+                self.assertEqual(RoadFading.brighter(None, first, cur), [], "leg ink crept brighter")
+            prev = cur
+        self.assertEqual(prev, [], "legs never faded out")
+
+    def test_dashes_stay_put_as_a_leg_fades(self):
+        # A leg whose first half was flown on fewer days: as that half fades
+        # out, the dashes on the rest must not shift. They're measured from
+        # the start of the leg, not from the first part still drawn.
+        bend = [(0.10, 0.50), (0.30, 0.42), (0.50, 0.40), (0.70, 0.44), (0.90, 0.50)]
+        self.fly(bend)
+        self.next_day()
+        self.fly(bend)
+        self.next_day()
+        self.fly(bend[2:])
+        st = Steadiness()
+        prev = st.segments(self.wow)
+        self.assertGreater(len(prev), 0)
+        base = int(self.wow.eval("ns.db.play.days"))
+        for d in range(1, 13):
+            self.wow.run(f"ns.db.play.days = {base + d}")
+            self.wow.H.now += 1
+            cur = st.segments(self.wow)
+            with self.subTest(play_day=d):
+                self.assertEqual(st.new_ink(prev, cur), [], "leg dashes moved")
+            prev = cur
+        self.assertFalse(self.inked(0.2, 0.46), "the weaker half never faded out")
+        self.assertTrue(self.inked(0.8, 0.47, tol=10), "the stronger half faded too soon")
+
+    def test_old_routes_are_brought_over_once(self):
+        w = self.wow
+        w.run("""
+            local z = ns.ZoneData(1448)
+            local function Route(x1, x2, l)
+                local r = { l = l, tl = ns.PlayNow(), d = 1 }
+                for i = 0, 20 do r[#r + 1] = x1 + (x2 - x1) * i / 20; r[#r + 1] = 0.5 end
+                return r
+            end
+            -- one path held as a whole record and a partial copy (the old split)
+            z.routes = { Route(0.1, 0.9, 3), Route(0.4, 0.9, 1) }
+            z.air = nil
+            ns.Flights.Convert()
+        """)
+        self.assertEqual(self.legs(), 1, "the partial copy became a second leg")
+        n = self.legs()
+        w.run("ns.Flights.Convert()")
+        self.assertEqual(self.legs(), n, "converting again added legs")
+        self.assertEqual(int(w.eval("#WarpathDB.maps[1448].routes")), 2, "the old routes were not kept")
+        for x in (0.2, 0.5, 0.8):
+            self.assertTrue(self.inked(x, 0.50), f"a route flown on 3 days isn't etched at x={x}")
+
+
 class Upgrades(unittest.TestCase):
     """Saved data from every past release upgrades with nothing lost.
 
