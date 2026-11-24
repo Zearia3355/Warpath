@@ -474,6 +474,115 @@ class Roads(unittest.TestCase):
             self.assertAlmostEqual(v, 3.0, places=3)        # 2 + 1, and the shared day counted once
 
 
+class RoadFading(unittest.TestCase):
+    """Roads only fade between visits (3.7.12).
+
+    With nothing new walked, every stretch loses strength at the same rate,
+    so the drawn roads may thin, gild back to silver, fade or go, but no ink
+    may appear where there was none and nothing may get brighter. The 3.7.12
+    prototype broke this: its gap joins and fragment rules were re-decided on
+    every redraw, so as one stretch faded a join filled the gap at the
+    brightness of the roads either side, and the network rewired itself."""
+
+    def lines(self, wow):
+        from render import COLLECT
+        wow.eval("ns.Redraw()")
+        out = []
+        for p in wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L":
+                out.append((float(f[5]),) + tuple(float(v) for v in f[6:10]))
+        return out
+
+    def brighter(self, earlier, later, tol=0.6, eps=0.02):
+        """Points of later lines that no earlier line covered at least as
+        strongly: new ink, or ink that got brighter."""
+        bad = []
+        for a, *seg in later:
+            if a < 0.02:
+                continue
+            x1, y1, x2, y2 = seg
+            for t in (0.0, 0.5, 1.0):
+                px, py = x1 + t * (x2 - x1), y1 + t * (y2 - y1)
+                best = max((ea for ea, *es in earlier if Steadiness.dist(px, py, tuple(es)) <= tol), default=0)
+                if best < a - eps:
+                    bad.append((round(px), round(py), round(best, 2), round(a, 2)))
+        return bad
+
+    def fade_days(self, setup, days=20):
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.roads = true")
+        wow.run("""
+            local z, GW, now = ns.ZoneData(1448), ns.C.GW, ns.PlayNow()
+            z.road = {}
+            function Put(ax, ay, bx, by, l)
+                local a, b = ay * GW + ax, by * GW + bx
+                z.road[math.min(a, b) * 10000 + math.max(a, b)] = { l = l, tl = now }
+            end
+        """ + setup)
+        prev = self.lines(wow)
+        self.assertGreater(len(prev), 0, "nothing drawn to begin with")
+        base = int(wow.eval("ns.db.play.days"))
+        for d in range(1, days + 1):
+            wow.run(f"ns.db.play.days = {base + d}")   # one more day played, nothing walked
+            wow.H.now += 1                              # the play clock caches per second
+            cur = self.lines(wow)
+            with self.subTest(play_day=d):
+                self.assertEqual(self.brighter(prev, cur), [], "road ink appeared or brightened with nothing walked")
+            prev = cur
+
+    def test_a_weak_middle_fades_instead_of_being_joined_over(self):
+        # a road whose middle stretch was walked less: as it fades the middle
+        # goes first; it must not be filled back in at the road's brightness
+        self.fade_days("""
+            for x = 10, 14 do Put(x, 30, x + 1, 30, 2.2) end
+            Put(15, 30, 16, 30, 1.3)
+            for x = 16, 20 do Put(x, 30, x + 1, 30, 2.2) end
+        """)
+
+    def test_a_lynchpin_is_held_as_a_thread_until_what_it_joins_fades(self):
+        # The weak middle of a road (1.3) is the only link between its two
+        # strong halves (2.2). On its own it drops out within two days; held,
+        # it stays as a faint thread while both halves are drawn, then goes.
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.roads = true")
+        wow.run("""
+            local z, GW, now = ns.ZoneData(1448), ns.C.GW, ns.PlayNow()
+            z.road = {}
+            local function Put(x, l) local a = 30 * GW + x z.road[a * 10000 + a + 1] = { l = l, tl = now } end
+            for x = 10, 14 do Put(x, 2.2) end
+            Put(15, 1.3)
+            for x = 16, 20 do Put(x, 2.2) end
+        """)
+        base = int(wow.eval("ns.db.play.days"))
+        D = wow.eval("ns.Redraw()")
+        px, py = 16.0 / 96 * float(D["w"]), 30.5 / 64 * float(D["h"])  # mid-stretch: cell 15 centre to cell 16 centre
+
+        def middle(day):
+            wow.run(f"ns.db.play.days = {base + day}")
+            wow.H.now += 1
+            return max((a for a, *s in self.lines(wow) if Steadiness.dist(px, py, tuple(s)) < 2), default=0)
+
+        thread, held = float(wow.eval("ns.C.ROAD_THREAD")), middle(4)
+        self.assertGreater(held, 0.15, "day 4: the middle is gone on its own, but should still show as a thread")
+        self.assertAlmostEqual(held, thread, places=2, msg="day 4: held at the thread level")
+        self.assertEqual(middle(14), 0, "day 14: both halves have faded, so the thread goes too")
+
+    def test_a_joined_network_only_fades(self):
+        # two roads joined across ground walked once, a side path beside one,
+        # and a scrap: every rule the prototype added, fading together
+        self.fade_days("""
+            for x = 10, 16 do Put(x, 30, x + 1, 30, 3) end
+            for x = 17, 19 do Put(x, 30, x + 1, 30, 0.9) end
+            for x = 20, 26 do Put(x, 30, x + 1, 30, 1.7) end
+            Put(12, 30, 13, 32, 1.6) Put(13, 32, 14, 32, 1.6) Put(14, 32, 15, 30, 1.6)
+            Put(30, 40, 31, 40, 1.9)
+            for y = 30, 36 do Put(24, y, 24, y + 1, 1.5) end
+        """)
+
+
 class Upgrades(unittest.TestCase):
     """Saved data from every past release upgrades with nothing lost.
 

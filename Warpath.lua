@@ -78,6 +78,7 @@ local C = {
     ROAD_BRIDGE_END = 12,      -- ...and this long where two road ends face each other along one walked line
     ROAD_WALKED     = 0.3,     -- ...counting ground walked at least this much (one day, within about 24 days played)
     ROAD_BUBBLE     = 10,      -- a loop this short all round (stretches) is one road: its weaker side is not drawn
+    ROAD_THREAD     = 0.5,     -- a lynchpin stretch stays at least this visible while what it joins is drawn
     LN2             = math.log(2),
     LOG2_5          = math.log(5) / math.log(2), -- short memory 1 -> 0.2 (RECENT_MIN) takes this many half-lives
     SILVER_SHARE    = 0.6,     -- silver appears at this share of the gold threshold

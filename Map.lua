@@ -1,7 +1,7 @@
 -- Warpath: Map
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
-local Ago, CellXY, Long, Print, Secret = ns.Ago, ns.CellXY, ns.Long, ns.Print, ns.Secret
+local Ago, CellXY, Long, PlayNow, Print, Secret = ns.Ago, ns.CellXY, ns.Long, ns.PlayNow, ns.Print, ns.Secret
 local Simplify, cur, recentSight, shared = ns.Simplify, ns.cur, ns.recentSight, ns.shared
 local Fields, PointTime, RunSeconds, ClassColor = ns.Fields, ns.PointTime, ns.RunSeconds, ns.ClassColor
 local StrokeArc, TrailSeconds = ns.StrokeArc, ns.TrailSeconds
@@ -535,10 +535,24 @@ local function Bubbles(adj, deg, nodes)
     end
 end
 
+-- The layout is settled as of your last visit (3.7.12). With nothing new
+-- walked, every stretch loses strength at the same rate, so the rules above
+-- (joins, scraps, stubs, loops) are decided on strengths as they stood when
+-- you last travelled in the zone, and between visits the whole layout just
+-- fades by that shared factor. Decided on today's strengths instead, a
+-- stretch fading out opened a gap that a join filled at the brightness of
+-- the roads either side: roads rewired and brightened with nothing walked.
+-- Returns the chains (strengths as of the last visit) and the fade since.
 local function RoadChains(z, faint, gold)
+    local last = 0
+    for _, rec in pairs(z.road) do
+        if rec.l and rec.l > 0 and rec.tl and rec.tl > last then last = rec.tl end
+    end
+    local fade = math.min(1, math.exp(-C.LN2 * (PlayNow() - last) / (db.longDays * C.DAY)))
+    if fade < 1e-6 then return {}, 0, {} end
     local adj, weak, nodes = {}, {}, {}
     for edge, rec in pairs(z.road) do
-        local L = Long(rec)
+        local L = Long(rec) / fade
         local a, b = math.floor(edge / 10000), edge % 10000
         if L >= C.ROAD_WALKED then
             weak[a], weak[b] = weak[a] or {}, weak[b] or {}
@@ -642,7 +656,100 @@ local function RoadChains(z, faint, gold)
             end
         end
     end
-    return chains
+    return chains, fade, adj
+end
+
+-- Lynchpins (3.7.12): a stretch on the best way between two strong stretches
+-- is held as a faint thread while the strongest stretch on each side of it is
+-- still drawn, so the strong fragments a fading network leaves stay visibly
+-- joined. "The best way" is the route whose weakest stretch is strongest:
+-- round a loop, the better side is held and the other fades on its own. A
+-- road's dead end is never held: there is nothing beyond it. These routes
+-- make up the network's strongest spanning tree; a stretch on it is held by
+-- the weaker of the strongest stretches on its two sides. Sets ch.hold[i]
+-- (0: not held), as of the last visit, so like everything else in the layout
+-- it fades by the shared factor and a thread only ever fades.
+local function Lynchpins(chains, adj)
+    local function Key(a, b) return math.min(a, b) * 10000 + math.max(a, b) end
+    local edges, nodes, root = {}, {}, {}
+    for u, near in pairs(adj) do
+        nodes[#nodes + 1] = u
+        root[u] = u
+        for v, L in pairs(near) do
+            if u < v then edges[#edges + 1] = { u, v, L } end
+        end
+    end
+    table.sort(nodes)
+    table.sort(edges, function(p, q)
+        if p[3] ~= q[3] then return p[3] > q[3] end
+        if p[1] ~= q[1] then return p[1] < q[1] end
+        return p[2] < q[2]
+    end)
+    local function Find(x)
+        while root[x] ~= x do root[x] = root[root[x]] x = root[x] end
+        return x
+    end
+    -- The strongest spanning tree (Kruskal, strongest first).
+    local tree = {}
+    for _, e in ipairs(edges) do
+        local a, b = Find(e[1]), Find(e[2])
+        if a ~= b then
+            root[a] = b
+            tree[e[1]] = tree[e[1]] or {}
+            tree[e[2]] = tree[e[2]] or {}
+            tree[e[1]][e[2]], tree[e[2]][e[1]] = e[3], e[3]
+        end
+    end
+    -- Root each tree; below[c]: strongest stretch under c; above[c]: strongest
+    -- stretch anywhere else, apart from c's own stretch up to its parent.
+    local held, up, seen = {}, {}, {}
+    for _, r in ipairs(nodes) do
+        if tree[r] and not seen[r] then
+            local order, stack = {}, { r }
+            seen[r] = true
+            while #stack > 0 do
+                local u = table.remove(stack)
+                order[#order + 1] = u
+                local kids = {}
+                for v in pairs(tree[u]) do if not seen[v] then kids[#kids + 1] = v end end
+                table.sort(kids)
+                for _, v in ipairs(kids) do seen[v] = true up[v] = u stack[#stack + 1] = v end
+            end
+            local below = {}
+            for i = #order, 1, -1 do
+                local u = order[i]
+                local m = 0
+                for v, L in pairs(tree[u]) do
+                    if up[v] == u then m = math.max(m, L, below[v]) end
+                end
+                below[u] = m
+            end
+            local above = { [r] = 0 }
+            for _, u in ipairs(order) do
+                -- the two best branches at u, so each child can take the best other one
+                local best, second, bestKid = 0, 0, nil
+                for v, L in pairs(tree[u]) do
+                    if up[v] == u then
+                        local b = math.max(L, below[v])
+                        if b > best then best, second, bestKid = b, best, v elseif b > second then second = b end
+                    end
+                end
+                local out = above[u]
+                if up[u] then out = math.max(out, tree[u][up[u]]) end
+                for v in pairs(tree[u]) do
+                    if up[v] == u then
+                        above[v] = math.max(out, v == bestKid and second or best)
+                        held[Key(u, v)] = math.min(below[v], above[v])
+                    end
+                end
+            end
+        end
+    end
+    for _, ch in ipairs(chains) do
+        local hold = {}
+        for i = 1, #ch.vals do hold[i] = held[Key(ch.pts[i], ch.pts[i + 1])] or 0 end
+        ch.hold = hold
+    end
 end
 
 local function DrawGround(D, scene)
@@ -660,14 +767,23 @@ local function DrawGround(D, scene)
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
         local thin = p.far and w * 0.0011 or w * 0.0020
         local candidates = {}
-        -- One piece of a chain, from map point (ax, ay) to (bx, by).
-        local function Piece(long, ax, ay, bx, by)
-            if D.nl >= roadCap then return end
+        local chains, fade, adj = RoadChains(z, faint, gold)
+        if C.ROAD_THREAD > 0 then Lynchpins(chains, adj) end
+        -- How much of a stretch of this strength shows: all of it from
+        -- silver, fading all the way out by the time it stops being drawn
+        -- (3.7.12; it used to stop at a quarter and then vanish in one step).
+        local function Seen(s) return s >= silver and 1 or s > faint and (s - faint) / (silver - faint) or 0 end
+        -- One piece of a chain, from map point (ax, ay) to (bx, by), at its
+        -- strength as of the last visit (and what holds it, if a lynchpin);
+        -- drawn at that faded by the time since.
+        local function Piece(long, hold, ax, ay, bx, by)
+            long = long * fade
+            local alpha = math.max(Seen(long), C.ROAD_THREAD * Seen((hold or 0) * fade))
+            if D.nl >= roadCap or alpha <= 0 then return end
             local x1, y1, x2, y2 = ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy)
             local g = Clamp((long - gStart) / (gEnd - gStart))
             local wear = Clamp((long - silver) / (full - silver))
             local worn = long >= gEnd and Clamp((long - gEnd) / (full - gEnd)) or 0
-            local alpha = long >= silver and 1 or 0.25 + 0.75 * (long - faint) / (silver - faint)
             local stripe, r, gg, bb = RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
             if stripe and worn > 0.05 and shine then
                 shimmer[#shimmer + 1] = { l = stripe, u = (ax + bx) * 0.5 + (ay + by) * 0.3,
@@ -677,7 +793,7 @@ local function DrawGround(D, scene)
                 end
             end
         end
-        for _, ch in ipairs(RoadChains(z, faint, gold)) do
+        for _, ch in ipairs(chains) do
             local px, py = {}, {}
             for i, c in ipairs(ch.pts) do
                 px[i], py[i] = z.cx[c], z.cy[c]
@@ -687,15 +803,17 @@ local function DrawGround(D, scene)
             -- each stretch is drawn straight through its middle half, and
             -- each bend as a short piece blending the two stretches it joins.
             -- Junctions and ends stay exactly where they are.
-            local n, vals = #ch.vals, ch.vals
+            local n, vals, hold = #ch.vals, ch.vals, ch.hold or {}
             local lx, ly
             for i = 1, n do
                 local sx0, sy0 = px[i], py[i]
                 if i > 1 then sx0, sy0 = 0.75 * px[i] + 0.25 * px[i + 1], 0.75 * py[i] + 0.25 * py[i + 1] end
                 local ex, ey = px[i + 1], py[i + 1]
                 if i < n then ex, ey = 0.25 * px[i] + 0.75 * px[i + 1], 0.25 * py[i] + 0.75 * py[i + 1] end
-                if lx then Piece((vals[i - 1] + vals[i]) / 2, lx, ly, sx0, sy0) end
-                Piece(vals[i], sx0, sy0, ex, ey)
+                if lx then
+                    Piece((vals[i - 1] + vals[i]) / 2, math.min(hold[i - 1] or 0, hold[i] or 0), lx, ly, sx0, sy0)
+                end
+                Piece(vals[i], hold[i], sx0, sy0, ex, ey)
                 lx, ly = ex, ey
             end
         end
