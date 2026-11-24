@@ -160,6 +160,24 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             for k, v in pairs(C.CFG_DEFAULTS) do
                 if cfg[k] == nil then cfg[k] = v end
             end
+            -- 3.8: roads, the trail and flights were reworked, so every map
+            -- layer comes back on once and the trail takes the new 12 h
+            -- default (Joe's call). Icon size, the map switch and corpse-run
+            -- hours are kept. Settings only; no history is touched.
+            if cfg.mapReset == nil then
+                local ok, err = pcall(function()
+                    local changed = cfg.trailMin ~= C.CFG_DEFAULTS.trailMin or not cfg.guildHaze
+                    for _, name in ipairs(C.LAYERS) do
+                        if not cfg.layers[name] then changed = true end
+                        cfg.layers[name] = true
+                    end
+                    cfg.guildHaze = true
+                    cfg.trailMin = C.CFG_DEFAULTS.trailMin
+                    S.mapWasReset = changed
+                end)
+                if not ok then Print("couldn't reset the map settings for 3.8: " .. tostring(err)) end
+                cfg.mapReset = "3.8"
+            end
             if type(cfg.minimap) ~= "table" then cfg.minimap = { hide = false } end
             cfg.grudge = cfg.grudge or {}
             for k, v in pairs(C.GRUDGE_DEFAULTS) do

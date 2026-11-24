@@ -1,6 +1,46 @@
 Warpath changelog
 
 =====================================================================
+3.8.0 "Roads, trails and flights"
+=====================================================================
+
+- Roads rebuilt. Each way you really travel becomes one road, instead
+  of several side by side, and short walked gaps are joined. Roads look
+  like raised gold trim: silver first, then a thread of gold along the
+  edge, then fully gold once the road is a habit (about 12 days of
+  daily use). Your most-worn roads carry a streak of your faction's
+  colour. Roads you stop using only fade; they never jump or move.
+- Today's trail rebuilt. Where you lingered (questing, a town) becomes
+  an outlined area with how long you spent there; hover it for each
+  visit. Between areas, the last 2.5 minutes are a solid line, then
+  dashes with small arrows showing which way you went, changing colour
+  as they age.
+- Flight paths: the routes you fly most, on two or more days, show as
+  blue dashes. One-off flights don't, so the map never becomes a web.
+- Today's trail now stays 12 hours by default (was 1 hour).
+- Your map settings are reset once for this release: every map layer
+  is turned back on and today's trail is set to 12 hours, so you see
+  the new looks. Your icon size, the map on/off switch and corpse-run
+  times are kept. Change anything on the Map tab.
+- /warpath clear trail clears today's trail and lingering areas,
+  keeping everything else.
+- /warpath roads now says how long a road you walk every day takes to
+  turn gold, and /warpath zone counts roads the way the map draws them
+  (gold, turning gold, silver).
+- Only your copy changes; nothing shared with guildmates is different,
+  and guildmates on 3.7 keep working with you.
+
+- Your saved data: everything is kept. Roads are merged into one road
+  per route the first time you log in; your old roads are kept, hidden,
+  so nothing is lost (your saved file gets bigger until a later release
+  drops them). Lingering areas and flight legs are new and are added
+  as you play; your old flight routes are turned into flight legs. Map
+  settings are reset once, as above. Don't go back to 3.7.11 or older
+  after this: they don't understand the merged roads.
+- New files: restart the game fully (a /reload is not enough).
+- Includes 3.7.0 to 3.7.11.
+
+=====================================================================
 3.7.11
 =====================================================================
 

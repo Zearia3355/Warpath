@@ -403,15 +403,9 @@ end
 -- first 60% of the gilding band), then the body turns gold (from just past
 -- the middle). The edge goes from iron to bronze as it does.
 --
--- Past full gold, two tiers in your faction's deep colour (C.FACTION_MARK):
---   "enamel"   a streak inlaid down the middle; at tier 2 it widens and
---              gains fine gold wires along its edges, like cloisonne
---   "banded"   the edge turns your faction's colour; at tier 2 a fine
---              streak down the middle as well
---   "embossed" the shaded side takes your faction's colour; at tier 2 a
---              fine streak down the middle as well
---   "streak"   a fine streak down the middle; at tier 2 the shaded side
---              takes your faction's colour too (Joe's pick of the two)
+-- Past full gold, two tiers in your faction's deep colour: tier 1 a fine
+-- streak down the middle; at tier 2 the shaded side takes your faction's
+-- colour too (Joe's pick; enamel, banded and embossed lost on renders).
 -- Tier 1 is complete at 12 (about two and a half weeks of daily use at the
 -- default gold threshold), tier 2 at 16.4 (about four and a half weeks). worn is the share of the
 -- band past full gold (9.6 to 20).
@@ -429,26 +423,18 @@ local function Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
     local nx, ny = -dy / len, dx / len
     if nx * -1 + ny * 1 < 0 then nx, ny = -nx, -ny end -- towards the light (y grows upwards here)
     local off = core * 0.22
-    local mode = C.FACTION_MARK
     local t1, t2 = Clamp((worn - 0.184) / 0.05), Clamp((worn - 0.605) / 0.05)
     local deep = faction.deep or { faction.r * 0.7, faction.g * 0.7, faction.b * 0.7 }
-    -- the edge: iron, then bronze; banded, it turns your faction's colour
+    -- the edge: iron, then bronze
     local er, eg, eb = Lerp(0.15, 0.24, g), Lerp(0.14, 0.15, g), Lerp(0.13, 0.05, g)
-    if mode == "banded" then
-        er, eg, eb = Lerp(er, deep[1], t1), Lerp(eg, deep[2], t1), Lerp(eb, deep[3], t1)
-    end
     D.nl = D.nl + 1
     PutLine(D.nl, 0, "BLEND", core + thin * 0.9, er, eg, eb, 0.9 * alpha, x1, y1, x2, y2)
     D.nl = D.nl + 1
     PutLine(D.nl, 1, "BLEND", core, cr, cg, cb, alpha, x1, y1, x2, y2)
-    -- the shade; embossed, it takes your faction's colour
+    -- the shade; at tier 2 it takes your faction's colour
     local dark = 1 - 0.6 * k
     local sr, sg, sb = cr * dark, cg * dark * 0.92, cb * dark * 0.8
-    if mode == "embossed" then
-        sr, sg, sb = Lerp(sr, deep[1], t1), Lerp(sg, deep[2], t1), Lerp(sb, deep[3], t1)
-    elseif mode == "streak" then
-        sr, sg, sb = Lerp(sr, deep[1], t2), Lerp(sg, deep[2], t2), Lerp(sb, deep[3], t2)
-    end
+    sr, sg, sb = Lerp(sr, deep[1], t2), Lerp(sg, deep[2], t2), Lerp(sb, deep[3], t2)
     D.nl = D.nl + 1
     PutLine(D.nl, 2, "BLEND", core * (0.3 + 0.15 * k), sr, sg, sb, alpha,
         x1 - nx * off, y1 - ny * off, x2 - nx * off, y2 - ny * off)
@@ -456,20 +442,10 @@ local function Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
     local stripe = PutLine(D.nl, 3, "BLEND", core * (0.25 + 0.12 * k), hr, hg, hb, alpha,
         x1 + nx * off, y1 + ny * off, x2 + nx * off, y2 + ny * off)
     -- the streak down the middle
-    local streak = mode == "enamel" and core * (0.2 * t1 + 0.14 * t2)
-        or mode == "streak" and core * 0.2 * t1 or core * 0.22 * t2
+    local streak = core * 0.2 * t1
     if streak > 0 then
         D.nl = D.nl + 1
         PutLine(D.nl, 4, "BLEND", streak, deep[1], deep[2], deep[3], alpha, x1, y1, x2, y2)
-        if mode == "enamel" and t2 > 0 then
-            -- fine gold wires either side of the enamel
-            local w, o = core * 0.07, streak * 0.5 + core * 0.04
-            for _, side in ipairs({ 1, -1 }) do
-                D.nl = D.nl + 1
-                PutLine(D.nl, 5, "BLEND", w, 1.00, 0.86, 0.40, t2 * alpha,
-                    x1 + nx * o * side, y1 + ny * o * side, x2 + nx * o * side, y2 + ny * o * side)
-            end
-        end
     end
     return stripe, hr, hg, hb
 end
@@ -910,7 +886,7 @@ local function DrawGround(D, scene)
         -- two tiers after about 2.5 and 4.5 weeks of daily use (12, 16.4),
         -- and the band's end at 20 (the ceiling is 20.7). Silver stays at two
         -- recent days.
-        gStart, gEnd, full = gold * 2.28, gold * 3.82, gold * 8
+        gStart, gEnd, full = gold * C.GILD_START, gold * C.GILD_FULL, gold * C.GILD_TOP
     end
     local roadCap = C.LINE_BUDGET - C.ROAD_RESERVE - 3
     local shine = cfg.shimmer

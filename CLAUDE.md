@@ -12,6 +12,7 @@ Migrated from a claude.ai Project on 2026-11-23. Everything before that is in `C
 
 ## Current state (2026-11-24)
 
+- **3.8.0 is built on `main`, not tagged or published yet** (2026-11-24): `trail-areas` fast-forwarded into `main`, plus the release work (`NEW_IN`, a one-time map reset, trail default 12 h, `/warpath clear trail`, road command fixes). Waiting on Joe's go-ahead to tag, push and install. See `docs/open-items.md` (3.8.0).
 - **3.7.11 is released**: tagged, published to CurseForge (pending the project's moderation) and GitHub Releases. It was installed in Joe's game (byte-identical to the published zip) until the road test builds replaced it. It was the first release through the pipeline.
 - **Installed before that:** **3.7.12-test2** (2026-11-24), a prototype of the roads rework from branch `roads-snap`, not `main`. Installed under its own label because installed files never change under an existing version number. Joe checked it in game: "a lot better initially"; everything is still silver, and he is watching how gilding arrives as he plays. SavedVariables backups: `tools/out/savedvars-backup-2026-11-23/` (before the first test build) and `-2026-11-24/`.
 - **Saved-data version:** `db.v` = 10 on Joe's characters (the test build's road merge). **Never reinstall 3.7.11 over it:** 3.7.11's `Migrate()` doesn't know version 10 and would rerun `MigrateToV4`, which recounts kills and deaths from pins and inflates totals. To go back, restore a backup with the game closed.

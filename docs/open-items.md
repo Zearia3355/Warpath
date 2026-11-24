@@ -4,6 +4,10 @@ Only open things live here. Close items when Joe confirms them; move shipped wor
 
 ---
 
+## 3.8.0 "Roads, trails and flights": built on `main`, waiting on Joe's go-ahead
+
+`trail-areas` fast-forwarded into `main` (2026-11-24). Added for the release: `NEW_IN` for 3.8; one-time map reset (layers + guild haze on, trail 12 h); trail default 12 h; faction-mark trials removed; `/warpath roads` and `/warpath zone` on the drawn bands; `/warpath clear trail`. `Settings` tests (6, two mutation-checked). Next: tag `3.8.0`, push (CI publishes to CurseForge and GitHub), `tools/install.ps1`, back up SavedVariables first. Joe to check in game: the "New in 3.8" box and the window opening on the Map tab.
+
 ## Released, waiting on CurseForge moderation
 
 **3.7.11** (released 2026-11-23/24): on CurseForge as "Warpath Forever" (project 1826632) and GitHub Releases, installed in Joe's game. The CurseForge file and project aren't visible to others until a moderator approves the project.
@@ -26,15 +30,12 @@ Branch `roads-snap` (commits `d923548` to `bbf735e`), not merged to `main`, noth
 - Small stair-steps at bends in the highlight and shade lines (visible zoomed in, worse at deep relief). Fix if they bother: offset the relief lines as one polyline per road instead of per piece.
 - Orgrimmar's centre is still the busiest knot; Tirisfal's northern road stops short of the main road (no walked ground between).
 
-**Before release**
-- Version: 3.7.12 or 3.8.0 (Joe's call; it's a large rework of an existing feature).
-- `CHANGELOG.txt` entry with the "Your saved data:" line (upgrade to `db.v` 10 merges lanes; old roads kept as `z.roadOld`). Guildmates are unaffected: nothing shared changed.
-- Decide on `z.roadOld`: keep for one release, then drop (saves ~0.6 MB on Lethality).
-- Remove the faction-mark treatments not chosen ("enamel", "banded", "embossed") and decide whether "plate" stays as an option.
-- `/warpath roads` counts in `Zone.lua` still use the old thresholds (silver 1.5, gold 2.5); align them with the drawn bands, and reword what `/warpath roads <days>` means (it now scales every band).
+**Done for 3.8.0:** version, changelog, faction-mark trials removed ("plate" stays as a constant), `/warpath roads` and zone counts on the drawn bands, merged to `main`.
+
+**After 3.8.0**
+- Drop `z.roadOld` in the release after 3.8.0 (Joe, 2026-11-24; saves ~0.6 MB on Lethality). It deletes data, so say so in that release's notes.
 - Glints and shimmer: check they still suit the gilt look and the new top of the scale.
 - Prune of one-day stretches and the per-stretch "walked today" fields (`r`, `tr`): storage savings proposed on 2026-11-23, not built.
-- Merge `roads-snap` into `main`, then the normal release checklist.
 
 ## Trail rework (3.8.0): installed as 3.8.0-test7, watching in game
 
@@ -56,11 +57,9 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 - Joe in game (test3): the area by the Undercity lift covers only part of the ground he lingered on. Causes: only time after forming counts; steps past a short margin end the visit and are dropped; distances are fractions of the map, so in cities (Undercity) they are several times shorter in yards. Built in 3.8.0-test4 (installed 2026-11-24, backup `tools/out/savedvars-backup-2026-11-24-test4/`), Joe's go-ahead: distances in yards, short trips past the edge join, recent trail joins on forming. Tests `test_areas_are_measured_in_yards`, `test_a_short_trip_past_the_edge_joins_the_area`, `test_trail_from_just_before_an_area_forms_joins_it`, each failing with its feature off. The harness stub now makes maps 4000 yd wide (was 1000), with `H.mapYards[id]` for a city. Unverified: the Undercity's real width in yards (the thresholds assume about 960).
 - Joe in game (test4): re-entering an old area didn't refresh it; the hover list filled with "1 min" entries; the area by the lift spread up the hallway; lingering left the last 2.5 min of line scribbled inside the live area. All four fixed on branch `trail-fixes` (worktree `.claude/worktrees/trail-fixes`, made from `bef7a82` because a flight-path session was editing the main folder), merged with the flight legs into `trail-areas` (`a4fe53d`) and installed as 3.8.0-test5 (backup `tools/out/savedvars-backup-2026-11-24-test5/`). Tests: `test_a_minute_inside_an_old_area_reopens_it`, `test_the_visit_list_reads_like_visits`, `test_a_corridor_walked_out_and_back_stays_a_line`, `test_inside_the_area_you_are_in_only_your_last_moments_show`, each mutation-checked.
 - Joe (test3): dashes jaggy where the solid line turns to dashes; dashes between arrows unevenly spaced. Both fixed in 3.8.0-test4: medium smoothing (test `test_dashes_stay_put_when_you_walk_on_after_a_stop`) and even spacing (test `test_dashes_and_arrows_are_evenly_spaced`), both mutation-checked.
-- Seen in test1: clearing the trail with `/run` without a `/reload` leaves the stroke being recorded out of the zone's list, so nothing draws. Offered: `/warpath clear trail` that resets the stroke in progress.
+- Seen in test1: clearing the trail with `/run` without a `/reload` leaves the stroke being recorded out of the zone's list, so nothing draws. `/warpath clear trail` built for 3.8.0 (test `test_clear_trail_clears_the_trail_and_keeps_the_rest`, mutation-checked).
 
-**Before release (with the roads items above)**
-- `NEW_IN` entry for 3.8.0; `CHANGELOG.txt` with "Your saved data:" (adds `z.areas`; nothing deleted; trail only, nothing shared); a full restart is needed (new file).
-- The flight-path rework: built on `trail-areas` (2026-11-24), not yet in the game; see below.
+**Done for 3.8.0:** `NEW_IN`, changelog, flight legs included.
 
 **Open questions**
 - Hide small areas from standing in town (auction house, mail), or at least their labels, especially in neutral towns.

@@ -360,15 +360,31 @@ function H.chat(arg)
     Print("your own kills and deaths in chat " .. State(v) .. ".")
 end
 
+-- 3.8: db.roadMin scales every band of the gilt roads (silver, the gold
+-- thread, full gold, the faction mark). Said as days of daily use to full
+-- gold: a road walked every day holds sum 2^(-i/half) after d days.
+local function DaysToGold(m)
+    local half = db.longDays or 14
+    local left = 1 - m * C.GILD_FULL * (1 - 2 ^ (-1 / half))
+    if left <= 0 then return nil end
+    return -half * math.log(left) / math.log(2)
+end
+
+local function GoldText(m)
+    local d = DaysToGold(m)
+    return d and ("a road you walk every day turns fully gold in about %d days"):format(math.floor(d + 0.5))
+        or "even a road you walk every day never turns fully gold"
+end
+
 function H.roads(arg)
     local n = tonumber(arg)
     if n and n >= 1.5 and n <= 10 then
         db.roadMin = n
-        Print(("a road turns gold once it holds about %g days of use."):format(n))
+        Print(("roads gild at %g (default 2.5): %s."):format(n, GoldText(n)))
         Redraw()
     else
-        Print(("roads turn gold at %g days of use. Usage: /warpath roads <1.5-10>. Hide them with /warpath layer roads off.")
-            :format(db.roadMin))
+        Print(("roads gild at %g (default 2.5): %s. Lower is sooner. Usage: /warpath roads <1.5-10>. Hide them with /warpath layer roads off.")
+            :format(db.roadMin, GoldText(db.roadMin)))
     end
 end
 
@@ -399,8 +415,19 @@ function H.clear(arg)
         else
             Print("nothing recorded in this zone.")
         end
+    elseif arg == "trail" then
+        -- 3.8: today's trail and lingering areas, on every map, including the
+        -- stroke being recorded (clearing z.strokes by hand left it orphaned,
+        -- so nothing drew until a /reload). Roads, marks and runs are kept.
+        for _, z in pairs(db.maps) do
+            if z.strokes then z.strokes = {} end
+            if z.areas then z.areas = {} end
+        end
+        cur.map, cur.stroke, cur.mode, cur.x, cur.y = nil, nil, nil, nil, nil
+        ns.Linger.Reset()
+        Print("today's trail is cleared. Roads, kills, deaths and corpse runs are kept.")
     else
-        Print("usage: /warpath clear zone | all")
+        Print("usage: /warpath clear trail | zone | all")
         return
     end
     Redraw()
@@ -516,8 +543,9 @@ local LIST = {
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },
     { "setup",     "setup",                         "all settings",                       "Settings", true, H.setup },
     { "memory",    "memory <days>",                 "how fast long memory (roads, haze, routes) fades", "Settings", false, H.memory },
-    { "roads",     "roads <days>",                  "days of use before a road turns gold", "Settings", false, H.roads },
+    { "roads",     "roads <days>",                  "how soon roads turn gold (default 2.5; lower is sooner)", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
+    { nil,         "clear trail",                   "clear today's trail and lingering areas", "Data" },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },
     { "debug",     "debug [haze|kills]",            "what Warpath can and can't see (haze: this zone's haze; kills: the kill-credit log)", "Troubleshooting", false, H.debug },
     { nil,         "share status",                  "guild messages sent, refused, received", "Troubleshooting" },

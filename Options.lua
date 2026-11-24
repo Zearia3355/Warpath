@@ -12,12 +12,10 @@ local ShowSetup, MaybeShowSetup, setup
 do
 -- One entry per change; the box wraps them, with a bullet and a hanging indent.
 local NEW_IN = {
-    "Multi-kills and feats: Double Kill up to Bloodbath, streak names, Payback, Clutch, Underdog and more. One line per kill, shared with your guild, and big text on screen for your own.",
-    "Dangerous ground replaces killing fields: it tells you if ground has been dangerous, contested or your hunting ground.",
-    "Guild-wide battle haze: guildmates' fights show on your map. The haze now counts kills and deaths only.",
-    "A minimap button, and map icons that keep their size when you zoom (Map tab).",
-    "3.7.6: your own kills and deaths in chat, worded as your guild sees them, with new death lines. Today's trail is a solid line, then dashes that fade out.",
-    "3.7.7: choose how long today's trail stays, 15 minutes to 24 hours (Map tab). The oldest part is the faintest.",
+    "Roads rebuilt: one road for each way you really travel, raised like gold trim. A road turns from silver to gold as it becomes a habit, and your most-worn roads carry a streak of your faction's colour. They only ever fade, never jump.",
+    "Today's trail: where you lingered (questing, a town) becomes an outlined area; hover it for when and how long. Between areas, a solid line turns to dashes with arrows showing which way you went.",
+    "Flight paths: the routes you fly most, on two or more days, show as blue dashes.",
+    "Your map settings were reset for this release: every layer is on and today's trail stays 12 hours. Change them on the Map tab.",
 }
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
@@ -570,7 +568,8 @@ function ShowSetup(isUpdate, tab)
     local s = setup
     if isUpdate then
         s.title:SetText("Warpath updated to " .. VERSION)
-        s.sub:SetText("Your current settings are already filled in.")
+        s.sub:SetText(S.mapWasReset and "Your settings are kept, except the map's: see the Map tab."
+            or "Your current settings are already filled in.")
         s.newBox:Show()
         s.welcome:Hide()
     else
@@ -599,7 +598,7 @@ function MaybeShowSetup()
         return
     end
     S.setupWaiting = false
-    local ok, err = pcall(ShowSetup, gdb.installed and true or false, 1)
+    local ok, err = pcall(ShowSetup, gdb.installed and true or false, S.mapWasReset and gdb.installed and 2 or 1)
     if not ok then
         Print("the options window failed to open: " .. tostring(err))
         Print("please send that line to whoever gave you Warpath. Settings are still at their defaults.")

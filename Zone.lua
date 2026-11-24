@@ -188,15 +188,17 @@ function Zone.Report()
     local st = Zone.Stats(mapID)
     local text = Zone.ChatText(st)
     Print(MapName(mapID) .. ": " .. (text ~= "" and text or "nothing of note yet") .. ".")
-    local goldN, silverN, recent, now = 0, 0, 0, time()
+    -- The same bands the map draws (3.8): silver, a gold thread, fully gold.
+    local goldN, gildN, silverN, recent, now = 0, 0, 0, 0, time()
     for _, e in pairs(z.road) do
         local long = Long(e, now)
-        if long >= db.roadMin then goldN = goldN + 1
+        if long >= db.roadMin * C.GILD_FULL then goldN = goldN + 1
+        elseif long >= db.roadMin * C.GILD_START then gildN = gildN + 1
         elseif long >= db.roadMin * C.SILVER_SHARE then silverN = silverN + 1 end
         if Recent(e, now) >= C.RECENT_MIN then recent = recent + 1 end
     end
-    Print(("Ground remembered: %d stretches of gold road, %d of silver, %d walked today. Dangerous ground: %d spot%s.")
-        :format(goldN, silverN, recent, ns.Ground.Spots(mapID), ns.Ground.Spots(mapID) == 1 and "" or "s"))
+    Print(("Ground remembered: %d stretches of gold road, %d turning gold, %d silver, %d walked today. Dangerous ground: %d spot%s.")
+        :format(goldN, gildN, silverN, recent, ns.Ground.Spots(mapID), ns.Ground.Spots(mapID) == 1 and "" or "s"))
     local victims, names = {}, {}
     for _, m in ipairs(z.marks) do
         if m[4] == "kill" and m.n then

@@ -17,14 +17,14 @@ Master switch: `cfg.shown` (shared by all characters). Map button left-click, `/
 ### Today's trail
 - Last **5 minutes**: solid line (`LINE_SOLID` 300 s, `DrawWalkLine`).
 - After that: **dashes** (`DrawTrail`, one per `DASH_PERIOD` 5 × thin) that shorten, thin and fade evenly to the end of the trail length. `DashLook(age, life)`: fill 0.85→0.5, thickness 1→0.55, alpha 0.95→0, linear from 5 min to trail end.
-- **Trail length** `cfg.trailMin`: default **60 min**, clamped 15–1440 (`ns.TrailSeconds`). Map tab radios 15m/30m/1h/4h/12h/24h (`TRAIL_MIN_CHOICES`); `/warpath trail <15m-24h>` (bare number = minutes). Old `cfg.trailHours` is kept but unused.
+- **Trail length** `cfg.trailMin`: default **12 h** (720 min; 60 before 3.8.0), clamped 15–1440 (`ns.TrailSeconds`). Map tab radios 15m/30m/1h/4h/12h/24h (`TRAIL_MIN_CHOICES`); `/warpath trail <15m-24h>` (bare number = minutes). Old `cfg.trailHours` is kept but unused.
 - Dashes are **anchored by distance along the stroke** (`s.d`, cumulative, map widths, aspect 668/1002, from `ns.StrokeArc`, computed in `Simplify` before reducing, kept in step like `s.ts`; extended at draw time for the open stroke). Tested 0 px movement over time and while walking.
 - Per-point times `s.ts` (seconds since `s.t`), kept in step by `Simplify()`. Trail from before 3.4 has no per-point times (no backfill).
 - Strokes kept 24 h (`KEEP_HOURS`). `DASH_BUDGET` 4000 pieces, newest first (faintest dropped first). Drawn over roads, no per-square cap.
 - **Footsteps were removed in 3.7.6** (`StepLook`, `STEP_*` gone). Road "walked today" is still recorded (`/warpath zone`).
 - History of this one feature, for context (it changed six times in two days): 3.4 5-min line fading into footsteps → 3.5 trail-length setting (2–24 h) → 3.6.3 footsteps fade over trail length → 3.7.5 15-min line + two-tone footsteps (jumped; rejected) → 3.7.6 dashes 5–15 min, no footsteps, length setting removed (Joe picked "option 2" from renders) → 3.7.7 length setting back, 15 min–24 h, default 1 h.
 
-### Trail rework (3.8.0) — built on branch `trail-areas`, installed as 3.8.0-test5 on 2026-11-24 (with the flight legs), test6 and test7 the same day (flight legs recoloured, then thinner on continents)
+### Trail rework (3.8.0) — shipped in 3.8.0 (tested in game as 3.8.0-test1 to test7)
 
 Why: on a friend's single hour of questing in Silithus, the trail was a red scribble. Every step is drawn, all dashes look alike, and the fade is linear over the trail length, so age can't be read ("where was I" works, "when" doesn't). The intent, in Joe's words: show recent travel, be readable in time, and stay out of the way of using the map to navigate. Picked from Python concept sketches on synthetic data (`trail_sketch*.py`, scratchpad only, not in the repo). Built in `Linger.lua` (recording, outline geometry, clipping) and `Map.lua` (`DrawToday`: `AreaScene`, `DrawWalkLine`, `DrawTrail`/`StrokeDashes`, `DrawAreas`, `DrawHere`, tags). Thresholds are first guesses; tune on real data.
 
@@ -95,7 +95,7 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 | faction tier 2 | 16.4 | day 31.5 | about 4 days in 5 |
 | end of band | 20 (8×) | — | every day |
 
-- **Faction mark** (`FACTION_MARK` "streak", in the faction's `deep` colour): tier 1 a thin streak down the gold; tier 2 the shaded side too. Trial alternatives still selectable: "enamel" (wider streak with gold wires), "banded" (edge in faction colour), "embossed" (shade from tier 1).
+- **Faction mark** (in the faction's `deep` colour): tier 1 a thin streak down the gold; tier 2 the shaded side too. The trial alternatives ("enamel", "banded", "embossed") were removed in 3.8.0. Band multipliers of `db.roadMin` are `C.GILD_START` 2.28, `C.GILD_FULL` 3.82, `C.GILD_TOP` 8, shared by `Map.lua` and the `/warpath zone` counts.
 - Glints (amber stars, ≤6 per zone) and shimmer still run on the most worn roads.
 - Tried and dropped on renders: cartographer's ink (vanishes on dark maps), trodden earth, gold rims and an engraved groove beyond gold (rims read as rail track; red-gold reads as bronze), and gems (rubies, sapphires, emeralds: at normal map size a road is 4–6 px, so stones read as specks).
 - `/warpath roads` counts ("N stretches of gold, M of silver", `Zone.lua`) still use the old thresholds (1.5 and 2.5), not the new bands. See open items.
@@ -232,11 +232,12 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 
 ## Options window
 - `/warpath setup` (the name again since 3.6.4) or `/warpath options`. Tabs: General, Map, Screenshots, Chronicle & zones, Grudges. Settings shared by all characters.
-- Opens itself once after a **feature** release (new minor), with a "New in" box (`NEW_IN`, wrapped bullet entries). Reopen the box today: `/run WarpathGlobal.seenVersion = nil` then `/reload`.
+- Opens itself once after a **feature** release (new minor), with a "New in" box (`NEW_IN`, wrapped bullet entries). 3.8.0's box covers roads, the trail, flights and the map reset; when the reset changed anything (`S.mapWasReset`) the window opens on the Map tab.
+- **3.8.0 one-time map reset** (`Events.lua`, flag `cfg.mapReset = "3.8"`, inside `pcall`): every `C.LAYERS` layer and `cfg.guildHaze` on, `cfg.trailMin` to the 12 h default. Kept: `iconScale`, `shown`, `runHours`, `shimmer`. Settings only, no history. Reopen the box today: `/run WarpathGlobal.seenVersion = nil` then `/reload`.
 
 ## Commands (summary)
 Everyday (`/warpath help`): `/warpath` (totals + "Type /warpath help"), `zone`, `chronicle`, `map`, `grudge`, `options`, `help all`.
-Full list (`/warpath help all`): built from one table of `{command, description, group, everyday}` so both lists can't drift. Includes everything above plus `layer <name> [on|off]`, `replay [hours]` (up to 24), `waypoint death|kill`, `memory <days>`, `roads <days>`, `clear zone`, `clear all` (asks to confirm within 10 s; grudges kept), `debug`, `debug kills`, `debug haze`.
+Full list (`/warpath help all`): built from one table of `{command, description, group, everyday}` so both lists can't drift. Includes everything above plus `layer <name> [on|off]`, `replay [hours]` (up to 24), `waypoint death|kill`, `memory <days>`, `roads <1.5-10>` (scales every road band; replies with days of daily use to full gold, from `db.longDays`), `clear trail` (3.8: strokes and areas on every map, plus the stroke being recorded and the live area; roads, marks, runs kept), `clear zone`, `clear all` (asks to confirm within 10 s; grudges kept), `debug`, `debug kills`, `debug haze`.
 Principles: noun-first names; every toggle takes `on|off` or toggles bare and replies with the new state; unknown command → one line + "Did you mean…"; old names stay as hidden aliases (`toggle`→`map`, `hud`→`table`, `revenge`/`lastkill`→`waypoint death|kill`, `heat`→`battle`, `recent`→`trail`, `shared`→`guild`).
 
 ## Saved data
@@ -306,4 +307,8 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-24 | Flight-leg casing colour and alphas | Claude (open to veto) |
 | 2026-11-24 | Flight legs on continent maps also at 65% width (test7) | Joe |
 | 2026-11-24 | Flight legs: snap 100 yd, points every 30 yd; shown from about two days (fade in from 1.4); old routes merged as the stronger, not summed; no `db.v` bump (convert once per zone); today's flight no longer drawn on its own and its options row removed; legs under roads | Claude (open to veto) |
+| 2026-11-24 | 3.8.0: one-time map reset, layers + trail length (keep icon size, map switch, corpse runs); trail default 12 h | Joe |
+| 2026-11-24 | The reset also turns guild haze back on (it sits with the layers on the Map tab); the options window opens on the Map tab when the reset changed something | Claude (open to veto) |
+| 2026-11-24 | Faction-mark trials removed (streak only); "plate" road style kept as a constant; `/warpath roads` keeps its 1.5–10 range and says days to full gold, or "never" above about 5.4 | Claude (open to veto) |
+| 2026-11-24 | `z.roadOld` kept for 3.8.0, dropped in a later release | Joe |
 | 2026-11-24 | Built: forming needs movement in 3 of the 4 minutes; every re-entry is its own visit record (tooltip merges those under 2 min apart); dusk = faction deep 60% towards earth brown; hidden trail skipped by visit time; arrow bend judged at full length, tip fixed | Claude (open to veto) |

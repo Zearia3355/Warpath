@@ -58,6 +58,79 @@ class Boot(unittest.TestCase):
         self.assertGreater(lua_count(wow, "WarpathDB.maps[1448] and WarpathDB.maps[1448].strokes"), 0)
 
 
+class Settings(unittest.TestCase):
+    """3.8's one-time map reset, /warpath clear trail and /warpath roads."""
+
+    OLD = """WarpathGlobal = { installed = "3.7.11", seenVersion = "3.7.11", cfg = {
+        trailMin = 60, iconScale = 140, shown = false, runHours = 6, guildHaze = false,
+        layers = { battle = false, roads = true, recent = false, runs = true, marks = true,
+                   sightings = false, shared = true } } }"""
+
+    def upgraded(self):
+        wow = Wow()
+        wow.run(self.OLD)
+        return wow.login()
+
+    def test_upgrade_turns_every_layer_on_and_sets_the_trail(self):
+        wow = self.upgraded()
+        for name in ("battle", "roads", "recent", "runs", "marks", "sightings", "shared"):
+            with self.subTest(layer=name):
+                self.assertTrue(wow.eval(f"ns.cfg.layers.{name}"))
+        self.assertTrue(wow.eval("ns.cfg.guildHaze"))
+        self.assertEqual(wow.eval("ns.cfg.trailMin"), 720)
+        self.assertTrue(wow.eval("ns.S.mapWasReset"))
+
+    def test_upgrade_keeps_the_other_map_settings(self):
+        wow = self.upgraded()
+        self.assertEqual(wow.eval("ns.cfg.iconScale"), 140)
+        self.assertFalse(wow.eval("ns.cfg.shown"))
+        self.assertEqual(wow.eval("ns.cfg.runHours"), 6)
+
+    def test_the_reset_happens_only_once(self):
+        wow = self.upgraded()
+        wow.run('SlashCmdList.WARPATH("layer battle off")')
+        wow.run('SlashCmdList.WARPATH("trail 1h")')
+        wow.login()  # the next login
+        self.assertFalse(wow.eval("ns.cfg.layers.battle"))
+        self.assertEqual(wow.eval("ns.cfg.trailMin"), 60)
+
+    def test_a_new_install_gets_the_12_hour_trail_and_no_reset_note(self):
+        wow = Wow().login()
+        self.assertEqual(wow.eval("ns.cfg.trailMin"), 720)
+        self.assertFalse(wow.eval("ns.S.mapWasReset"))
+
+    def test_clear_trail_clears_the_trail_and_keeps_the_rest(self):
+        wow = Wow().login()
+        wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        for i in range(40):
+            wow.H.player.x = 0.4 + i * 0.003
+            wow.advance(5)
+        z = "WarpathDB.maps[1448]"
+        self.assertGreater(lua_count(wow, f"{z}.strokes"), 0)
+        roads = lua_count(wow, f"{z}.road")
+        self.assertGreater(roads, 0)
+        wow.run('SlashCmdList.WARPATH("clear trail")')
+        self.assertEqual(lua_count(wow, f"{z}.strokes"), 0)
+        self.assertEqual(lua_count(wow, f"{z}.road"), roads)
+        # Walking on starts a new trail at once, without a /reload (the bug
+        # this command exists for: an orphaned stroke drew nothing).
+        for i in range(5):
+            wow.H.player.y = 0.5 + i * 0.003
+            wow.advance(5)
+        self.assertGreater(lua_count(wow, f"{z}.strokes"), 0)
+        self.assertTrue(wow.eval(f"ns.cur.stroke ~= nil and {z}.strokes[#{z}.strokes] == ns.cur.stroke"))
+
+    def test_roads_says_how_long_to_gold(self):
+        wow = Wow().login()
+        before = len(wow.chat)
+        wow.run('SlashCmdList.WARPATH("roads")')
+        line = " ".join(wow.chat[before:])
+        self.assertIn("about 12 days", line)  # the documented day 12.5 of daily use, at 2.5
+        before = len(wow.chat)
+        wow.run('SlashCmdList.WARPATH("roads 8")')
+        self.assertIn("never turns fully gold", " ".join(wow.chat[before:]))
+
+
 class Share(unittest.TestCase):
     """The guild channel, including what 3.7.10's diagnostics count."""
 

@@ -1,5 +1,5 @@
 
--- Warpath 3.8.0-test7
+-- Warpath 3.8.0
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -82,12 +82,14 @@ local C = {
     ROAD_BUBBLE     = 10,      -- a loop this short all round (stretches) is one road: its weaker side is not drawn
     ROAD_THREAD     = 0.5,     -- a lynchpin stretch stays at least this visible while what it joins is drawn
     ROAD_STYLE      = "gilt",  -- how roads are drawn: "gilt" (raised gold trim, 3.7.12) or "plate" (flat, 3.7)
-    FACTION_MARK    = "streak", -- past full gold, two tiers: "streak", "enamel", "banded" or "embossed" (trial)
     GILT_RELIEF     = 1.0,     -- how strongly gilt roads stand out, 0-1 (Joe picked deep)
     ROAD_SMOOTH     = 3,       -- a road's look is averaged over this many stretches either side
     LN2             = math.log(2),
     LOG2_5          = math.log(5) / math.log(2), -- short memory 1 -> 0.2 (RECENT_MIN) takes this many half-lives
     SILVER_SHARE    = 0.6,     -- silver appears at this share of the gold threshold
+    GILD_START      = 2.28,    -- gilt roads (3.7.12): a gold thread from this many times db.roadMin,
+    GILD_FULL       = 3.82,    -- fully gold from this many,
+    GILD_TOP        = 8,       -- and the faction mark's band ends at this many
     SHOT_THROTTLE   = 1.5,     -- one screenshot per burst of kills
     COMBAT_GRACE    = 3,       -- seconds after combat that a kill still counts as yours
     MARK_CAP        = 300,
@@ -174,7 +176,7 @@ local C = {
         runHours = 24, flightHours = 24, fieldAlert = true,
         iconScale = 100, overlay = true, overlaySize = "medium",
         groundScreen = true, groundChat = true, groundAfter = 2,
-        guildHaze = true, shareHistory = true, selfChat = true, trailMin = 60 },
+        guildHaze = true, shareHistory = true, selfChat = true, trailMin = 720 }, -- 3.8: trail 12 h (was 1 h)
     GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
     SHOT_DEFAULTS = { on = true, mode = "all", card = "text", delay = 0.5, combat = true },
 }
