@@ -1522,15 +1522,20 @@ local RUN_LOOK = {
 -- one line; grouping looks only at those, never at how faded they are, and
 -- the dashes are measured from the start of the leg, so they stay put and
 -- only ever fade.
--- Warm gold (Joe's pick, 2026-11-24): no cream, which reads as silver.
--- Passes: off = sideways offset (in line widths), t = thickness, a = alpha,
--- each from two days to well flown.
+-- Royal blue with a dark casing (Joe's pick, 2026-11-24, from renders over
+-- his screenshots): the map art is yellow-gold parchment, so gold or earthy
+-- colours vanish and a cool colour reads. Passes: t = thickness in line
+-- widths, a = alpha, each from two days to well flown. A line width is a
+-- fraction of the map's width: on a continent no thinner than on a zone
+-- (there lines came out a pixel wide), on a zone map 65% of the old width.
 local AIR_LOOK = {
-    dash = 10, gap = 9,
-    { off = 0, t0 = 0.9, t1 = 1.6, a0 = 0.40, a1 = 0.85, r = 0.96, g = 0.74, b = 0.28 },
+    dash = 10, gap = 9, far = 0.0018, zone = 0.0013,
+    { t0 = 3.2, t1 = 4.4, a0 = 0.75, a1 = 0.95, r = 0.08, g = 0.05, b = 0.10 },
+    { t0 = 1.4, t1 = 2.2, a0 = 0.95, a1 = 1.00, r = 0.25, g = 0.45, b = 1.00 },
 }
-local function DrawLegs(D, z, thin, sx, sy, ox, oy)
+local function DrawLegs(D, z, far, sx, sy, ox, oy)
     local Strength, lo, look = ns.Flights.Strength, C.AIR_SHOW - C.AIR_FADE, AIR_LOOK
+    local thin = D.w * (far and look.far or look.zone)
     local period, np = look.dash + look.gap, #look
     for _, L in ipairs(z.air) do
         local n = #L / 2
@@ -1574,13 +1579,11 @@ local function DrawLegs(D, z, thin, sx, sy, ox, oy)
                         local inPat = (at[a] + pos) % period
                         if inPat < look.dash then
                             local stop = math.min(len, pos + look.dash - inPat)
-                            for _, P in ipairs(look) do
-                                local o = P.off * thin
+                            for pi, P in ipairs(look) do -- casing, then the colour over it
                                 D.nair, D.nl = D.nair + 1, D.nl + 1
-                                PutLine(D.nl, P.off == 0 and -2 or -1, "BLEND", thin * (P.t0 + (P.t1 - P.t0) * u),
+                                PutLine(D.nl, pi - 3, "BLEND", thin * (P.t0 + (P.t1 - P.t0) * u),
                                     P.r, P.g, P.b, (P.a0 + (P.a1 - P.a0) * u) * vis,
-                                    x1 + ux * pos - uy * o, y1 + uy * pos + ux * o,
-                                    x1 + ux * stop - uy * o, y1 + uy * stop + ux * o)
+                                    x1 + ux * pos, y1 + uy * pos, x1 + ux * stop, y1 + uy * stop)
                             end
                             pos = stop
                         else
@@ -1603,7 +1606,7 @@ local function DrawRuns(D, scene)
         local p, z = e.p, e.z
         local thin = p.far and w * 0.0011 or w * 0.0020
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
-        if z.air and ns.Flights then DrawLegs(D, z, thin, sx, sy, ox, oy) end
+        if z.air and ns.Flights then DrawLegs(D, z, p.far, sx, sy, ox, oy) end
         for ri = #z.runs, 1, -1 do -- newest first
             local s = z.runs[ri]
             local look, life = RUN_LOOK[s.k], RunSeconds(s.k)

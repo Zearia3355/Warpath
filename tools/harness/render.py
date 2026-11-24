@@ -20,6 +20,10 @@ What it is and isn't:
 Saved data is only read. The map's master switch is forced on in memory
 (a character may have it off), and nothing is written back.
 
+--backdrop draws over an in-game screenshot of the same map (--canvas cuts the
+map's canvas out of it), at the size it was in game: the real art decides
+whether a colour reads, which the olive stand-in can't tell you.
+
 --at sets the moment to render. The default is when the SavedVariables file
 was last written, i.e. the character's last logout, so "today's trail" shows
 as it looked then rather than faded out by the time you run this.
@@ -173,13 +177,16 @@ def classify(tex):
     return "disc"
 
 
-def paint(prims, w, h):
+def paint(prims, w, h, backdrop=None):
     W, H = w * SS, h * SS
-    base = Image.new("RGB", (W, H), GROUND)
-    g = ImageDraw.Draw(base)
-    for i in range(1, 10):
-        g.line([(W * i / 10, 0), (W * i / 10, H)], fill=GRID, width=1)
-        g.line([(0, H * i / 10), (W, H * i / 10)], fill=GRID, width=1)
+    if backdrop is not None:            # the real map art, from an in-game screenshot
+        base = backdrop.convert("RGB").resize((W, H), Image.LANCZOS)
+    else:
+        base = Image.new("RGB", (W, H), GROUND)
+        g = ImageDraw.Draw(base)
+        for i in range(1, 10):
+            g.line([(W * i / 10, 0), (W * i / 10, H)], fill=GRID, width=1)
+            g.line([(0, H * i / 10), (W, H * i / 10)], fill=GRID, width=1)
 
     add = None
     stamps = {}
@@ -250,11 +257,15 @@ def addon_from_ref(ref):
     return tmp
 
 
-def render(addon_dir, saved, account, name, map_id, at, layers=None):
+def render(addon_dir, saved, account, name, map_id, at, layers=None, backdrop=None):
+    """backdrop: the map canvas cut from an in-game screenshot. The overlay
+    takes its size, so lines are as thick, in pixels, as they were in game."""
     wow = Wow(saved=saved, saved_global=account, player={"name": name, "mapID": map_id},
               addon_dir=addon_dir)
     wow.H.now = int(at)
     wow.login(settle=0)
+    if backdrop is not None:
+        wow.run(f"WarpathOverlay.__w = {backdrop.width}; WarpathOverlay.__h = {backdrop.height}")
     wow.run(f"WorldMapFrame.__shown = true; __H.mapShown = {int(map_id)}; ns.cfg.shown = true")
     if layers is not None:
         wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end")
@@ -270,7 +281,7 @@ def render(addon_dir, saved, account, name, map_id, at, layers=None):
         for id in pairs(WarpathDB.maps) do
             if id ~= {int(map_id)} and __H.rectMisses and __H.rectMisses[id .. ">" .. {int(map_id)}] then n = n + 1 end
         end return n end)()"""))
-    return paint(prims, int(D["w"]), int(D["h"])), stats, wow
+    return paint(prims, int(D["w"]), int(D["h"]), backdrop), stats, wow
 
 
 def caption(img, text):
@@ -299,6 +310,8 @@ def main():
                          "'work' is the working copy, e.g. --ref main --ref work")
     ap.add_argument("--layers", help="comma list to show only these, e.g. roads,trail")
     ap.add_argument("--out", default="warpath-render.png")
+    ap.add_argument("--backdrop", help="in-game screenshot of the same map, to draw over its real art")
+    ap.add_argument("--canvas", help="x1,y1,x2,y2 of the map canvas in the screenshot (default: the whole image)")
     args = ap.parse_args()
     if not args.wtf:
         ap.error("--wtf or WARPATH_WTF is required")
@@ -323,13 +336,18 @@ def main():
                 if c > n then best, n = id, c end
             end return best end)()"""))
 
+    backdrop = None
+    if args.backdrop:
+        backdrop = Image.open(args.backdrop).convert("RGB")
+        if args.canvas:
+            backdrop = backdrop.crop(tuple(int(v) for v in args.canvas.split(",")))
     refs = args.ref or [None]
     panels = []
     for ref in refs:
         if ref == "work":
             ref = None
         addon_dir = addon_from_ref(ref) if ref else REPO
-        img, stats, wow = render(addon_dir, saved, account, name, map_id, at, layers)
+        img, stats, wow = render(addon_dir, saved, account, name, map_id, at, layers, backdrop)
         zone = wow.eval(f"ns.MapName({map_id})")
         label = f"{ref or 'working copy'}  -  {zone}  -  {stats['nl']} lines, {stats['nd']} dots, {stats['np']} pins"
         if stats["unplaced"]:

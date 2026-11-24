@@ -72,7 +72,7 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 
 Design in `how-it-works.md` (Flight legs). New file `Flights.lua` (**needs a full game restart**).
 
-- Joe in game: do the warm gold dashes read against real map art, and stay clear of gilded roads where the two cross?
+- Joe in game (test5): warm gold dashes were nearly invisible on the parchment. Now royal blue with a dark casing, picked from renders over his Kalimdor and Barrens screenshots; zone maps at 65% width. Check in the next test build: dark zones (Felwood, Ashenvale), where legs cross water, and next to blue (Alliance) kill marks.
 - Joe: does a leg build up visibly over a week of normal flying? Real data so far has 3 days, so only the trunk shows.
 - Saved data grows: Lethality's routes become 88 legs, 3,868 points (roughly 200 KB on a 1.8 MB file, estimated, not measured). Storing `t` and `d` once per run of points would halve it if it matters.
 - Untested in game: a flight that crosses onto the continent map between zones (Kalimdor 1414) lays a few scrap legs there; they're flown once and stay hidden.
