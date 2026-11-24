@@ -41,7 +41,7 @@ if (-not (Test-Path (Join-Path $repo 'Warpath.toc'))) {
 }
 
 # Repo-only: never shipped. Mirrors the ignore list in .pkgmeta.
-$excludeDirs = @('.git', '.github', 'docs', 'tools')
+$excludeDirs = @('.git', '.github', '.claude', 'docs', 'tools')
 $excludeFiles = @('.pkgmeta', '.gitattributes', '.gitignore', 'CLAUDE.md', 'CLAUDE.local.md', 'README.md')
 
 $version = (Select-String -Path (Join-Path $repo 'Warpath.toc') -Pattern '^## Version:\s*(.+)$').Matches[0].Groups[1].Value.Trim()
