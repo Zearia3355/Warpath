@@ -1512,39 +1512,98 @@ end
 
 local RUN_LOOK = {
     g = { r = 0.55, g = 0.90, b = 1.00, top = 0.90, bottom = 0.15, dash = 7, gap = 5, thick = 1.4, glow = true },
-    -- today's flights: thin, softer gold, fading out over their lifetime
-    f = { r = 0.96, g = 0.84, b = 0.55, top = 0.45, bottom = 0.08, dash = 10, gap = 9, thick = 0.85 },
 }
 
--- Corpse runs (dashed ice blue with a soft glow) and flights (long gold
--- dashes), fading along their length over their lifetime; flight routes you
--- keep taking underneath.
+-- Flight legs (3.8): dashed, so they read as flight paths and never as
+-- roads (roads are the solid lines). Deeper and brighter with the days
+-- you've flown them. Only legs flown on about two days show, so the hubs
+-- you pass through don't spin a web. Runs of points with the same memory
+-- (credited together) that lie within half a pixel of a straight line are
+-- one line; grouping looks only at those, never at how faded they are, and
+-- the dashes are measured from the start of the leg, so they stay put and
+-- only ever fade.
+-- Warm gold (Joe's pick, 2026-11-24): no cream, which reads as silver.
+-- Passes: off = sideways offset (in line widths), t = thickness, a = alpha,
+-- each from two days to well flown.
+local AIR_LOOK = {
+    dash = 10, gap = 9,
+    { off = 0, t0 = 0.9, t1 = 1.6, a0 = 0.40, a1 = 0.85, r = 0.96, g = 0.74, b = 0.28 },
+}
+local function DrawLegs(D, z, thin, sx, sy, ox, oy)
+    local Strength, lo, look = ns.Flights.Strength, C.AIR_SHOW - C.AIR_FADE, AIR_LOOK
+    local period, np = look.dash + look.gap, #look
+    for _, L in ipairs(z.air) do
+        local n = #L / 2
+        local v, at = {}, { 0 } -- strength, and distance along the leg in pixels
+        for i = 1, n do v[i] = Strength(L, i) end
+        local function X(i) return ox + L[2 * i - 1] * sx end
+        local function Y(i) return -(oy + L[2 * i] * sy) end
+        for i = 2, n do at[i] = at[i - 1] + math.sqrt((X(i) - X(i - 1)) ^ 2 + (Y(i) - Y(i - 1)) ^ 2) end
+        local function Same(i, j) return L.l[i] == L.l[j] and L.t[i] == L.t[j] end
+        local a = 1
+        while a < n do
+            local sa = math.min(v[a], v[a + 1])
+            if sa < lo then
+                a = a + 1
+            else
+                -- grow the line while the next point is credited like this one
+                -- and every point so far stays on the straight line
+                local b = a + 1
+                while b < n and b - a < 40 and Same(b, b + 1) and Same(a, a + 1) and Same(a, b) do
+                    local x1, y1, x2, y2 = X(a), Y(a), X(b + 1), Y(b + 1)
+                    local dx, dy = x2 - x1, y2 - y1
+                    local len = math.sqrt(dx * dx + dy * dy)
+                    local ok = true
+                    for k = a + 1, b do
+                        if len > 0 and math.abs((X(k) - x1) * dy - (Y(k) - y1) * dx) / len > 0.5 then ok = false break end
+                    end
+                    if not ok then break end
+                    b = b + 1
+                end
+                local s = sa
+                for k = a + 1, b - 1 do s = math.min(s, v[k + 1]) end
+                local vis = Clamp((s - lo) / C.AIR_FADE)
+                local x1, y1 = X(a), Y(a)
+                local dx, dy = X(b) - x1, Y(b) - y1
+                local len = math.sqrt(dx * dx + dy * dy)
+                if vis > 0 and len > 0 then
+                    local u = Clamp((s - C.AIR_SHOW) / (C.ROAD_FULL - C.AIR_SHOW))
+                    local ux, uy = dx / len, dy / len
+                    local pos = 0
+                    while pos < len and D.nair + np <= C.AIR_BUDGET do
+                        local inPat = (at[a] + pos) % period
+                        if inPat < look.dash then
+                            local stop = math.min(len, pos + look.dash - inPat)
+                            for _, P in ipairs(look) do
+                                local o = P.off * thin
+                                D.nair, D.nl = D.nair + 1, D.nl + 1
+                                PutLine(D.nl, P.off == 0 and -2 or -1, "BLEND", thin * (P.t0 + (P.t1 - P.t0) * u),
+                                    P.r, P.g, P.b, (P.a0 + (P.a1 - P.a0) * u) * vis,
+                                    x1 + ux * pos - uy * o, y1 + uy * pos + ux * o,
+                                    x1 + ux * stop - uy * o, y1 + uy * stop + ux * o)
+                            end
+                            pos = stop
+                        else
+                            pos = pos + period - inPat
+                        end
+                    end
+                end
+                a = b
+            end
+        end
+    end
+end
+
+-- Corpse runs (dashed ice blue with a soft glow), fading along their length
+-- over their lifetime; the flight legs you keep flying underneath. Today's
+-- flights are no longer drawn on their own (3.8): they're in the legs.
 local function DrawRuns(D, scene)
     local w, h, now = D.w, D.h, D.now
-    local bar = C.ROUTE_MIN
     for _, e in ipairs(scene.zones) do
         local p, z = e.p, e.z
         local thin = p.far and w * 0.0011 or w * 0.0020
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
-        local f = RUN_LOOK.f
-        for _, r in ipairs(z.routes) do
-            local long = Long(r, now)
-            -- A route appears at ROUTE_MIN but only goes below ROUTE_OFF, fading
-            -- out in between, so a few days away never makes it blink out.
-            if long >= bar then r.on = true elseif long < C.ROUTE_OFF then r.on = nil end
-            if r.on then
-                -- Quiet on purpose: short, sparse, muted dashes that stay well
-                -- under roads and today's flights.
-                local use = Clamp((long - bar) / (C.ROAD_FULL - bar))
-                local a = (0.14 + 0.26 * use) * Clamp((long - C.ROUTE_OFF) / (bar - C.ROUTE_OFF))
-                local phase = 0
-                for i = 1, #r / 2 - 1 do
-                    phase = Dashes(D, 3, thin * (0.8 + 0.5 * use), 0.86, 0.74, 0.50, a,
-                        6, 10, phase, ox + r[2 * i - 1] * sx, -(oy + r[2 * i] * sy),
-                        ox + r[2 * i + 1] * sx, -(oy + r[2 * i + 2] * sy))
-                end
-            end
-        end
+        if z.air and ns.Flights then DrawLegs(D, z, thin, sx, sy, ox, oy) end
         for ri = #z.runs, 1, -1 do -- newest first
             local s = z.runs[ri]
             local look, life = RUN_LOOK[s.k], RunSeconds(s.k)
@@ -1727,7 +1786,7 @@ local EMPTY = { proj = {}, zones = {} }
 -- limit: number of trail points to draw (replay); nil = live view.
 local function Draw(scene, limit)
     local D = { w = overlay:GetWidth(), h = overlay:GetHeight(), now = time(), replay = limit and true,
-        nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0, ntag = 0 }
+        nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0, ntag = 0, nair = 0 }
     local L = cfg.layers
     tail.stroke, tail.p = nil, nil
     for i = #shimmer, 1, -1 do shimmer[i] = nil end

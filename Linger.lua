@@ -515,7 +515,7 @@ local function Visits(a)
 end
 
 ns.Linger = {
-    LAG = LAG, Visits = Visits,
+    LAG = LAG, Visits = Visits, MapYards = MapYards,
     Step = Step, Reset = Reset, Outline = Outline, Clip = Clip, InPoly = InPoly,
     Live = function() return st.live end,
     State = function() return st end, -- for tests

@@ -327,7 +327,7 @@ function H.memory(arg)
     local days = tonumber(arg:match("(%S+)%s*$") or "")
     if days and days >= 2 and days <= 90 then
         db.longDays = days
-        Print(("long memory (roads, battle haze, flight routes) halves every %g days you play."):format(days))
+        Print(("long memory (roads, battle haze, flight paths) halves every %g days you play."):format(days))
         Redraw()
     else
         Print(("long memory halves every %g days you play. Usage: /warpath memory <days 2-90>"):format(db.longDays))

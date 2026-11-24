@@ -60,13 +60,22 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 
 **Before release (with the roads items above)**
 - `NEW_IN` entry for 3.8.0; `CHANGELOG.txt` with "Your saved data:" (adds `z.areas`; nothing deleted; trail only, nothing shared); a full restart is needed (new file).
-- The flight-path rework.
+- The flight-path rework: built on `trail-areas` (2026-11-24), not yet in the game; see below.
 
 **Open questions**
 - Hide small areas from standing in town (auction house, mail), or at least their labels, especially in neutral towns.
 - A long slow drift (grinding along a road) caps an area at 0.30 and starts a new one: may look like a chain of blobs. Judge on real data.
 - How far the Forever world map zooms (arrows are judged zoomed in).
 - Real data: ask for the friend's Silithus `SavedVariables\Warpath.lua`; none of Joe's characters has a messy trail.
+
+## Flight legs (3.8.0): built, not in the game yet
+
+Design in `how-it-works.md` (Flight legs). New file `Flights.lua` (**needs a full game restart**).
+
+- Joe in game: do the warm gold dashes read against real map art, and stay clear of gilded roads where the two cross?
+- Joe: does a leg build up visibly over a week of normal flying? Real data so far has 3 days, so only the trunk shows.
+- Saved data grows: Lethality's routes become 88 legs, 3,868 points (roughly 200 KB on a 1.8 MB file, estimated, not measured). Storing `t` and `d` once per run of points would halve it if it matters.
+- Untested in game: a flight that crosses onto the continent map between zones (Kalimdor 1414) lays a few scrap legs there; they're flown once and stay hidden.
 
 ## Open investigation: guildmates' kills don't reach Joe inside battlegrounds
 

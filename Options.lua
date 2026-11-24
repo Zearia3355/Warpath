@@ -96,7 +96,6 @@ local function SetupLoad(s, c)
     s.shimmer:SetChecked(c.shimmer)
     s.trailMin:Set(c.trailMin)
     s.runHours:Set(c.runHours)
-    s.flightHours:Set(c.flightHours)
     s.shotOn:SetChecked(c.shot.on)
     s.which:Set(c.shot.mode)
     s.caption:Set(c.shot.card)
@@ -137,7 +136,6 @@ local function SetupSave(s)
     cfg.shimmer = On(s.shimmer)
     cfg.trailMin = s.trailMin.value or cfg.trailMin or 60
     cfg.runHours = s.runHours.value or 24
-    cfg.flightHours = s.flightHours.value or 24
     cfg.shot.on = On(s.shotOn)
     cfg.shot.mode = s.which.value or "all"
     cfg.shot.card = s.caption.value or "text"
@@ -351,8 +349,6 @@ local function BuildMap(s, panel)
     L.Radios(s.trailMin)
     s.runHours = MakeRadios(panel, "Corpse runs", HOURS)
     L.Radios(s.runHours)
-    s.flightHours = MakeRadios(panel, "Today's flights", HOURS)
-    L.Radios(s.flightHours)
 end
 
 local function BuildShots(s, panel)

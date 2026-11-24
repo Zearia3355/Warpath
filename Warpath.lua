@@ -19,9 +19,9 @@
 --     trail      today's footsteps in your faction's colour, vivid when fresh,
 --                deepening after an hour and fading slowly over the trail
 --                length, plus a line for your last 15 minutes (full for 5, then fading).
---     runs       corpse runs (dashed ice blue) and flights (long gold dashes),
---                fading along their length over 24 hours, plus the flight
---                routes you keep taking.
+--     runs       corpse runs (dashed ice blue), fading along their length
+--                over 24 hours, and the flight legs you keep flying, etched
+--                into the map (3.8).
 --
 --   marks      skulls where you died, blades where you scored honorable kills.
 --   sightings  where you have seen hostile players.
@@ -93,7 +93,7 @@ local C = {
     MARK_CAP        = 300,
     LINE_BUDGET     = 5000,    -- roads and the walking line
     ROAD_RESERVE    = 800,     -- lines roads leave free for the walking line
-    RUN_BUDGET      = 2500,    -- corpse runs, flights and flight routes
+    RUN_BUDGET      = 2500,    -- corpse runs
     GLINT_CAP       = 6,       -- amber glints per zone
     DOT_BUDGET      = 3500,
     MARK_BUDGET     = 400,
@@ -109,10 +109,11 @@ local C = {
     AVENGE_RADIUS   = 0.10,
     GRUDGE_COOLDOWN = 60,
     REPLAY_SECONDS  = 20,
-    ROUTE_MATCH     = 0.03,    -- flight stretches this close at both ends are one route
-    ROUTE_MIN       = 4,       -- long memory before a flight route shows: about five
-                               -- separate days of flying it within a couple of weeks
-    ROUTE_OFF       = 2.5,     -- ...and it only goes again below this, fading on the way
+    AIR_STEP        = 30,      -- yards between the points of a flight leg (3.8)
+    AIR_SNAP        = 100,     -- a flight this close to a leg flies that leg
+    AIR_SHOW        = 2,       -- a leg is fully etched once flown on about two days...
+    AIR_FADE        = 0.6,     -- ...fading in over this much strength below that
+    AIR_BUDGET      = 1500,    -- lines for flight legs
     TRAIL_CHOICES   = { 2, 4, 7, 12, 24 }, -- hours a stretch walked once stays
     GRUDGE_SEEN     = 900,     -- a grudge sighting stays named on the map this long
     GRUDGE_LOG      = 30,      -- encounters kept per grudge
@@ -634,6 +635,7 @@ local function Prune()
             if Long(r, now) >= 0.05 then kept[#kept + 1] = r end
         end
         z.routes = kept
+        if ns.Flights then ns.Flights.Prune(z) end
         while #z.marks > C.MARK_CAP do table.remove(z.marks, 1) end
         for edge, e in pairs(z.road) do
             if Long(e, now) < 0.05 and Recent(e, now) < 0.05 then z.road[edge] = nil end
@@ -918,6 +920,13 @@ local function Migrate()
         end
     end
     for _, z in pairs(db.maps) do ZoneFields(z) end
+    -- Flight routes become flight legs (3.8). No version bump: a zone is
+    -- done once it has z.air, so it is safe to run again or to go back to a
+    -- build that doesn't know legs (it ignores them).
+    if ns.Flights then
+        local ok, err = pcall(ns.Flights.Convert)
+        if not ok then Print("bringing your flight routes over hit an error, so some flight paths start fresh: " .. tostring(err)) end
+    end
     db.campaigns = db.campaigns or {}
 end
 

@@ -27,38 +27,12 @@ local function Mode()
     if UnitOnTaxi("player") then return "f" end
 end
 
--- A flight's stretch through a zone, matched to earlier flights by its two
--- ends (flight paths are fixed). A match strengthens one route record with
--- road-style long memory instead of adding a copy.
-local function AddFlightRoute(mapID, s)
-    local n = #s / 2
-    if n < 2 then return end
-    local ax, ay, bx, by = s[1], s[2], s[2 * n - 1], s[2 * n]
-    if (bx - ax) ^ 2 + (by - ay) ^ 2 < 0.05 * 0.05 then return end
-    local z = ZoneData(mapID)
-    local now, today = time(), tonumber(date("%y%j"))
-    local tol = C.ROUTE_MATCH * C.ROUTE_MATCH
-    local function Near(x1, y1, x2, y2) return (x1 - x2) ^ 2 + (y1 - y2) ^ 2 < tol end
-    for _, r in ipairs(z.routes) do
-        local m = #r
-        if (Near(r[1], r[2], ax, ay) and Near(r[m - 1], r[m], bx, by))
-            or (Near(r[1], r[2], bx, by) and Near(r[m - 1], r[m], ax, ay)) then
-            Credit(r, now, today)
-            return
-        end
-    end
-    local r = { l = 0, tl = now }
-    for i = 1, #s do r[i] = s[i] end
-    Credit(r, now, today)
-    z.routes[#z.routes + 1] = r
-end
-
--- Finish the stroke being recorded: simplify it, and remember a flight's route.
+-- Finish the stroke being recorded: simplify it, and etch a flight into its legs.
 local function CloseStroke()
     local s = cur.stroke
     if not s then return end
     Simplify(s)
-    if s.k == "f" and cur.map then AddFlightRoute(cur.map, s) end
+    if s.k == "f" and cur.map and ns.Flights then ns.Flights.Add(cur.map, s) end
     cur.stroke = nil
 end
 
@@ -885,7 +859,6 @@ function ns.ForgetFields(mapID) ns.Ground.Forget(mapID) end
 
 -- Shared with the other files.
 ns.MergeLanes = MergeLanes
-ns.AddFlightRoute = AddFlightRoute
 ns.CloseStroke = CloseStroke
 ns.FinishShot = FinishShot
 ns.OnDeath = OnDeath
