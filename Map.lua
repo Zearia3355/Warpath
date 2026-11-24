@@ -1526,10 +1526,10 @@ local RUN_LOOK = {
 -- his screenshots): the map art is yellow-gold parchment, so gold or earthy
 -- colours vanish and a cool colour reads. Passes: t = thickness in line
 -- widths, a = alpha, each from two days to well flown. A line width is a
--- fraction of the map's width: on a continent no thinner than on a zone
--- (there lines came out a pixel wide), on a zone map 65% of the old width.
+-- fraction of the map's width: 65% of what was first rendered on both
+-- (Joe found both a little thick in game, test6).
 local AIR_LOOK = {
-    dash = 10, gap = 9, far = 0.0018, zone = 0.0013,
+    dash = 10, gap = 9, far = 0.00117, zone = 0.0013,
     { t0 = 3.2, t1 = 4.4, a0 = 0.75, a1 = 0.95, r = 0.08, g = 0.05, b = 0.10 },
     { t0 = 1.4, t1 = 2.2, a0 = 0.95, a1 = 1.00, r = 0.25, g = 0.45, b = 1.00 },
 }
