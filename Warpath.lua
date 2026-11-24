@@ -1,5 +1,5 @@
 
--- Warpath 3.7.12-test
+-- Warpath 3.7.12-test2
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -79,6 +79,10 @@ local C = {
     ROAD_WALKED     = 0.3,     -- ...counting ground walked at least this much (one day, within about 24 days played)
     ROAD_BUBBLE     = 10,      -- a loop this short all round (stretches) is one road: its weaker side is not drawn
     ROAD_THREAD     = 0.5,     -- a lynchpin stretch stays at least this visible while what it joins is drawn
+    ROAD_STYLE      = "gilt",  -- how roads are drawn: "gilt" (raised gold trim, 3.7.12) or "plate" (flat, 3.7)
+    FACTION_MARK    = "streak", -- past full gold, two tiers: "streak", "enamel", "banded" or "embossed" (trial)
+    GILT_RELIEF     = 1.0,     -- how strongly gilt roads stand out, 0-1 (Joe picked deep)
+    ROAD_SMOOTH     = 3,       -- a road's look is averaged over this many stretches either side
     LN2             = math.log(2),
     LOG2_5          = math.log(5) / math.log(2), -- short memory 1 -> 0.2 (RECENT_MIN) takes this many half-lives
     SILVER_SHARE    = 0.6,     -- silver appears at this share of the gold threshold

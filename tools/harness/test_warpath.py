@@ -570,6 +570,18 @@ class RoadFading(unittest.TestCase):
         self.assertAlmostEqual(held, thread, places=2, msg="day 4: held at the thread level")
         self.assertEqual(middle(14), 0, "day 14: both halves have faded, so the thread goes too")
 
+    def test_a_worn_road_with_a_weak_middle_only_fades(self):
+        # A heavily worn road (faction mark, both tiers) with a weaker stretch
+        # in the middle: as that stretch fades out, nothing beyond it may move
+        # or brighten.
+        # (Threads off: a held thread would keep the middle drawn.)
+        self.fade_days("""
+            ns.C.ROAD_THREAD = 0
+            for x = 10, 19 do Put(x, 30, x + 1, 30, 22) end
+            Put(20, 30, 21, 30, 1.5)
+            for x = 21, 34 do Put(x, 30, x + 1, 30, 22) end
+        """, days=10)
+
     def test_a_joined_network_only_fades(self):
         # two roads joined across ground walked once, a side path beside one,
         # and a scrap: every rule the prototype added, fading together

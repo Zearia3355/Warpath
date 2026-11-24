@@ -334,7 +334,90 @@ end
 
 -- One gold or silver stretch: outline, body, and (once fully gold) a warm
 -- centre stripe that brightens with wear. Returns the stripe, if any.
+-- Gilt roads (3.7.12, C.ROAD_STYLE "gilt"): raised metal, like Blizzard's
+-- gold frame trim. A dark edge, the body, shade on the far side and a warm
+-- highlight on the side facing the light (top left). C.GILT_RELIEF sets how
+-- strongly it stands out (0-1). The highlight stays warm and saturated,
+-- never lightened to white.
+--
+-- Gold arrives in steps you can see rather than a blend through cream: a
+-- pewter road first takes a thread of gold along its lit edge (over the
+-- first 60% of the gilding band), then the body turns gold (from just past
+-- the middle). The edge goes from iron to bronze as it does.
+--
+-- Past full gold, two tiers in your faction's deep colour (C.FACTION_MARK):
+--   "enamel"   a streak inlaid down the middle; at tier 2 it widens and
+--              gains fine gold wires along its edges, like cloisonne
+--   "banded"   the edge turns your faction's colour; at tier 2 a fine
+--              streak down the middle as well
+--   "embossed" the shaded side takes your faction's colour; at tier 2 a
+--              fine streak down the middle as well
+--   "streak"   a fine streak down the middle; at tier 2 the shaded side
+--              takes your faction's colour too (Joe's pick of the two)
+-- Tier 1 is complete at 12 (about two and a half weeks of daily use at the
+-- default gold threshold), tier 2 at 16.4 (about four and a half weeks). worn is the share of the
+-- band past full gold (9.6 to 20).
+local function Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
+    local core = thin * (1.1 + 1.9 * wear)
+    local k = C.GILT_RELIEF
+    local bodyT, lightT = Smooth((g - 0.55) / 0.45), Smooth(g / 0.6)
+    local cr, cg, cb = Lerp(0.74, 0.96, bodyT), Lerp(0.74, 0.76, bodyT), Lerp(0.70, 0.26, bodyT)
+    cr, cg, cb = Lerp(cr, 0.98, worn * 0.25), Lerp(cg, 0.62, worn * 0.25), Lerp(cb, 0.14, worn * 0.25)
+    local hr, hg, hb = Lerp(0.90, 1.00, lightT), Lerp(0.89, 0.84, lightT), Lerp(0.84, 0.36, lightT)
+    hg, hb = Lerp(hg, 0.90, worn), Lerp(hb, 0.48, worn)
+    local dx, dy = x2 - x1, y2 - y1
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len == 0 then return end
+    local nx, ny = -dy / len, dx / len
+    if nx * -1 + ny * 1 < 0 then nx, ny = -nx, -ny end -- towards the light (y grows upwards here)
+    local off = core * 0.22
+    local mode = C.FACTION_MARK
+    local t1, t2 = Clamp((worn - 0.184) / 0.05), Clamp((worn - 0.605) / 0.05)
+    local deep = faction.deep or { faction.r * 0.7, faction.g * 0.7, faction.b * 0.7 }
+    -- the edge: iron, then bronze; banded, it turns your faction's colour
+    local er, eg, eb = Lerp(0.15, 0.24, g), Lerp(0.14, 0.15, g), Lerp(0.13, 0.05, g)
+    if mode == "banded" then
+        er, eg, eb = Lerp(er, deep[1], t1), Lerp(eg, deep[2], t1), Lerp(eb, deep[3], t1)
+    end
+    D.nl = D.nl + 1
+    PutLine(D.nl, 0, "BLEND", core + thin * 0.9, er, eg, eb, 0.9 * alpha, x1, y1, x2, y2)
+    D.nl = D.nl + 1
+    PutLine(D.nl, 1, "BLEND", core, cr, cg, cb, alpha, x1, y1, x2, y2)
+    -- the shade; embossed, it takes your faction's colour
+    local dark = 1 - 0.6 * k
+    local sr, sg, sb = cr * dark, cg * dark * 0.92, cb * dark * 0.8
+    if mode == "embossed" then
+        sr, sg, sb = Lerp(sr, deep[1], t1), Lerp(sg, deep[2], t1), Lerp(sb, deep[3], t1)
+    elseif mode == "streak" then
+        sr, sg, sb = Lerp(sr, deep[1], t2), Lerp(sg, deep[2], t2), Lerp(sb, deep[3], t2)
+    end
+    D.nl = D.nl + 1
+    PutLine(D.nl, 2, "BLEND", core * (0.3 + 0.15 * k), sr, sg, sb, alpha,
+        x1 - nx * off, y1 - ny * off, x2 - nx * off, y2 - ny * off)
+    D.nl = D.nl + 1
+    local stripe = PutLine(D.nl, 3, "BLEND", core * (0.25 + 0.12 * k), hr, hg, hb, alpha,
+        x1 + nx * off, y1 + ny * off, x2 + nx * off, y2 + ny * off)
+    -- the streak down the middle
+    local streak = mode == "enamel" and core * (0.2 * t1 + 0.14 * t2)
+        or mode == "streak" and core * 0.2 * t1 or core * 0.22 * t2
+    if streak > 0 then
+        D.nl = D.nl + 1
+        PutLine(D.nl, 4, "BLEND", streak, deep[1], deep[2], deep[3], alpha, x1, y1, x2, y2)
+        if mode == "enamel" and t2 > 0 then
+            -- fine gold wires either side of the enamel
+            local w, o = core * 0.07, streak * 0.5 + core * 0.04
+            for _, side in ipairs({ 1, -1 }) do
+                D.nl = D.nl + 1
+                PutLine(D.nl, 5, "BLEND", w, 1.00, 0.86, 0.40, t2 * alpha,
+                    x1 + nx * o * side, y1 + ny * o * side, x2 + nx * o * side, y2 + ny * o * side)
+            end
+        end
+    end
+    return stripe, hr, hg, hb
+end
+
 local function RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
+    if C.ROAD_STYLE == "gilt" then return Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2) end
     local core = thin * (1.1 + 1.9 * wear)
     local casing = core + thin * 1.5
     local cr, cg, cb = Gild(g)
@@ -760,6 +843,17 @@ local function DrawGround(D, scene)
     local faint = silver * 0.8           -- roads fade in before silver
     local gStart, gEnd = silver * 1.2, gold * 2 -- the gilding band
     local full = math.max(C.ROAD_FULL, gEnd + 4)
+    if C.ROAD_STYLE == "gilt" then
+        -- Bands by habit (3.7.12), not by how much anyone has played so far:
+        -- a road used every k days played settles at 1 / (1 - 2^(-k/14)).
+        -- At the default gold threshold (2.5): a gold thread from about twice
+        -- a week (5.7, day 6.5 of daily use), fully gold at every 2 to 2.5
+        -- days (9.6, day 12.5; Joe's middle ground), the faction mark's
+        -- two tiers after about 2.5 and 4.5 weeks of daily use (12, 16.4),
+        -- and the band's end at 20 (the ceiling is 20.7). Silver stays at two
+        -- recent days.
+        gStart, gEnd, full = gold * 2.28, gold * 3.82, gold * 8
+    end
     local roadCap = C.LINE_BUDGET - C.ROAD_RESERVE - 3
     local shine = cfg.shimmer
     for _, e in ipairs(scene.zones) do
@@ -776,14 +870,30 @@ local function DrawGround(D, scene)
         -- One piece of a chain, from map point (ax, ay) to (bx, by), at its
         -- strength as of the last visit (and what holds it, if a lynchpin);
         -- drawn at that faded by the time since.
-        local function Piece(long, hold, ax, ay, bx, by)
-            long = long * fade
+        -- look: the strength its colour, width and tier come from, smoothed
+        -- along the road so a whole stretch gilds together (3.7.12); whether
+        -- and how much it shows still comes from its own strength.
+        -- joinA/joinB: that end meets another piece (not a road's dead end).
+        local function Piece(long, look, hold, ax, ay, bx, by, joinA, joinB)
+            long, look = long * fade, (look or long) * fade
             local alpha = math.max(Seen(long), C.ROAD_THREAD * Seen((hold or 0) * fade))
-            if D.nl >= roadCap or alpha <= 0 then return end
             local x1, y1, x2, y2 = ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy)
-            local g = Clamp((long - gStart) / (gEnd - gStart))
-            local wear = Clamp((long - silver) / (full - silver))
-            local worn = long >= gEnd and Clamp((long - gEnd) / (full - gEnd)) or 0
+            if D.nl >= roadCap or alpha <= 0 then return end
+            local g = Clamp((look - gStart) / (gEnd - gStart))
+            local wear = Clamp((look - silver) / (full - silver))
+            local worn = look >= gEnd and Clamp((look - gEnd) / (full - gEnd)) or 0
+            -- Overlap the next piece a little, so the dark edge can't show
+            -- through the outside of a bend as a notch. Only while fully
+            -- drawn: overlapping faded pieces would bead at every join.
+            if alpha >= 0.99 then
+                local dx, dy = x2 - x1, y2 - y1
+                local len = math.sqrt(dx * dx + dy * dy)
+                if len > 0 then
+                    local e = thin * (1.1 + 1.9 * wear) * 0.5 / len
+                    if joinA then x1, y1 = x1 - dx * e, y1 - dy * e end
+                    if joinB then x2, y2 = x2 + dx * e, y2 + dy * e end
+                end
+            end
             local stripe, r, gg, bb = RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
             if stripe and worn > 0.05 and shine then
                 shimmer[#shimmer + 1] = { l = stripe, u = (ax + bx) * 0.5 + (ay + by) * 0.3,
@@ -804,6 +914,23 @@ local function DrawGround(D, scene)
             -- each bend as a short piece blending the two stretches it joins.
             -- Junctions and ends stay exactly where they are.
             local n, vals, hold = #ch.vals, ch.vals, ch.hold or {}
+            -- a chain's end point meets other roads unless it's a dead end
+            local function Joined(c)
+                local k = 0
+                for _ in pairs(adj[c] or {}) do k = k + 1 end
+                return k > 1
+            end
+            -- The look, smoothed along the road: a weighted average of each
+            -- stretch and up to C.ROAD_SMOOTH either side of it.
+            local look, R = {}, C.ROAD_SMOOTH
+            for i = 1, n do
+                local sum, wt = 0, 0
+                for j = math.max(1, i - R), math.min(n, i + R) do
+                    local k = R + 1 - math.abs(i - j)
+                    sum, wt = sum + vals[j] * k, wt + k
+                end
+                look[i] = sum / wt
+            end
             local lx, ly
             for i = 1, n do
                 local sx0, sy0 = px[i], py[i]
@@ -811,9 +938,11 @@ local function DrawGround(D, scene)
                 local ex, ey = px[i + 1], py[i + 1]
                 if i < n then ex, ey = 0.25 * px[i] + 0.75 * px[i + 1], 0.25 * py[i] + 0.75 * py[i + 1] end
                 if lx then
-                    Piece((vals[i - 1] + vals[i]) / 2, math.min(hold[i - 1] or 0, hold[i] or 0), lx, ly, sx0, sy0)
+                    Piece((vals[i - 1] + vals[i]) / 2, (look[i - 1] + look[i]) / 2,
+                        math.min(hold[i - 1] or 0, hold[i] or 0), lx, ly, sx0, sy0, true, true)
                 end
-                Piece(vals[i], hold[i], sx0, sy0, ex, ey)
+                Piece(vals[i], look[i], hold[i], sx0, sy0, ex, ey, i > 1 or Joined(ch.pts[1]),
+                    i < n or Joined(ch.pts[n + 1]))
                 lx, ly = ex, ey
             end
         end
