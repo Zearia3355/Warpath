@@ -813,13 +813,76 @@ class Lingering(unittest.TestCase):
 
     def test_trail_from_just_before_an_area_forms_joins_it(self):
         self.walk(0.20, 0.50, 0.385, 0.50)
-        self.room(0.387, 0.50, 3 * 60, 0.003, 0.02)   # milling about on one side...
+        for i in range(90):                           # milling about on one side, doubling back...
+            self.go(0.387 + 0.003 * (i % 3 - 1), 0.49 + 0.02 * ((i // 3) % 2))
+            self.go(0.387, 0.50)
         self.walk(0.387, 0.50, 0.52, 0.50)            # ...off east for a bit...
         self.room(0.52, 0.50, 90, 0.003, 0.01)
         self.walk(0.52, 0.50, 0.42, 0.50)             # ...and back in from the east
         self.room(0.42, 0.50, 5 * 60, 0.012, 0.02)    # ...then long enough beside it to form
         self.assertEqual(self.areas(), 1)
         self.assertLess(min(self.hull_xs()), 0.392, "the earlier wandering didn't join")
+
+    def test_a_corridor_walked_out_and_back_stays_a_line(self):
+        # Joe, test4: an area spread up the hallway. A short trip that only
+        # walks out along a corridor and straight back isn't lingering.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.46, 0.50)             # straight up the corridor...
+        self.walk(0.46, 0.50, 0.40, 0.50)             # ...and straight back
+        self.quest(0.40, 0.50, 60, phase=2.0)
+        self.assertEqual(self.areas(), 1)
+        self.assertLess(max(self.hull_xs()), 0.44, "the corridor joined the area")
+
+    def test_a_minute_inside_an_old_area_reopens_it(self):
+        # Joe, test4: re-entering an old area didn't refresh it.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.80, 0.30)
+        self.room(0.80, 0.30, 12 * 60, 0.003, 0.003)  # away longer than 10 minutes
+        self.walk(0.80, 0.30, 0.40, 0.50)
+        for _ in range(20):                           # through it, briefly: not reopened
+            self.go(0.40, 0.50)
+        self.assertFalse(self.live())
+        self.quest(0.40, 0.50, 70, phase=1.0)         # a minute there: reopened
+        self.assertTrue(self.live())
+        self.assertEqual(self.wow.eval(f"WarpathDB.maps[{self.MAP}].areas[1]") is not None, True)
+        self.assertEqual(self.visits(1), 2)
+
+    def test_the_visit_list_reads_like_visits(self):
+        # Stepping in and out at the edge made a list of "1 min" entries.
+        out = self.wow.eval("""(function()
+            local a = { v = {
+                { s = 0, e = 600, t = 500 }, { s = 650, e = 700, t = 40 }, { s = 800, e = 860, t = 50 },
+                { s = 3000, e = 3300, t = 280 }, { s = 3320, e = 3330, t = 10 },
+                { s = 10000, e = 10050, t = 50 } } }
+            local r = {}
+            for _, v in ipairs(ns.Linger.Visits(a)) do r[#r + 1] = v.s .. ':' .. v.t end
+            return table.concat(r, ' ')
+        end)()""")
+        self.assertEqual(out, "0:590 3000:340")
+
+    def test_inside_the_area_you_are_in_only_your_last_moments_show(self):
+        # Joe, test4: lingering left a fresh scribble of the last minutes
+        # inside the area. Line older than the join lag (45 s) is hidden there.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 8 * 60)
+        self.assertTrue(self.live())
+        recent = self.wow.eval("""(function()
+            local out, now = {}, time()
+            for _, s in ipairs(WarpathDB.maps[1448].strokes) do
+                for i = 1, #s / 2 do
+                    if ns.PointTime(s, i) >= now - 50 then out[#out + 1] = s[2 * i - 1] .. ',' .. s[2 * i] end
+                end
+            end
+            return table.concat(out, ';')
+        end)()""")
+        pts = [tuple(float(v) for v in p.split(",")) for p in recent.split(";")]
+        pts = [(x * 1002, y * 668) for x, y in pts] + [(self.wow.H.player.x * 1002, self.wow.H.player.y * 668)]
+        path = [(a[0], a[1], b[0], b[1]) for a, b in zip(pts, pts[1:])]
+        stray = [(x, y) for x, y in self.inside_ink(self.outline_px(), self.lines())
+                 if min(Steadiness.dist(x, y, sg) for sg in path) > 1.5]
+        self.assertEqual(stray, [], "older line drawn inside the area you're in")
 
     def test_the_hidden_trail_stays_hidden_when_you_leave(self):
         # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes

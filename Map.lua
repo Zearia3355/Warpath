@@ -296,16 +296,8 @@ local function TagEnter(self)
     if not a then return end
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
     GameTooltip:AddLine(self.text:GetText() .. " here", 1, 0.82, 0)
-    -- visits under 2 minutes apart read as one (a step outside and back)
-    local shown = {}
-    for _, v in ipairs(a.v) do
-        local last = shown[#shown]
-        if last and v.s - last.e < 120 then
-            last.e, last.t = v.e, last.t + (v.t or 0)
-        else
-            shown[#shown + 1] = { s = v.s, e = v.e, t = v.t or 0 }
-        end
-    end
+    -- visits as a person would tell them (Linger.Visits merges and folds)
+    local shown = ns.Linger and ns.Linger.Visits(a) or {}
     for i = math.max(1, #shown - 5), #shown do
         local v = shown[i]
         local mins = math.max(1, math.floor(v.t / 60 + 0.5))
@@ -1084,10 +1076,13 @@ end
 -- Each zone's areas as drawn now, the clips they put on the trail, and
 -- their visits in time order (for holding links). Kept on the scene entry.
 local function AreaScene(e, now, life)
-    local list, solid, dash, visits, hide = {}, {}, {}, {}, {}
+    local list, solid, dash, visits, hide, settled = {}, {}, {}, {}, {}, {}
     -- Linger.lua is new in 3.8: after a /reload without a restart the game
     -- hasn't loaded it, so draw the trail without areas rather than fail
-    if not Linger then e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide } return end
+    if not Linger then
+        e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide, settled = settled }
+        return
+    end
     local live = Linger.Live()
     for _, a in ipairs(e.z.areas or {}) do
         local isLive = a == live
@@ -1101,7 +1096,13 @@ local function AreaScene(e, now, life)
             -- you're there, fades out over a minute after you leave.
             dash[#dash + 1] = { poly = poly, box = box, k = 0 }
             if not isLive then
-                solid[#solid + 1] = { poly = poly, box = box, k = 1 - Smooth((now - a.e) / 60) }
+                local c = { poly = poly, box = box, k = 1 - Smooth((now - a.e) / 60) }
+                solid[#solid + 1], settled[#settled + 1] = c, c
+            else
+                -- in the area you're in, your line shows only until those
+                -- steps would have joined it (LAG): you see your last
+                -- moments there, not a fresh scribble of the last minutes
+                settled[#settled + 1] = { poly = poly, box = box, k = 0 }
             end
             for _, v in ipairs(a.v) do visits[#visits + 1] = { s = v.s, e = v.e, age = age, a = a } end
             -- Every step taken during a visit joined the area, so trail from
@@ -1119,7 +1120,7 @@ local function AreaScene(e, now, life)
         end
     end
     table.sort(visits, function(x, y) return x.s < y.s end)
-    e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide }
+    e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide, settled = settled }
 end
 
 -- A link between two different areas stays at least as visible as the
@@ -1178,8 +1179,20 @@ local function DrawWalkLine(D, scene)
                     if t1 < cutoff and t2 > t1 then -- trim the piece older than the line
                         local k = (cutoff - t1) / (t2 - t1)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
+                        t1 = cutoff
                     end
-                    Ink(D, p, e.lg.solid, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
+                    -- older than the join lag: settled, so hidden inside the area you're in too
+                    local settle = now - (Linger and Linger.LAG or 45)
+                    if t2 <= settle then
+                        Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
+                    elseif t1 >= settle or t2 <= t1 then
+                        Ink(D, p, e.lg.solid, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
+                    else
+                        local k = (settle - t1) / (t2 - t1)
+                        local mx, my = ax + (bx - ax) * k, ay + (by - ay) * k
+                        Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, mx, my)
+                        Ink(D, p, e.lg.solid, 7, thick, faction.r, faction.g, faction.b, 0.95, mx, my, bx, by)
+                    end
                 end
             end
         end

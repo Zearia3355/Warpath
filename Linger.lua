@@ -24,6 +24,14 @@ local SPAN_YD = 1200               -- an area stops growing past this size
 local GAP = 600                    -- a 10-minute gap (logged off, loading) ends a visit
 local PAD = 0.010                  -- the outline sits this far outside the ground covered (on the map)
 local ZONE_YD = 4000               -- a map's width when the game can't say
+-- Only ground you milled about joins an area by a short trip or as recent
+-- trail; ground you travelled through (a corridor) stays a line (Joe, test4). Travelling:
+-- over MILL_T seconds either side you got more than MILL_STRAIGHT of the
+-- way you walked, and walked at least MILL_YD.
+local MILL_T, MILL_STRAIGHT, MILL_YD = 12, 0.75, 25
+local TRIP_WIDE_YD = 10            -- a trip narrower than this went along a corridor and back
+local REOPEN_T = 60                -- a minute inside an older area reopens it (passing through doesn't)
+local VISIT_MERGE, VISIT_MIN = 600, 120 -- the visit list: under 10 min apart is one visit; under 2 min folds in
 
 local st = { win = {}, pend = {} } -- live state; nothing here is saved
 local outlines = setmetatable({}, { __mode = "k" })
@@ -251,6 +259,43 @@ local function Join(a, x, y)
     S.dirty = true
 end
 
+-- Were you travelling at point i of a time-ordered list of { x, y, t }?
+local function Moving(list, i)
+    local p, a, b = list[i], i, i
+    while a > 1 and p.t - list[a - 1].t <= MILL_T do a = a - 1 end
+    while b < #list and list[b + 1].t - p.t <= MILL_T do b = b + 1 end
+    -- each side on its own: an out-and-back turns where both sides are straight
+    local function Straight(from, to)
+        if from == to then return false end
+        local path = 0
+        for j = from + 1, to do
+            path = path + math.sqrt((list[j].x - list[j - 1].x) ^ 2 + ((list[j].y - list[j - 1].y) * ASPECT) ^ 2)
+        end
+        local net = math.sqrt((list[to].x - list[from].x) ^ 2 + ((list[to].y - list[from].y) * ASPECT) ^ 2)
+        return path > R(MILL_YD) / 2 and net > path * MILL_STRAIGHT
+    end
+    return Straight(a, i) or Straight(i, b)
+end
+
+-- Did a trip only go out along a line and back? Every point lies within
+-- TRIP_WIDE_YD of the line from where it started to its furthest point.
+local function Narrow(pts)
+    local o, far, fd = pts[1], nil, 0
+    if not o then return true end
+    for _, p in ipairs(pts) do
+        local d = (p.x - o.x) ^ 2 + ((p.y - o.y) * ASPECT) ^ 2
+        if d > fd then far, fd = p, d end
+    end
+    if not far then return true end
+    local dx, dy = far.x - o.x, (far.y - o.y) * ASPECT
+    local L = math.sqrt(dx * dx + dy * dy)
+    for _, p in ipairs(pts) do
+        local px, py = p.x - o.x, (p.y - o.y) * ASPECT
+        if math.abs(px * dy - py * dx) / L > R(TRIP_WIDE_YD) then return false end
+    end
+    return true
+end
+
 local function Leave()
     st.live, st.pend = nil, {}
     S.dirty = true
@@ -258,7 +303,7 @@ end
 
 local function Reset()
     if st.live then Leave() end
-    st.win, st.pend, st.map, st.clock, st.trip = {}, {}, nil, nil, nil
+    st.win, st.pend, st.map, st.clock, st.trip, st.inside = {}, {}, nil, nil, nil, nil
 end
 
 local function Begin(a, startWall, now, secs)
@@ -278,11 +323,15 @@ local function JoinRecent(z, a, cx, cy, now)
         local s = z.strokes[si]
         if s.e < now - RECENT then break end
         if not s.k then
-            for i = #s / 2, 1, -1 do
+            local list = {}
+            for i = 1, #s / 2 do
                 local t = PointTime(s, i)
-                if t and t < now - RECENT then break end
-                local x, y = s[2 * i - 1], s[2 * i]
-                if (x - cx) ^ 2 + ((y - cy) * ASPECT) ^ 2 <= reach * reach then Join(a, x, y) end
+                if t and t >= now - RECENT then list[#list + 1] = { x = s[2 * i - 1], y = s[2 * i], t = t } end
+            end
+            for i, p in ipairs(list) do
+                if (p.x - cx) ^ 2 + ((p.y - cy) * ASPECT) ^ 2 <= reach * reach and not Moving(list, i) then
+                    Join(a, p.x, p.y)
+                end
             end
         end
     end
@@ -326,7 +375,12 @@ local function Linger(z, x, y, now, clock, dt)
     end
     if Outside(a.h, x, y) > R(MARGIN_YD) or Span(a.h) > R(SPAN_YD) then
         -- the walk out hasn't joined; keep it in case you come straight back
-        local trip = Span(a.h) <= R(SPAN_YD) and { a = a, t = clock, pts = pend } or nil
+        -- (only the ground outside it: the steps inside are inside anyway)
+        local outside = {}
+        for _, p in ipairs(pend) do
+            if Outside(a.h, p.x, p.y) > 0 then outside[#outside + 1] = p end
+        end
+        local trip = Span(a.h) <= R(SPAN_YD) and { a = a, t = clock, pts = outside } or nil
         Leave()
         st.trip = trip
         st.win = { { x = x, y = y, t = clock } }
@@ -355,8 +409,9 @@ local function Watch(z, x, y, now, clock)
     for i = #z.areas, 1, -1 do
         local a = z.areas[i]
         if now - a.e <= REENTER and Outside(a.h, x, y) == 0 then
-            -- straight back from a short trip: the ground it covered joins
-            if st.trip and st.trip.a == a then
+            -- straight back from a short trip: its ground joins, unless it
+            -- only went out along a line and back (a corridor stays a line)
+            if st.trip and st.trip.a == a and not Narrow(st.trip.pts) then
                 for _, p in ipairs(st.trip.pts) do Join(a, p.x, p.y) end
             end
             st.trip = nil
@@ -366,6 +421,26 @@ local function Watch(z, x, y, now, clock)
             Begin(a, now, now, 0)
             return
         end
+    end
+    -- inside an older area still on your trail: a minute there reopens it;
+    -- passing through doesn't
+    -- (inside its outline; a few seconds out at the edge don't restart the count)
+    local life, inside = TrailSeconds(), nil
+    for i = #z.areas, 1, -1 do
+        local a = z.areas[i]
+        if now - a.e <= life and Outside(a.h, x, y) <= PAD then inside = a break end
+    end
+    if inside then
+        if st.inside ~= inside then st.inside, st.insideT, st.insideW = inside, clock, now end
+        st.insideSeen = clock
+        if clock - st.insideT >= REOPEN_T then
+            local since = clock - st.insideT
+            st.inside = nil
+            Begin(inside, st.insideW, now, since)
+            return
+        end
+    elseif st.inside and clock - (st.insideSeen or 0) > 15 then
+        st.inside = nil
     end
     local win = st.win
     local last = win[#win]
@@ -413,8 +488,34 @@ local function Step(mapID, x, y, mode)
     end
 end
 
+-- An area's visits as a person would tell them: visits under 10 minutes
+-- apart are one, and anything under 2 minutes folds into its neighbour
+-- (stepping in and out at the edge made a list of "1 min" entries).
+local function Visits(a)
+    local out = {}
+    for _, v in ipairs(a.v or {}) do
+        local last = out[#out]
+        if last and v.s - last.e < VISIT_MERGE then
+            last.e, last.t = math.max(last.e, v.e), last.t + (v.t or 0)
+        else
+            out[#out + 1] = { s = v.s, e = v.e, t = v.t or 0 }
+        end
+    end
+    local i = 1
+    while i <= #out and #out > 1 do
+        if out[i].t < VISIT_MIN then
+            local n = out[i > 1 and i - 1 or i + 1]
+            n.t, n.s, n.e = n.t + out[i].t, math.min(n.s, out[i].s), math.max(n.e, out[i].e)
+            table.remove(out, i)
+        else
+            i = i + 1
+        end
+    end
+    return out
+end
+
 ns.Linger = {
-    LAG = LAG,
+    LAG = LAG, Visits = Visits,
     Step = Step, Reset = Reset, Outline = Outline, Clip = Clip, InPoly = InPoly,
     Live = function() return st.live end,
     State = function() return st end, -- for tests
