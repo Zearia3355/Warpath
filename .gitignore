@@ -14,3 +14,6 @@ __pycache__/
 Thumbs.db
 desktop.ini
 *.swp
+
+# Claude Code local settings: machine paths (the WoW install folder)
+.claude/settings.local.json
