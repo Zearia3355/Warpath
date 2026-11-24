@@ -36,7 +36,7 @@ Branch `roads-snap` (commits `d923548` to `bbf735e`), not merged to `main`, noth
 - Prune of one-day stretches and the per-stretch "walked today" fields (`r`, `tr`): storage savings proposed on 2026-11-23, not built.
 - Merge `roads-snap` into `main`, then the normal release checklist.
 
-## Trail rework (3.8.0): installed as 3.8.0-test5, watching in game
+## Trail rework (3.8.0): installed as 3.8.0-test6, watching in game
 
 Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `how-it-works.md` (Trail rework). 3.8.0 is "Roads, trails and flights": the roads rework (3.7.12 prototype) and the coming flight-path rework ship with it (Joe, 2026-11-24).
 
@@ -68,11 +68,11 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 - How far the Forever world map zooms (arrows are judged zoomed in).
 - Real data: ask for the friend's Silithus `SavedVariables\Warpath.lua`; none of Joe's characters has a messy trail.
 
-## Flight legs (3.8.0): built, not in the game yet
+## Flight legs (3.8.0): installed as 3.8.0-test6, watching in game
 
 Design in `how-it-works.md` (Flight legs). New file `Flights.lua` (**needs a full game restart**).
 
-- Joe in game (test5): warm gold dashes were nearly invisible on the parchment. Now royal blue with a dark casing, picked from renders over his Kalimdor and Barrens screenshots; zone maps at 65% width. Check in the next test build: dark zones (Felwood, Ashenvale), where legs cross water, and next to blue (Alliance) kill marks.
+- Joe in game (test5): warm gold dashes were nearly invisible on the parchment. Now royal blue with a dark casing, picked from renders over his Kalimdor and Barrens screenshots; zone maps at 65% width. Installed as 3.8.0-test6 (backup `tools/out/savedvars-backup-2026-11-24-test6/`). Check: dark zones (Felwood, Ashenvale), where legs cross water, and next to blue (Alliance) kill marks.
 - Joe: does a leg build up visibly over a week of normal flying? Real data so far has 3 days, so only the trunk shows.
 - Saved data grows: Lethality's routes become 88 legs, 3,868 points (roughly 200 KB on a 1.8 MB file, estimated, not measured). Storing `t` and `d` once per run of points would halve it if it matters.
 - Untested in game: a flight that crosses onto the continent map between zones (Kalimdor 1414) lays a few scrap legs there; they're flown once and stay hidden.

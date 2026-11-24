@@ -24,7 +24,7 @@ Master switch: `cfg.shown` (shared by all characters). Map button left-click, `/
 - **Footsteps were removed in 3.7.6** (`StepLook`, `STEP_*` gone). Road "walked today" is still recorded (`/warpath zone`).
 - History of this one feature, for context (it changed six times in two days): 3.4 5-min line fading into footsteps → 3.5 trail-length setting (2–24 h) → 3.6.3 footsteps fade over trail length → 3.7.5 15-min line + two-tone footsteps (jumped; rejected) → 3.7.6 dashes 5–15 min, no footsteps, length setting removed (Joe picked "option 2" from renders) → 3.7.7 length setting back, 15 min–24 h, default 1 h.
 
-### Trail rework (3.8.0) — built on branch `trail-areas`, installed as 3.8.0-test5 on 2026-11-24 (with the flight legs)
+### Trail rework (3.8.0) — built on branch `trail-areas`, installed as 3.8.0-test5 on 2026-11-24 (with the flight legs), test6 the same day (flight legs recoloured)
 
 Why: on a friend's single hour of questing in Silithus, the trail was a red scribble. Every step is drawn, all dashes look alike, and the fade is linear over the trail length, so age can't be read ("where was I" works, "when" doesn't). The intent, in Joe's words: show recent travel, be readable in time, and stay out of the way of using the map to navigate. Picked from Python concept sketches on synthetic data (`trail_sketch*.py`, scratchpad only, not in the repo). Built in `Linger.lua` (recording, outline geometry, clipping) and `Map.lua` (`DrawToday`: `AreaScene`, `DrawWalkLine`, `DrawTrail`/`StrokeDashes`, `DrawAreas`, `DrawHere`, tags). Thresholds are first guesses; tune on real data.
 
