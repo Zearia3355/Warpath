@@ -97,7 +97,7 @@ Moving a hand-copied install to the CurseForge app: saved data lives in `WTF`, n
 3. In one pass: update `docs/how-it-works.md` (feature state + decision log), `CHANGELOG.txt`, the release's `NEW_IN` entry in `Options.lua` (plain, one line per change, for players), and `docs/open-items.md` (close checks Joe has confirmed, add new ones).
 4. Bump `## Version:` in `Warpath.toc`, and the comment at the top of `Warpath.lua` to match.
 5. Release summary for Joe: files changed, saved-data impact, whether `/reload` is enough or a restart is needed, and any calls you made yourself.
-6. Commit, then on Joe's go-ahead: tag the bare version, push the tag (CI publishes), and run `tools/install.ps1`.
+6. Commit, then on Joe's go-ahead: back up SavedVariables, tag the bare version, push the tag (CI publishes). Watch the run until the log shows the CurseForge upload "Success", then until the version is listed on the CurseForge files page (about 15–20 min of review). Joe installs releases from the CurseForge app (from 3.8.0); run `tools/install.ps1` only if he asks. Test builds still install by script.
 
 ---
 
