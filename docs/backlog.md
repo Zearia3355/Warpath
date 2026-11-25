@@ -24,7 +24,19 @@ Template:
 
 ## Bugs
 
-_None reported outside the work in `open-items.md`. The guild-sharing-in-battlegrounds problem is an open investigation there._
+_The guild-sharing-in-battlegrounds problem is an open investigation in `open-items.md`._
+
+### Several guildmates killing one enemy: duplicate lines and pins
+- From: Joe, 2026-11-24
+- Status: new
+- What: when several guildmates kill the same person, everyone gets duplicates and chat spam. Expected: one kill, said once.
+- Notes (from the code, 3.8.2):
+  - Every guildmate who credits the kill sends their own `K` message (`Record.lua` `Share("K", …)`), each naming the same victim.
+  - The receiver (`Share.lua` `Receive`) drops only an identical message from the same sender (GUILD plus PARTY/RAID copies). Different senders all pass: each prints a chat line (`Feats.GuildKillLine`), adds a pin (`z.gmarks`) at nearly the same spot, and adds to that guildmate's haze layer.
+  - Your own kill of that enemy isn't checked against incoming ones either, so you get your line plus a line per guildmate.
+  - Fix outline (receiver-side, so it works with guildmates on older versions): group kills of the same victim on the same map within ~30 s. The first report prints and pins; later ones fold into it (one line naming everyone, e.g. "A and B killed Thrall", or silent) and add no pin. Skip a guildmate's report of a victim you just killed yourself. Senders that send no victim name (before 3.7): group by map, a short distance and ~10 s.
+  - To decide: haze. Each guildmate's layer counting the kill is arguably right (it's their fight), and the combined haze already damps the rest (0.75 × strongest + 0.15 × others).
+  - Ask Joe: is the spam chat lines, pins, or both? Group or raid, or just guild?
 
 ---
 
