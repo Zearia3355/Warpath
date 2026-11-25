@@ -42,6 +42,12 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Area time labels are hard to read
+- From: Joe, 2026-11-24
+- Status: needs a design
+- What: the time labels over lingering areas ("23m") are hard to see on the map.
+- Notes: from the code (`Map.lua` `GetTag`, `PlaceTag`, `AreaTag`): `GameFontNormalSmall`, no outline; colour is the area's own colour moved 35% towards gold, so a faction red or a faded dusk brown on the yellow parchment, low contrast; alpha follows the area's fade (+0.2), so older areas' labels go dim too. Options to render for Joe over his screenshots: an outline or heavier shadow on the text; a dark Blizzard backing behind it; a stronger, more saturated colour; a slightly larger font; fading the label less than the outline. Keep it warm (brightness from saturation, never towards white) and small.
+
 ### Zone standing on the zone's own map
 - From: Joe, 2026-11-24
 - Status: needs a design
