@@ -26,6 +26,12 @@ Template:
 
 _The guild-sharing-in-battlegrounds problem is an open investigation in `open-items.md`._
 
+### Ground warnings vanish before you can read them
+- From: Joe, 2026-11-25
+- Status: wanted (cause found)
+- What: the on-screen "CONTESTED GROUND" (also "DANGEROUS GROUND", "YOUR HUNTING GROUND") warning disappears far too fast, like the kill big text. The kill text is meant to be a flash; this one is meant to be read.
+- Notes: confirmed in the code. `Ground.lua` shows it through `ns.Overlay.Show`, the same overlay as the kill big text, whose timing is fixed in `Overlay.lua`: 0.15 s punch, 1.2 s hold, 0.4 s fade, under 2 s in all. The subline is a full sentence ("12 kills, 8 deaths here. Guildmates have died here 3 times."). Fix: let `Overlay.Show` take its own hold, and give ground warnings a reading-length hold (roughly 4–6 s, or scaled to the text's length), leaving kill text as it is. Check it doesn't sit over a kill's big text (ground warnings already wait for that). Present since 3.7.0.
+
 ### Several guildmates killing one enemy: duplicate lines and pins
 - From: Joe, 2026-11-24
 - Status: new
