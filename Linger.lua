@@ -12,7 +12,8 @@ local ASPECT = 668 / 1002          -- every zone map is 3:2; distances are in ma
 -- few times less ground than a zone map, so fractions of the map made city
 -- areas several times tighter. Each map's width in yards comes from the game.
 local FORM_T = 240                 -- 4 min in one place...
-local FORM_YD = 150                -- ...within this of its centre: an area forms
+local FORM_YD = 225                -- ...within this of its centre: an area forms (3.8.3: was 150;
+                                   -- questing in the open world roams 200-330 yd every 4 min)
 local FORM_N = 6                   -- and you moved about (standing still isn't lingering)
 local LAG = 45                     -- a step joins the area 45 s later, if you're still in it
 local SHOW = 3                     -- inside the area you're in, only this much of your line shows (3.8.2)
@@ -22,6 +23,10 @@ local TRIP_T, TRIP_YD = 120, 150   -- ...but back within 2 min, never further ou
 local RECENT = 600                 -- when an area forms, your last 10 min of trail near it joins
 local REENTER = 600                -- stepping back inside within 10 min reopens the area
 local SPAN_YD = 1200               -- an area stops growing past this size
+-- A city (a map under CITY_YD wide: the Undercity is about 960) is denser:
+-- 225 yd there swallowed the corridor to the lift (Joe's Undercity data),
+-- so cities keep the tighter radius and a smaller cap (3.8.3).
+local CITY_YD, CITY_FORM_YD, CITY_SPAN_YD = 2000, 150, 400
 local GAP = 600                    -- a 10-minute gap (logged off, loading) ends a visit
 local PAD = 0.010                  -- the outline sits this far outside the ground covered (on the map)
 local ZONE_YD = 4000               -- a map's width when the game can't say
@@ -50,6 +55,9 @@ local function MapYards(mapID)
     return w
 end
 local function R(yd) return yd / (st.yd or ZONE_YD) end -- yards to map widths, on this map
+local function City() return (st.yd or ZONE_YD) < CITY_YD end
+local function FormR() return R(City() and CITY_FORM_YD or FORM_YD) end
+local function SpanR() return R(City() and CITY_SPAN_YD or SPAN_YD) end
 
 ---------------------------------------------------------------------------
 -- Geometry, on (x, y * ASPECT) so distances are true on the map
@@ -258,6 +266,64 @@ local function Join(a, x, y)
     a.h = Hull(flat)
     a.w = (a.w or 0) + 1
     S.dirty = true
+    return true
+end
+
+-- Do two convex hulls' edges cross? (the one way to overlap with no
+-- corner of either inside the other)
+local function Crosses(h, g)
+    local n, m = #h / 2, #g / 2
+    for i = 1, n do
+        local j = i % n + 1
+        local ax, ay, bx, by = h[2 * i - 1], h[2 * i] * ASPECT, h[2 * j - 1], h[2 * j] * ASPECT
+        for k = 1, m do
+            local l = k % m + 1
+            local cx, cy, dx, dy = g[2 * k - 1], g[2 * k] * ASPECT, g[2 * l - 1], g[2 * l] * ASPECT
+            if Cross(ax, ay, bx, by, cx, cy) * Cross(ax, ay, bx, by, dx, dy) < 0
+                and Cross(cx, cy, dx, dy, ax, ay) * Cross(cx, cy, dx, dy, bx, by) < 0 then return true end
+        end
+    end
+    return false
+end
+
+-- How far apart two hulls are; 0 if they overlap. For convex shapes the
+-- nearest points are a corner of one and an edge of the other.
+local function Gap(h, g)
+    local best = math.huge
+    for i = 1, #h, 2 do best = math.min(best, Outside(g, h[i], h[i + 1])) end
+    for i = 1, #g, 2 do best = math.min(best, Outside(h, g[i], g[i + 1])) end
+    if best > 0 and Crosses(h, g) then best = 0 end
+    return best
+end
+
+-- The area you're in takes in any recent area its outline touches (3.8.3):
+-- questing that wandered made side-by-side areas that never joined, so an
+-- hour in one hub read as three blobs. Only while you're in it, so an area
+-- grows only the way it already does as you play; never past the size cap.
+local function Merge(z, a, now)
+    local life = TrailSeconds()
+    for i = #z.areas, 1, -1 do
+        local b = z.areas[i]
+        if b ~= a and now - b.e <= life and Gap(a.h, b.h) <= 2 * PAD then
+            local flat = {}
+            for k = 1, #a.h do flat[#flat + 1] = a.h[k] end
+            for k = 1, #b.h do flat[#flat + 1] = b.h[k] end
+            local h = Hull(flat)
+            if Span(h) <= SpanR() then
+                a.h = h
+                a.w = (a.w or 0) + (b.w or 0) + 1
+                -- visits in time order; the one being recorded stays last
+                local live = table.remove(a.v)
+                for _, v in ipairs(b.v or {}) do a.v[#a.v + 1] = v end
+                table.sort(a.v, function(p, q) return p.s < q.s end)
+                a.v[#a.v + 1] = live
+                table.remove(z.areas, i)
+                if st.inside == b then st.inside = nil end
+                if st.trip and st.trip.a == b then st.trip.a = a end
+                S.dirty = true
+            end
+        end
+    end
 end
 
 -- Were you travelling at point i of a time-ordered list of { x, y, t }?
@@ -319,7 +385,7 @@ end
 -- Your trail from the last RECENT seconds within reach of where an area
 -- formed joins it: the wandering before the four minutes were up.
 local function JoinRecent(z, a, cx, cy, now)
-    local reach = R(FORM_YD)
+    local reach = FormR()
     for si = #z.strokes, 1, -1 do
         local s = z.strokes[si]
         if s.e < now - RECENT then break end
@@ -346,12 +412,13 @@ local function Form(z, now, clock, cx, cy)
     for _, p in ipairs(win) do flat[#flat + 1] = p.x flat[#flat + 1] = p.y end
     for i = #z.areas, 1, -1 do
         local a = z.areas[i]
-        if now - a.e <= life and Span(a.h) < R(SPAN_YD) then
+        if now - a.e <= life and Span(a.h) < SpanR() then
             for _, p in ipairs(win) do
                 if Outside(a.h, p.x, p.y) <= R(MARGIN_YD) then
                     Begin(a, now - secs, now, secs)
                     for _, q in ipairs(win) do Join(a, q.x, q.y) end
                     JoinRecent(z, a, cx, cy, now)
+                    Merge(z, a, now)
                     return
                 end
             end
@@ -361,6 +428,7 @@ local function Form(z, now, clock, cx, cy)
     z.areas[#z.areas + 1] = a
     Begin(a, now - secs, now, secs)
     JoinRecent(z, a, cx, cy, now)
+    Merge(z, a, now)
 end
 
 local function Linger(z, x, y, now, clock, dt)
@@ -374,23 +442,25 @@ local function Linger(z, x, y, now, clock, dt)
     if not last or math.abs(x - last.x) + math.abs(y - last.y) >= C.MIN_STEP then
         pend[#pend + 1] = { x = x, y = y, t = clock }
     end
-    if Outside(a.h, x, y) > R(MARGIN_YD) or Span(a.h) > R(SPAN_YD) then
+    if Outside(a.h, x, y) > R(MARGIN_YD) or Span(a.h) > SpanR() then
         -- the walk out hasn't joined; keep it in case you come straight back
         -- (only the ground outside it: the steps inside are inside anyway)
         local outside = {}
         for _, p in ipairs(pend) do
             if Outside(a.h, p.x, p.y) > 0 then outside[#outside + 1] = p end
         end
-        local trip = Span(a.h) <= R(SPAN_YD) and { a = a, t = clock, pts = outside } or nil
+        local trip = Span(a.h) <= SpanR() and { a = a, t = clock, pts = outside } or nil
         Leave()
         st.trip = trip
         st.win = { { x = x, y = y, t = clock } }
         return
     end
+    local grew
     while pend[1] and clock - pend[1].t >= LAG do
         local p = table.remove(pend, 1)
-        Join(a, p.x, p.y)
+        grew = Join(a, p.x, p.y) or grew
     end
+    if grew then Merge(z, a, now) end
 end
 
 local function Watch(z, x, y, now, clock)
@@ -460,7 +530,7 @@ local function Watch(z, x, y, now, clock)
     local cx, cy = 0, 0
     for _, p in ipairs(win) do cx, cy = cx + p.x, cy + p.y end
     cx, cy = cx / #win, cy / #win
-    local r = R(FORM_YD)
+    local r = FormR()
     for _, p in ipairs(win) do
         if (p.x - cx) ^ 2 + ((p.y - cy) * ASPECT) ^ 2 > r * r then return end
     end

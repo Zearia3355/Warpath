@@ -84,6 +84,8 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 
 **Done for 3.8.0:** `NEW_IN`, changelog, flight legs included.
 
+- Joe (Plaguelands data, after 3.8.2): the trail was still a mess, with no big central area. Built 3.8.3-test1 on branch `areas-merge` (installed 2026-11-24, backup `tools/out/savedvars-backup-2026-11-24-3.8.3-test1/`): forming radius 225 yd on zone maps, 150 yd and a 400 yd cap in cities, touching areas merge. Replayed on his data: Eastern Plaguelands 6 areas instead of 4, the middle questing one area; the Undercity unchanged (one area on the ring). Tests `test_side_by_side_areas_become_one`, `test_far_apart_areas_stay_apart`, `test_a_city_keeps_the_tighter_radius`, each mutation-checked. Joe to judge in game: questing hubs, towns (do small town stops now form areas more readily?), cities. Not yet: `NEW_IN` and changelog for 3.8.3.
+
 **Open questions**
 - Hide small areas from standing in town (auction house, mail), or at least their labels, especially in neutral towns.
 - A long slow drift (grinding along a road) caps an area at 0.30 and starts a new one: may look like a chain of blobs. Judge on real data.

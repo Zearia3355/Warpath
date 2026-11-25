@@ -164,7 +164,10 @@ class NewIn(unittest.TestCase):
 
     def test_opens_after_a_release_in_the_same_series(self):
         # The case 3.8.1 is for: before, an earlier 3.8 build kept it shut.
-        version = Wow().eval("ns.VERSION").split("-")[0]
+        full = Wow().eval("ns.VERSION")
+        if "-" in full:
+            self.skipTest("a test build; its release needs an entry before shipping")
+        version = full.split("-")[0]
         self.assertTrue(self.shown(self.booted(version + "-test1")))
 
     def test_opens_after_a_feature_release(self):
@@ -957,6 +960,48 @@ class Lingering(unittest.TestCase):
         other.walk(0.20, 0.50, 0.40, 0.50)
         other.room(0.40, 0.50, 6 * 60, 0.06, 0.08)
         self.assertEqual(other.areas(), 0)
+
+    def test_side_by_side_areas_become_one(self):
+        # Joe, Plaguelands data (3.8.3): questing that wandered made areas
+        # next to each other that never joined. The area you're in takes in
+        # one its outline touches.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)                # area one: x about 0.375-0.425
+        self.walk(0.40, 0.50, 0.50, 0.50)             # 200 yd east, too far to reopen it
+        self.quest(0.50, 0.50, 6 * 60, phase=1.0)     # area two forms on its own
+        self.assertEqual(self.areas(), 2)
+        self.quest(0.49, 0.50, 3 * 60, phase=2.0)     # area two creeps west...
+        self.quest(0.465, 0.50, 3 * 60, phase=3.0)
+        self.quest(0.45, 0.50, 3 * 60, phase=4.0)     # ...until the outlines touch
+        self.assertEqual(self.areas(), 1, "side-by-side areas didn't merge")
+        self.assertLess(min(self.hull_xs()), 0.38)
+        self.assertGreater(max(self.hull_xs()), 0.52)
+        self.assertEqual(self.visits(1), 2, "a merged area keeps both visits")
+
+    def test_far_apart_areas_stay_apart(self):
+        # merging across a gap would draw one outline over the road between
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.55, 0.50)             # 400 yd of gap
+        self.quest(0.55, 0.50, 8 * 60, phase=1.0)
+        self.assertEqual(self.areas(), 2)
+
+    def test_a_city_keeps_the_tighter_radius(self):
+        # 225 yd suits questing outside; in the Undercity it swallowed the
+        # corridor to the lift. The same 180-yard wander...
+        city = Wow()
+        city.run(f"__H.mapYards = {{ [{self.MAP}] = 1000 }}")
+        city.login()
+        self.wow = city
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.room(0.40, 0.50, 6 * 60, 0.18, 0.03)
+        self.assertEqual(self.areas(), 0, "a wander across a city quarter made an area")
+        # ...in the open world is somewhere you lingered
+        other = Lingering()
+        other.setUp()
+        other.walk(0.20, 0.50, 0.40, 0.50)
+        other.room(0.40, 0.50, 6 * 60, 0.045, 0.03)
+        self.assertEqual(other.areas(), 1)
 
     def test_a_short_trip_past_the_edge_joins_the_area(self):
         self.walk(0.20, 0.50, 0.40, 0.50)
