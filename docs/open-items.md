@@ -4,7 +4,7 @@ Only open things live here. Close items when Joe confirms them; move shipped wor
 
 ---
 
-## 3.8.1: built on `main`, releasing 2026-11-24
+## 3.8.1: released 2026-11-24 (tag on `ad8ef02`; CI run 45521771033 uploaded to CurseForge, "Success", and GitHub Releases)
 
 - Guild version check: the sync hello carries the version; one chat line per session when a guildmate runs a newer release (sharing on, both on 3.8.1+). Tests in `Share` (mutation-checked: without the once-guard, and without the check, they fail).
 - Update window after every release, `NEW_IN` keyed by version (`NewIn` tests). Joe's account last saw `3.8.0-test4`, so he gets the 3.8.0 and 3.8.1 entries together.
