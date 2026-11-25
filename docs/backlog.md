@@ -92,6 +92,18 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Feature requests
 
+### What you did in a lingering area, on hover
+- From: Joe, 2026-11-25
+- Status: needs a design
+- What: hovering a lingering area ("zone") shows more than how long you were there: gold looted, items looted, XP gained, and other stats useful while levelling and at end game.
+- Notes:
+  - Today the hover shows only the visit list and time spent (`z.areas`, visits `{ s, e, t }`).
+  - Candidates, per visit or per area: gold gained (money before and after, so vendoring counts unless loot is read separately), items looted (count, best quality), XP gained and mobs killed (XP messages), quests turned in, levels gained, reputation gained, deaths, and PvP kills already on the map. Possibly XP per hour while levelling, rep or gold per hour at end game.
+  - Check every event exists and reads cleanly on the Forever client, including in combat, where the game hides values (`ns.Foes.Safe`).
+  - Areas are pruned after 24 h, so the stats would go with them. Decide whether anything rolls up into the zone's lifetime totals (the zone-entry chat line, the chronicle).
+  - Saved-data size: a few numbers per visit is small, item lists aren't; prefer counts.
+  - Keep the tooltip short: a few lines, zeros left out, like the zone-entry line.
+
 ### Catch up on guildmates' kills and deaths missed while offline
 - From: Joe, 2026-11-24
 - Status: wanted, needs a design. Waits on the battleground debugging in `open-items.md` (Joe, 2026-11-24: debug that first).
