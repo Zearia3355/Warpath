@@ -48,6 +48,17 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Rework the settings panel, and first-install defaults
+- From: Joe, 2026-11-25
+- Status: needs a design
+- What: redo the options window: its layout, which settings it offers, and the panel as a whole. At the same time, re-evaluate the defaults a new install starts with.
+- Notes:
+  - Today: a tabbed window (`Options.lua`, Warpath's own tabs because the client's tab template is missing). The General tab is full (near `BODY_H` 330, radio rows fit about six short choices), which is why new settings have had to squeeze in beside old ones.
+  - Start from an inventory: every setting, its default, where it lives (tab, map button menu, slash command), and whether anyone changes it. Some settings exist in two or three places.
+  - Defaults to look at: guild sharing is off by default (`cfg.share`), so the guild features, the version check included, do nothing until someone finds the switch; kill screenshots default to every kill; trail length 12 h; which map layers start on.
+  - Changing defaults affects only new installs; existing players keep their settings (preserve saved data). Any reset for existing players is called out first, as 3.8.0's map reset was.
+  - Do it with or after "Welcome and What's new pages in the chronicle", which moves the update box out of this window.
+
 ### Continent and world maps are hard to read
 - From: Joe, 2026-11-25 (screenshots of the world, Kalimdor and Eastern Kingdoms maps)
 - Status: needs a design
