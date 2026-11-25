@@ -99,7 +99,7 @@ Opened 2026-11-22. This is the one piece of live work.
 - **Hypotheses.** (a) The client doesn't deliver GUILD addon messages into battlegrounds. (b) They arrive as secret values during `InChatMessagingLockdown` and `OnComm` dropped them before counting.
 - **Fix options.** A whisper relay only helps for (a). **Catch-up on exit** — the receiver asks guildmates what it missed when leaving — works for both.
 - **Next step:** the diagnostics (3.7.10) are in every release since 3.7.11, so they're in Joe's game. Have a guildmate send `/warpath share test` while Joe is inside a battleground, then read `/warpath share status`.
-- Joe, 2026-11-24: wants this fixed now. Catch-up on exit shares its design with the backlog's "Catch up on guildmates' kills and deaths missed while offline": build them together.
+- Joe, 2026-11-24: **debug this first**, before any catch-up design: it's still unexplained behaviour. Find which hypothesis holds before choosing a fix. Catch-up on exit shares its design with the backlog's "Catch up on guildmates' kills and deaths missed while offline", so that waits on this.
 
 ## Found by the test harness
 

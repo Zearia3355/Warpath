@@ -58,7 +58,7 @@ _None reported outside the work in `open-items.md`. The guild-sharing-in-battleg
 
 ### Catch up on guildmates' kills and deaths missed while offline
 - From: Joe, 2026-11-24
-- Status: wanted (Joe: "immediately"), needs a design
+- Status: wanted, needs a design. Waits on the battleground debugging in `open-items.md` (Joe, 2026-11-24: debug that first).
 - What: when you log in, get the kill and death pins guildmates made while you were offline, and send yours to guildmates who were offline when you made them.
 - Notes:
   - Today the login sync (`Sync.lua`) catches up only **battle haze** cells. Kills and deaths go out once, live over GUILD, so anyone offline never gets them.
