@@ -78,6 +78,7 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 **Done for 3.8.0:** `NEW_IN`, changelog, flight legs included.
 
 **Open questions**
+- Joe in game (3.8.1, 2026-11-24, Undercity, screenshot): inside the area he's in (solid outline, so the live area), his line still loops round inside it: "I thought we got rid of that?" Likely by design, not a bug: test4's fix left the last 45 s (`LAG`) of line showing inside the live area, and 45 s of running in circles in a small city area is a lot of line. Check before changing anything: stand still inside for 45 s; if the loops vanish, it's the 45 s window; if they stay, it's a bug. If it's the window, a fix is to show less inside the live area (say 10–15 s, or only the line since entering) without changing when steps join the area (`LAG` does both today). Not started (Joe: log only).
 - Hide small areas from standing in town (auction house, mail), or at least their labels, especially in neutral towns.
 - A long slow drift (grinding along a road) caps an area at 0.30 and starts a new one: may look like a chain of blobs. Judge on real data.
 - How far the Forever world map zooms (arrows are judged zoomed in).
