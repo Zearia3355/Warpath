@@ -4,7 +4,7 @@ Warpath is a World of Warcraft addon for **WoW Forever** (open-world PvP, Interf
 
 Originally named **Wake** (1.0).
 
-Feature-by-feature behaviour is in `docs/how-it-works.md`; open items are in `docs/open-items.md`. Read both before changing a feature. Machine-specific paths and character names are in `CLAUDE.local.md`, which is deliberately untracked.
+Feature-by-feature behaviour is in `docs/how-it-works.md`; work in progress is in `docs/open-items.md`. Read both before changing a feature. Future work (bugs, enhancements, feature requests, and ideas already declined) is in `docs/backlog.md`: when Joe reports a bug or asks for something that isn't being built now, add it there. Machine-specific paths and character names are in `CLAUDE.local.md`, which is deliberately untracked.
 
 Migrated from a claude.ai Project on 2026-11-23. Everything before that is in `CHANGELOG.txt` and in the imported release history (see below).
 
