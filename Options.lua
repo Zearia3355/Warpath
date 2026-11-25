@@ -22,27 +22,14 @@ local NEW_IN = {
     "Flight paths: the routes you fly most, on two or more days, show as blue dashes.",
     "Your map settings were reset for this release: every layer is on and today's trail stays 12 hours. Change them on the Map tab.",
   } },
+  { "3.8.1", {
+    "When a guildmate runs a newer Warpath, you're told in chat once, so you know to update (both of you need guild sharing on).",
+    "/warpath trail clear clears today's trail and lingering areas (as /warpath clear trail does).",
+    "This window now opens after every update, small ones included.",
+  } },
 }
 
--- "3.8.0-test4" -> 3, 8, 0, true. A test build comes before its release.
-local function Parts(v)
-    if type(v) ~= "string" then return nil end
-    local a, b, c, rest = v:match("^(%d+)%.(%d+)%.?(%d*)(.*)$")
-    if not a then return nil end
-    return tonumber(a), tonumber(b), tonumber(c) or 0, rest ~= ""
-end
-
--- Is version a older than b? Anything unreadable counts as oldest.
-local function Older(a, b)
-    local a1, a2, a3, at = Parts(a)
-    local b1, b2, b3, bt = Parts(b)
-    if not a1 then return b1 ~= nil end
-    if not b1 then return false end
-    if a1 ~= b1 then return a1 < b1 end
-    if a2 ~= b2 then return a2 < b2 end
-    if a3 ~= b3 then return a3 < b3 end
-    return at and not bt
-end
+local Older = ns.VersionOlder
 
 -- The entries this account hasn't seen: { version, line } pairs, oldest
 -- first, the newest NEW_MAX of them.

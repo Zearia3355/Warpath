@@ -120,6 +120,17 @@ class Settings(unittest.TestCase):
         self.assertGreater(lua_count(wow, f"{z}.strokes"), 0)
         self.assertTrue(wow.eval(f"ns.cur.stroke ~= nil and {z}.strokes[#{z}.strokes] == ns.cur.stroke"))
 
+    def test_trail_clear_is_the_same_as_clear_trail(self):
+        wow = Wow().login()
+        for i in range(20):
+            wow.H.player.x = 0.4 + i * 0.003
+            wow.advance(5)
+        self.assertGreater(lua_count(wow, "WarpathDB.maps[1448].strokes"), 0)
+        trail = wow.eval("ns.cfg.trailMin")
+        wow.run('SlashCmdList.WARPATH("trail clear")')
+        self.assertEqual(lua_count(wow, "WarpathDB.maps[1448].strokes"), 0)
+        self.assertEqual(wow.eval("ns.cfg.trailMin"), trail)
+
     def test_roads_says_how_long_to_gold(self):
         wow = Wow().login()
         before = len(wow.chat)
@@ -240,6 +251,33 @@ class Share(unittest.TestCase):
         self.receive("1|K|1448|0.41|0.61")
         self.assertIn("1 errors", self.diag())
         self.assertEqual(lua_count(self.wow, "WarpathDB.maps[1448].gmarks"), 2)
+
+    def newer_lines(self):
+        return [l for l in self.new_chat() if "is out (you have" in l]
+
+    def test_a_guildmate_on_a_newer_release_is_mentioned_once(self):
+        # 3.8.1: the hello carries the sender's version.
+        self.receive("1|H|0|99.0.0")
+        self.receive("1|H|0|99.0.0", sender="Ann Lee")
+        self.assertEqual(len(self.newer_lines()), 1, self.new_chat())
+        self.assertIn("99.0.0", self.newer_lines()[0])
+        self.receive("1|H|0|99.0.1")  # an even newer one is news again
+        self.assertEqual(len(self.newer_lines()), 2)
+
+    def test_same_older_test_and_garbled_versions_say_nothing(self):
+        version = self.wow.eval("ns.VERSION")
+        for text in (f"1|H|0|{version}", "1|H|0|3.0.0", "1|H|0|99.0.0-test1", "1|H|0", "1|H|1|",
+                     "1|H|0|99.0", "1|H|0|99.0.0.0.0.0.0", "1|H|0|banana"):
+            with self.subTest(text=text):
+                self.receive(text)
+        self.assertEqual(self.newer_lines(), [])
+
+    def test_the_hello_carries_this_version(self):
+        self.wow.run("IsInGuild = function() return true end")
+        self.wow.run("ns.Sync.Hello(false)")
+        msgs = [m for m in self.wow.sent if "|H|" in str(m)]
+        self.assertTrue(msgs, self.wow.sent)
+        self.assertIn("1|H|0|" + self.wow.eval("ns.VERSION"), str(msgs[-1]))
 
     def test_nothing_is_received_with_sharing_off(self):
         self.wow.run("ns.cfg.share = false")

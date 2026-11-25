@@ -6,7 +6,9 @@
 -- guildmate's history is kept in its own layer, so nothing counts twice and
 -- your own haze is never sent back to anyone as theirs.
 --
--- Messages: "1|H|<full>"  hello; full = 1 asks for everything again.
+-- Messages: "1|H|<full>|<version>"  hello; full = 1 asks for everything
+--           again. The version (3.8.1) tells guildmates a newer Warpath is
+--           out; older versions read only <full> and ignore the rest.
 --           "1|B|<map>|<layer b|d>|<clear 0|1>|<cells>"  cells are
 --           3 base-36 characters of cell index + 2 of strength (0.01 steps).
 local ADDON, ns = ...
@@ -59,7 +61,7 @@ end
 function Sync.Hello(full, to)
     if not cfg.share or S.inInstance then return end
     if not to and not IsInGuild() then return end
-    Send(("%s|H|%s"):format(C.PROTO, full and "1" or "0"), to)
+    Send(("%s|H|%s|%s"):format(C.PROTO, full and "1" or "0", ns.VERSION or ""), to)
 end
 
 local function HaveGuildLayers()
@@ -104,7 +106,23 @@ local function Answer(to, full)
     db.syncSent[to] = now
 end
 
+-- A guildmate runs a newer release (3.8.1): say so once a session, and
+-- again only for an even newer one. Test builds ("3.8.2-test1") aren't
+-- published, so they never count.
+local newestTold
+local function CheckVersion(text)
+    local _, _, _, ver = strsplit("|", text)
+    if type(ver) ~= "string" or #ver > 12 or not ver:match("^%d+%.%d+%.%d+$") then return end
+    if not ns.VersionOlder(ns.VERSION, ver) then return end
+    if newestTold and not ns.VersionOlder(newestTold, ver) then return end
+    newestTold = ver
+    Print(("Warpath %s is out (you have %s): a guildmate is running it. Update from the CurseForge app, as \"Warpath Forever\".")
+        :format(ver, ns.VERSION or "?"))
+end
+Sync.NewestTold = function() return newestTold end -- for tests
+
 local function OnHello(text, sender, channel)
+    CheckVersion(text)
     local full = text:sub(5, 5) == "1"
     -- ask them for theirs too, once a session
     if channel ~= "WHISPER" and not helloed[sender] then

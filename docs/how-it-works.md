@@ -224,6 +224,10 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 - Inside instances: receive yes (3.7.8), send no, record nothing. A hello received inside goes unanswered until next login.
 - `/warpath share [on|off]`, `share test`, `share status` (3.7.10: three diagnostic lines + last error), `share history`, `share sync`.
 
+### Newer-version notice (3.8.1)
+- The sync hello carries the sender's version (`1|H|<full>|<version>`); `Sync.lua` `CheckVersion`. A version newer than yours (`ns.VersionOlder`, shared with the update window) prints one line: the version, yours, and "Update from the CurseForge app, as Warpath Forever". Once a session; again only for an even newer one. Test builds (`3.8.2-test1`) and anything not `x.y.z` are ignored.
+- Only between guildmates with sharing on, because the hello is sent and read only then (`cfg.share` is off by default). Nothing new is sent when sharing is off.
+
 ## Battlegrounds, arenas, dungeons, raids
 - Warpath records nothing, shows no banners/caption/sounds, takes no screenshots, sends nothing, hides the war table, draws nothing; holds the options window until you leave. Multiple detection signals, re-checked every 5 s (`InsideMatch`, `S.inInstance`).
 
@@ -313,4 +317,6 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-24 | `z.roadOld` kept for 3.8.0, dropped in a later release | Joe |
 | 2026-11-24 | The update window opens after every release, fix releases included | Joe |
 | 2026-11-24 | `NEW_IN` keyed by version, showing everything unseen (8 lines max); a test build counts as before its release, so testers still see the release's box | Claude (open to veto) |
+| 2026-11-24 | 3.8.1: tell players when a guildmate runs a newer version; `/warpath trail clear` | Joe |
+| 2026-11-24 | Version check rides on the existing sync hello, so it works only with sharing on (sending a version ping with sharing off would break the opt-out); once a session, again for an even newer one; test builds ignored; `trail clear` listed under Map, `clear trail` still works | Claude (open to veto) |
 | 2026-11-24 | Built: forming needs movement in 3 of the 4 minutes; every re-entry is its own visit record (tooltip merges those under 2 min apart); dusk = faction deep 60% towards earth brown; hidden trail skipped by visit time; arrow bend judged at full length, tip fixed | Claude (open to veto) |

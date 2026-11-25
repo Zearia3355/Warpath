@@ -1,6 +1,29 @@
 Warpath changelog
 
 =====================================================================
+3.8.1
+=====================================================================
+
+- When a guildmate is running a newer Warpath than you, you're told in
+  chat, once, with the version, so you know to update from the
+  CurseForge app. It works between guildmates who both have 3.8.1 or
+  newer and guild sharing on (/warpath share on).
+- /warpath trail clear clears today's trail and lingering areas, the
+  same as /warpath clear trail. It's listed with the map commands in
+  /warpath help all.
+- /warpath help all said today's trail lasts 1 hour by default; it's
+  12 hours since 3.8.0.
+- The options window now opens once after every update, small ones
+  too, with what's new since you last saw it.
+- Guildmates on older versions keep working with you; they just won't
+  hear about newer versions until they update.
+
+- Your saved data: everything is kept. Nothing about your data changes.
+- No new files: a /reload loads it (the version number shown stays
+  3.8.0 until you next restart the game).
+- Includes 3.8.0.
+
+=====================================================================
 3.8.0 "Roads, trails and flights"
 =====================================================================
 

@@ -4,6 +4,16 @@ Only open things live here. Close items when Joe confirms them; move shipped wor
 
 ---
 
+## 3.8.1: built on `main`, releasing 2026-11-24
+
+- Guild version check: the sync hello carries the version; one chat line per session when a guildmate runs a newer release (sharing on, both on 3.8.1+). Tests in `Share` (mutation-checked: without the once-guard, and without the check, they fail).
+- Update window after every release, `NEW_IN` keyed by version (`NewIn` tests). Joe's account last saw `3.8.0-test4`, so he gets the 3.8.0 and 3.8.1 entries together.
+- `/warpath trail clear`, listed under Map; help said "(default 1h)", now 12h.
+
+**Joe to check in game**
+- The update window opens after installing 3.8.1, headed "NEW IN 3.8.0 TO 3.8.1".
+- The version notice can only be seen once a release after 3.8.1 exists and a guildmate runs it.
+
 ## 3.8.0 "Roads, trails and flights": released 2026-11-24, Joe installing from CurseForge
 
 Tagged on `main` (`5425eb5`); CI run 45519414319 uploaded to CurseForge ("Success") and GitHub Releases. The CI zip matches a local `git archive` build file for file. Release work: `NEW_IN` for 3.8; one-time map reset (layers + guild haze on, trail 12 h); trail default 12 h; faction-mark trials removed; `/warpath roads` and `/warpath zone` on the drawn bands; `/warpath clear trail`; `Settings` tests (6, two mutation-checked). Backup: `tools/out/savedvars-backup-2026-11-24-3.8.0/`.
@@ -11,16 +21,6 @@ Tagged on `main` (`5425eb5`); CI run 45519414319 uploaded to CurseForge ("Succes
 **Joe to check**
 - Installing through the CurseForge app (the project may still be awaiting moderation, so the app may not find it yet). The hand-copied `Interface\AddOns\Warpath` folder shows as an unknown local addon until replaced; removing it first is safe (saved data is in `WTF`).
 - After a full restart: the "New in 3.8" box, the window opening on the Map tab, the reset (his trail goes from 24 h to 12 h; set it back on the Map tab).
-
-## Queued for 3.8.1 (Joe, 2026-11-24: "not now, but queue")
-
-- `/warpath trail clear` as another way to say `/warpath clear trail` (noun-first, where Joe looked first), listed under "Map" next to the trail length; `/warpath help` doesn't show `clear trail` today, only `help all` under "Data".
-- `/warpath help all` still says the trail lasts "(default 1h)"; it's 12 h since 3.8.0 (`Commands.lua`, the `trail` row).
-- **Built in the working copy:** the update window opens after every release (Joe, 2026-11-24). 3.8.1 needs its own `NEW_IN` entry. Joe, whose account last saw `3.8.0-test4`, will get the 3.8.0 and 3.8.1 entries together.
-
-## Asked about: telling players a newer version exists
-
-Warpath has no version check today. Addons can't reach the internet, so the only source is guildmates: Joe asked 2026-11-24 whether it can say "a new version is out" like other addons do. Feasible without breaking old versions: the sync hello `1|H|<full>` is read only at character 5 by every version, so `1|H|<full>|<version>` is safe to send. On seeing a higher version from a guildmate, print one chat line per session. Not built; Joe to decide.
 
 ## Released, waiting on CurseForge moderation
 

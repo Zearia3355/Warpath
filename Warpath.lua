@@ -1,5 +1,5 @@
 
--- Warpath 3.8.0
+-- Warpath 3.8.1
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -972,6 +972,26 @@ ns.StrokeArc = StrokeArc
 ns.Sound = Sound
 ns.UISound = UISound
 ns.VERSION = VERSION
+
+-- Is version a older than b? "3.8.0-test4" -> 3, 8, 0 and a test build,
+-- which comes before its release. Anything unreadable counts as oldest.
+-- Used by the update window (Options) and the guild version check (Sync).
+function ns.VersionOlder(a, b)
+    local function Parts(v)
+        if type(v) ~= "string" then return nil end
+        local x, y, z, rest = v:match("^(%d+)%.(%d+)%.?(%d*)(.*)$")
+        if not x then return nil end
+        return tonumber(x), tonumber(y), tonumber(z) or 0, rest ~= ""
+    end
+    local a1, a2, a3, at = Parts(a)
+    local b1, b2, b3, bt = Parts(b)
+    if not a1 then return b1 ~= nil end
+    if not b1 then return false end
+    if a1 ~= b1 then return a1 < b1 end
+    if a2 ~= b2 then return a2 < b2 end
+    if a3 ~= b3 then return a3 < b3 end
+    return at and not bt
+end
 ns.Waypoint = Waypoint
 ns.WorldXY = WorldXY
 ns.ZoneData = ZoneData

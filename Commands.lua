@@ -337,11 +337,12 @@ end
 -- How long today's trail stays (3.7.7): "/warpath trail 1h", "30m", "90" (minutes).
 function H.trail(arg)
     arg = (arg or ""):lower():gsub("%s+", "")
+    if arg == "clear" then return H.clear("trail") end -- 3.8.1: the same as /warpath clear trail
     local n, unit = arg:match("^(%d+%.?%d*)([mh]?)$")
     n = tonumber(n)
     if not n then
         local m = cfg.trailMin or 60
-        Print(("today's trail stays %s. Usage: /warpath trail <15m to 24h>"):format(m < 60 and (m .. " minutes") or ((m / 60) .. (m == 60 and " hour" or " hours"))))
+        Print(("today's trail stays %s. Usage: /warpath trail <15m to 24h>, or /warpath trail clear"):format(m < 60 and (m .. " minutes") or ((m / 60) .. (m == 60 and " hour" or " hours"))))
         return
     end
     local minutes = unit == "h" and n * 60 or n
@@ -523,7 +524,8 @@ local LIST = {
     { "minimap",   "minimap [on|off]",              "the minimap button",                 "Map", false, H.minimap },
     { "history",   "history [on|off]",              "show every stored pin, faded ones too (off at login)", "Map", false, H.history },
     { "icons",     "icons <25-200>",                "map icon size, in percent",          "Map", false, H.icons },
-    { "trail",     "trail <15m-24h>",               "how long today's trail stays (default 1h)", "Map", false, H.trail },
+    { "trail",     "trail <15m-24h>",               "how long today's trail stays (default 12h)", "Map", false, H.trail },
+    { nil,         "trail clear",                   "clear today's trail and lingering areas", "Map" },
     { "grudge",    "grudge [name]",                 "hold a grudge (default: your target)", "Grudges", true, H.grudge },
     { nil,         "grudge forgive [name]",         "strike a grudge from your ledger",   "Grudges" },
     { "grudges",   "grudges [chat]",                "your ledger of grudges (book, or chat)", "Grudges", false, H.grudges },
@@ -545,7 +547,6 @@ local LIST = {
     { "memory",    "memory <days>",                 "how fast long memory (roads, haze, routes) fades", "Settings", false, H.memory },
     { "roads",     "roads <days>",                  "how soon roads turn gold (default 2.5; lower is sooner)", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
-    { nil,         "clear trail",                   "clear today's trail and lingering areas", "Data" },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },
     { "debug",     "debug [haze|kills]",            "what Warpath can and can't see (haze: this zone's haze; kills: the kill-credit log)", "Troubleshooting", false, H.debug },
     { nil,         "share status",                  "guild messages sent, refused, received", "Troubleshooting" },

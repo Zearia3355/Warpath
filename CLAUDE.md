@@ -138,7 +138,7 @@ Prefix-based addon messages (`WARPATH`, proto `1`). Old versions safely ignore u
 
 - Kill: `1|K|map|x|y|pool|line|chain|feat|featLine|a1|a2|cry|victim`
 - Death: `1|D|map|x|y|killerFull|streak|line|took` (from 3.7.6, `line` is set for every death)
-- Sync hello: `1|H|full` (GUILD)
+- Sync hello: `1|H|full|version` (GUILD; the version from 3.8.1. Older versions read only `full`. A receiver on an older release prints one chat line per session, again only for an even newer one; test builds never count. Only between guildmates with sharing on.)
 - Battle history: `1|B|map|b/d|clear|cells` (whisper)
 - Inside instances (`S.inInstance`: battlegrounds, arenas, dungeons, raids): sending is off, own recording is off, **receiving is on** (3.7.8) — but see the open investigation.
 - **Never share the player's trail.**
