@@ -4,9 +4,13 @@ Only open things live here. Close items when Joe confirms them; move shipped wor
 
 ---
 
-## 3.8.0 "Roads, trails and flights": built on `main`, waiting on Joe's go-ahead
+## 3.8.0 "Roads, trails and flights": released 2026-11-24, Joe installing from CurseForge
 
-`trail-areas` fast-forwarded into `main` (2026-11-24). Added for the release: `NEW_IN` for 3.8; one-time map reset (layers + guild haze on, trail 12 h); trail default 12 h; faction-mark trials removed; `/warpath roads` and `/warpath zone` on the drawn bands; `/warpath clear trail`. `Settings` tests (6, two mutation-checked). Next: tag `3.8.0`, push (CI publishes to CurseForge and GitHub), `tools/install.ps1`, back up SavedVariables first. Joe to check in game: the "New in 3.8" box and the window opening on the Map tab.
+Tagged on `main` (`5425eb5`); CI run 45519414319 uploaded to CurseForge ("Success") and GitHub Releases. The CI zip matches a local `git archive` build file for file. Release work: `NEW_IN` for 3.8; one-time map reset (layers + guild haze on, trail 12 h); trail default 12 h; faction-mark trials removed; `/warpath roads` and `/warpath zone` on the drawn bands; `/warpath clear trail`; `Settings` tests (6, two mutation-checked). Backup: `tools/out/savedvars-backup-2026-11-24-3.8.0/`.
+
+**Joe to check**
+- Installing through the CurseForge app (the project may still be awaiting moderation, so the app may not find it yet). The hand-copied `Interface\AddOns\Warpath` folder shows as an unknown local addon until replaced; removing it first is safe (saved data is in `WTF`).
+- After a full restart: the "New in 3.8" box, the window opening on the Map tab, the reset (his trail goes from 24 h to 12 h; set it back on the Map tab).
 
 ## Released, waiting on CurseForge moderation
 
