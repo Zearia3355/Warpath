@@ -42,6 +42,17 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Continent and world maps are hard to read
+- From: Joe, 2026-11-25 (screenshots of the world, Kalimdor and Eastern Kingdoms maps)
+- Status: needs a design
+- What: zoomed out, Warpath draws every kill and death pin, roads, trail scraps and flight dashes at small size, plus each zone's win/loss label. Where they cluster (north Kalimdor, the Plaguelands) it's a pile of overlapping icons, and the win/loss numbers are too small to read among them.
+- Notes:
+  - What a continent view is for: which zones you win and lose in, and where you've been fighting. Individual pins and road squiggles at that size don't add much.
+  - Ideas: on continent and world views, show one readable win/loss badge per zone and drop (or heavily thin) individual pins; or group a zone's pins into one marker with a count; leave out roads and trail scraps there, keep flight legs only if they read; make the win/loss label larger and give it contrast (see "Area time labels are hard to read", same font problem).
+  - Pairs with "Zone standing on the zone's own map": decide the badge's look once for both.
+  - The world view (both continents) should probably show even less than a continent.
+  - Render options from Lethality's real data over these screenshots for Joe to pick; continent placement is already verified against real map rects (`tools/harness/map_rects.lua`).
+
 ### Roads, trail and areas pile up where they overlap
 - From: Joe, 2026-11-25 (screenshot, Eastern Plaguelands; earlier offered by Claude as "calmer long trails")
 - Status: needs a design
