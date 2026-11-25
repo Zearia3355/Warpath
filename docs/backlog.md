@@ -94,12 +94,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - What: left-clicking the map button to show or hide Warpath on the map prints "Warpath on the map shown." / "hidden (still recording)." in chat. Not needed: you can see the result on the map.
 - Notes: the line is in `MapButton.lua` `SetShown()`. Layer toggles from the button's menu already print nothing. Keep the reply for the slash command (`/warpath map`), since every slash toggle replies with its new state (`how-it-works.md`, Commands); only the button click goes quiet. Check whether the button's tooltip should then say "still recording" when hidden, since that hint lived only in the chat line.
 
-### Reopen the "New in" box on demand
-- From: Claude (offered, not asked for)
-- Status: new
-- What: `/warpath new`, or a "What's new" button, to reopen the update window.
-- Notes: today it takes `/run WarpathGlobal.seenVersion = nil` then `/reload`.
-
 ### Warn when the old Wake addon is loaded
 - From: Claude (offered, not asked for)
 - Status: new
@@ -113,6 +107,17 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 ---
 
 ## Feature requests
+
+### Welcome and "What's new" pages in the chronicle
+- From: Joe, 2026-11-25 (folds in Claude's earlier offer to reopen the "New in" box on demand)
+- Status: needs a design
+- What: players may never find the chronicle. Move the first-install welcome and the update box out of the options window and into the chronicle, and after an update open the chronicle on its "What's new" page. Opening the book shows the rest of it (campaigns, grudges) on the way.
+- Notes:
+  - Today `Options.lua` opens the options window after every release (`gdb.seenVersion`, `NEW_IN`, `Unseen`): a "NEW IN x TO y" box, or a welcome line on first install. The `NewIn` tests cover it; they would move with it.
+  - The chronicle (`Chronicle.lua`) is a two-page book with section tabs (Campaigns, Grudges). A third section, or a page in front: welcome on first install (what Warpath does, where the settings are, the map button), "What's new" after an update, always reachable from its tab, which also answers "reopen it on demand".
+  - Keep a way to the settings from that page (a button or line pointing to the options window), since the welcome used to sit on top of them.
+  - Hold the book until it's safe to open, as the options window is held today (not in combat, not inside a battleground).
+  - Update `CLAUDE.md` (Versioning: "the options window opens by itself after every release") when built.
 
 ### What you did in a lingering area, on hover
 - From: Joe, 2026-11-25
