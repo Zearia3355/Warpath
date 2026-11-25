@@ -303,7 +303,7 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-24 | Areas cover where you lingered: distances in yards, short trips past the edge join, recent trail joins on forming | Joe |
 | 2026-11-24 | Area distances: form 150 yd, leave 90 yd, trips 2 min / 150 yd, recent 10 min, max 1200 yd; 4000 yd when the game can't give a map's width | Claude (open to veto) |
 | 2026-11-24 | Re-entering an old area refreshes it; the visit list reads as visits; corridors stay lines; inside the area you're in only your last moments show | Joe (asked) |
-| 2026-11-24 | Reopen after 1 min inside (15 s grace at the edge); visits merge under 10 min apart, fold under 2 min; a trip within 10 yd of its own line is a corridor; recent trail joins only milling points; inside the live area the line shows for 45 s | Claude (open to veto) |
+| 2026-11-24 | Reopen after 1 min inside (15 s grace at the edge); visits merge under 10 min apart, fold under 2 min; a trip within 10 yd of its own line is a corridor; recent trail joins only milling points; inside the live area the line shows for 45 s | Claude (open to veto; **vetoed 2026-11-24**: Joe wants ~3 s, see `open-items.md`) |
 | 2026-11-24 | Link holding keeps visibility only (colour and dashes show the link's own age); a loop back into the same area isn't held | Claude (open to veto) |
 | 2026-11-24 | Roads, trail and flight-path rework ship together as **3.8.0**, "Roads, trails and flights" (a feature release: `NEW_IN` entry, options window opens once) | Joe |
 | 2026-11-24 | Flights: lines only for the legs you fly most (not landings; not every flight), so the map never becomes a web; dashed (reads as flight, not road) | Joe |
