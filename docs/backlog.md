@@ -26,6 +26,12 @@ Template:
 
 _The guild-sharing-in-battlegrounds problem is an open investigation in `open-items.md`._
 
+### Ground warnings vanish before you can read them
+- From: Joe, 2026-11-25
+- Status: wanted (cause found)
+- What: the on-screen "CONTESTED GROUND" (also "DANGEROUS GROUND", "YOUR HUNTING GROUND") warning disappears far too fast, like the kill big text. The kill text is meant to be a flash; this one is meant to be read.
+- Notes: confirmed in the code. `Ground.lua` shows it through `ns.Overlay.Show`, the same overlay as the kill big text, whose timing is fixed in `Overlay.lua`: 0.15 s punch, 1.2 s hold, 0.4 s fade, under 2 s in all. The subline is a full sentence ("12 kills, 8 deaths here. Guildmates have died here 3 times."). Fix: let `Overlay.Show` take its own hold, and give ground warnings a reading-length hold (roughly 4–6 s, or scaled to the text's length), leaving kill text as it is. Check it doesn't sit over a kill's big text (ground warnings already wait for that). Present since 3.7.0.
+
 ### Several guildmates killing one enemy: duplicate lines and pins
 - From: Joe, 2026-11-24
 - Status: new
@@ -41,6 +47,39 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 ---
 
 ## Enhancements
+
+### Rework the settings panel, and first-install defaults
+- From: Joe, 2026-11-25
+- Status: needs a design
+- What: redo the options window: its layout, which settings it offers, and the panel as a whole. At the same time, re-evaluate the defaults a new install starts with.
+- Notes:
+  - Today: a tabbed window (`Options.lua`, Warpath's own tabs because the client's tab template is missing). The General tab is full (near `BODY_H` 330, radio rows fit about six short choices), which is why new settings have had to squeeze in beside old ones.
+  - Start from an inventory: every setting, its default, where it lives (tab, map button menu, slash command), and whether anyone changes it. Some settings exist in two or three places.
+  - Defaults to look at: guild sharing is off by default (`cfg.share`), so the guild features, the version check included, do nothing until someone finds the switch; kill screenshots default to every kill; trail length 12 h; which map layers start on.
+  - Changing defaults affects only new installs; existing players keep their settings (preserve saved data). Any reset for existing players is called out first, as 3.8.0's map reset was.
+  - Do it with or after "Welcome and What's new pages in the chronicle", which moves the update box out of this window.
+
+### Continent and world maps are hard to read
+- From: Joe, 2026-11-25 (screenshots of the world, Kalimdor and Eastern Kingdoms maps)
+- Status: needs a design
+- What: zoomed out, Warpath draws every kill and death pin, roads, trail scraps and flight dashes at small size, plus each zone's win/loss label. Where they cluster (north Kalimdor, the Plaguelands) it's a pile of overlapping icons, and the win/loss numbers are too small to read among them.
+- Notes:
+  - What a continent view is for: which zones you win and lose in, and where you've been fighting. Individual pins and road squiggles at that size don't add much.
+  - Ideas: on continent and world views, show one readable win/loss badge per zone and drop (or heavily thin) individual pins; or group a zone's pins into one marker with a count; leave out roads and trail scraps there, keep flight legs only if they read; make the win/loss label larger and give it contrast (see "Area time labels are hard to read", same font problem).
+  - Pairs with "Zone standing on the zone's own map": decide the badge's look once for both.
+  - The world view (both continents) should probably show even less than a continent.
+  - Render options from Lethality's real data over these screenshots for Joe to pick; continent placement is already verified against real map rects (`tools/harness/map_rects.lua`).
+
+### Roads, trail and areas pile up where they overlap
+- From: Joe, 2026-11-25 (screenshot, Eastern Plaguelands; earlier offered by Claude as "calmer long trails")
+- Status: needs a design
+- What: where roads, today's trail and lingering areas share ground, they draw on top of each other and the map becomes a mess, worse with the game's quest markers on it. Joe's screenshot had the trail off; with it on, Eastern Plaguelands would be unreadable.
+- Notes:
+  - Most of the overlap is the trail running along roads you walk every day: the same path drawn twice in two styles. Ideas: where the trail follows a road, draw only the road (or only the newest part of the trail, the bit that says where you just went); hide old trail dashes on silver and gold roads.
+  - Areas: roads crossing a filled area draw over it; dim or thin roads inside areas, or draw the area outline only.
+  - Fewer marks overall: cap trail dashes per map square, rank-based, never newest-wins, or marks will crawl (anchored, only fade).
+  - Quest markers belong to the game and can't be moved; leave room around them only if the map tells us where they are.
+  - Real data to render from: Lethality's Plaguelands trail, kept in `tools/out/trail-data-2026-11-24-plaguelands/` (863 points, 4 areas in Eastern Plaguelands). Render options over Joe's screenshot of the same map for him to pick.
 
 ### Area time labels are hard to read
 - From: Joe, 2026-11-24
@@ -66,22 +105,10 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - What: left-clicking the map button to show or hide Warpath on the map prints "Warpath on the map shown." / "hidden (still recording)." in chat. Not needed: you can see the result on the map.
 - Notes: the line is in `MapButton.lua` `SetShown()`. Layer toggles from the button's menu already print nothing. Keep the reply for the slash command (`/warpath map`), since every slash toggle replies with its new state (`how-it-works.md`, Commands); only the button click goes quiet. Check whether the button's tooltip should then say "still recording" when hidden, since that hint lived only in the chat line.
 
-### Reopen the "New in" box on demand
-- From: Claude (offered, not asked for)
-- Status: new
-- What: `/warpath new`, or a "What's new" button, to reopen the update window.
-- Notes: today it takes `/run WarpathGlobal.seenVersion = nil` then `/reload`.
-
 ### Warn when the old Wake addon is loaded
 - From: Claude (offered, not asked for)
 - Status: new
 - What: a chat warning when Wake (the 1.0 ancestor) is also enabled, like the PvPKillShot one.
-
-### Calmer long trails
-- From: Claude (offered, not asked for)
-- Status: new
-- What: hide old trail dashes on silver and gold roads, or cap dashes per map square.
-- Notes: any cap must be rank-based, never newest-wins, or marks will crawl.
 
 ### Tuning knobs, if Joe asks
 - From: Claude
@@ -91,6 +118,29 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 ---
 
 ## Feature requests
+
+### Welcome and "What's new" pages in the chronicle
+- From: Joe, 2026-11-25 (folds in Claude's earlier offer to reopen the "New in" box on demand)
+- Status: needs a design
+- What: players may never find the chronicle. Move the first-install welcome and the update box out of the options window and into the chronicle, and after an update open the chronicle on its "What's new" page. Opening the book shows the rest of it (campaigns, grudges) on the way.
+- Notes:
+  - Today `Options.lua` opens the options window after every release (`gdb.seenVersion`, `NEW_IN`, `Unseen`): a "NEW IN x TO y" box, or a welcome line on first install. The `NewIn` tests cover it; they would move with it.
+  - The chronicle (`Chronicle.lua`) is a two-page book with section tabs (Campaigns, Grudges). A third section, or a page in front: welcome on first install (what Warpath does, where the settings are, the map button), "What's new" after an update, always reachable from its tab, which also answers "reopen it on demand".
+  - Keep a way to the settings from that page (a button or line pointing to the options window), since the welcome used to sit on top of them.
+  - Hold the book until it's safe to open, as the options window is held today (not in combat, not inside a battleground).
+  - Update `CLAUDE.md` (Versioning: "the options window opens by itself after every release") when built.
+
+### What you did in a lingering area, on hover
+- From: Joe, 2026-11-25
+- Status: needs a design
+- What: hovering a lingering area ("zone") shows more than how long you were there: gold looted, items looted, XP gained, and other stats useful while levelling and at end game.
+- Notes:
+  - Today the hover shows only the visit list and time spent (`z.areas`, visits `{ s, e, t }`).
+  - Candidates, per visit or per area: gold gained (money before and after, so vendoring counts unless loot is read separately), items looted (count, best quality), XP gained and mobs killed (XP messages), quests turned in, levels gained, reputation gained, deaths, and PvP kills already on the map. Possibly XP per hour while levelling, rep or gold per hour at end game.
+  - Check every event exists and reads cleanly on the Forever client, including in combat, where the game hides values (`ns.Foes.Safe`).
+  - Areas are pruned after 24 h, so the stats would go with them. Decide whether anything rolls up into the zone's lifetime totals (the zone-entry chat line, the chronicle).
+  - Saved-data size: a few numbers per visit is small, item lists aren't; prefer counts.
+  - Keep the tooltip short: a few lines, zeros left out, like the zone-entry line.
 
 ### Catch up on guildmates' kills and deaths missed while offline
 - From: Joe, 2026-11-24
