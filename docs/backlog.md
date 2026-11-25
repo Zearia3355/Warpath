@@ -42,6 +42,12 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Zone standing on the zone's own map
+- From: Joe, 2026-11-24
+- Status: needs a design
+- What: show the zone's overall stats on the zone map too, not only on continent maps.
+- Notes: today the standing (your crest and "kills : deaths", in the winning side's colour) is drawn only on continent views, at each zone's centre, once a zone has 3 or more kills plus deaths (`Map.lua`, "Zone standing", `e.p.far`). On a zone map the centre would sit on top of the pins and trail, so it needs its own place: a corner of the map, or next to the zone's name. Could carry more than the continent label (the zone-entry chat line has kills, deaths, miles, sightings, best streak), but keep it small (don't-clutter rule). Render placements over a screenshot for Joe to pick.
+
 ### A clown icon for deaths to mobs
 - From: feedback passed on by Joe, 2026-11-24
 - Status: needs a design
