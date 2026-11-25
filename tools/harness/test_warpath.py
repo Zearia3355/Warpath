@@ -1023,7 +1023,8 @@ class Lingering(unittest.TestCase):
 
     def test_inside_the_area_you_are_in_only_your_last_moments_show(self):
         # Joe, test4: lingering left a fresh scribble of the last minutes
-        # inside the area. Line older than the join lag (45 s) is hidden there.
+        # inside the area. 3.8.2 (Joe): only the last 3 s show there, not 45 s
+        # ("the point of the zone is to stop scribbling the map").
         self.walk(0.20, 0.50, 0.40, 0.50)
         self.quest(0.40, 0.50, 8 * 60)
         self.assertTrue(self.live())
@@ -1031,7 +1032,7 @@ class Lingering(unittest.TestCase):
             local out, now = {}, time()
             for _, s in ipairs(WarpathDB.maps[1448].strokes) do
                 for i = 1, #s / 2 do
-                    if ns.PointTime(s, i) >= now - 50 then out[#out + 1] = s[2 * i - 1] .. ',' .. s[2 * i] end
+                    if ns.PointTime(s, i) >= now - 5 then out[#out + 1] = s[2 * i - 1] .. ',' .. s[2 * i] end
                 end
             end
             return table.concat(out, ';')

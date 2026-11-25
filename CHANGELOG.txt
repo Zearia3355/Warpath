@@ -1,6 +1,21 @@
 Warpath changelog
 
 =====================================================================
+3.8.2
+=====================================================================
+
+- Inside the area you're lingering in, the map no longer scribbles
+  your last 45 seconds of trail over it. Only a short tail behind your
+  arrow shows (about 3 seconds), so the outline keeps the map clean,
+  which is what the areas are for.
+- Areas still grow the same way as you move about in them.
+
+- Your saved data: everything is kept. Nothing about your data changes.
+- No new files: a /reload loads it (the version number shown stays
+  as before until you next restart the game).
+- Includes 3.8.0 to 3.8.1.
+
+=====================================================================
 3.8.1
 =====================================================================
 

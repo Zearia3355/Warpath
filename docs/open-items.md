@@ -4,6 +4,13 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
+## 3.8.2: live-area trail cut to 3 s
+
+Joe in game (3.8.1, Undercity): inside the area he was in, his last 45 s of line scribbled over it; "that was never the intent", stopping the scribble is the point of the areas. Now only the last 3 s show there (`SHOW` in `Linger.lua`; `LAG` 45 s still decides when steps join). Old areas keep hiding your line until a minute inside reopens them (Joe: live only). Test `test_inside_the_area_you_are_in_only_your_last_moments_show` now checks 5 s; it fails with 45 s put back.
+
+**Joe to check in game**
+- Lingering in an area: only a short tail behind the arrow, no loops.
+
 ## 3.8.1: released 2026-11-24 (tag on `ad8ef02`; CI run 45521771033 uploaded to CurseForge, "Success", and GitHub Releases)
 
 - Guild version check: the sync hello carries the version; one chat line per session when a guildmate runs a newer release (sharing on, both on 3.8.1+). Tests in `Share` (mutation-checked: without the once-guard, and without the check, they fail).
@@ -78,7 +85,6 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 **Done for 3.8.0:** `NEW_IN`, changelog, flight legs included.
 
 **Open questions**
-- **Bug, not tuning** (Joe: the scribble "was never the intent", stopping it is the point of the areas). Joe in game (3.8.1, 2026-11-24, Undercity, screenshot): inside the area he's in (solid outline, so the live area), his line still loops round inside it: "I thought we got rid of that?" Likely by design, not a bug: test4's fix left the last 45 s (`LAG`) of line showing inside the live area, and 45 s of running in circles in a small city area is a lot of line. **Joe confirmed it's the 45 s window, and wants it much shorter: about 3 s** of line inside the area you're in (first said 10 s, then: "The point of the zone is to stop scribbling the map in that zone"). To build: a separate display window (3 s) for the live area, keeping `LAG` 45 s for when steps join the area (`LAG` does both today, including the live-area `hide` span in `Map.lua`). Update the decision-log line "inside the live area the line shows for 45 s" and the `test_inside_the_area_you_are_in_only_your_last_moments_show` test. Not started (Joe: log only this session).
 - Hide small areas from standing in town (auction house, mail), or at least their labels, especially in neutral towns.
 - A long slow drift (grinding along a road) caps an area at 0.30 and starts a new one: may look like a chain of blobs. Judge on real data.
 - How far the Forever world map zooms (arrows are judged zoomed in).

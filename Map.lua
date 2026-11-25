@@ -1075,9 +1075,9 @@ local function AreaScene(e, now, life)
                 local c = { poly = poly, box = box, k = 1 - Smooth((now - a.e) / 60) }
                 solid[#solid + 1], settled[#settled + 1] = c, c
             else
-                -- in the area you're in, your line shows only until those
-                -- steps would have joined it (LAG): you see your last
-                -- moments there, not a fresh scribble of the last minutes
+                -- in the area you're in, only your last few seconds of line
+                -- show (SHOW, 3 s from 3.8.2; 45 s before): the area is
+                -- there to stop the scribble
                 settled[#settled + 1] = { poly = poly, box = box, k = 0 }
             end
             for _, v in ipairs(a.v) do visits[#visits + 1] = { s = v.s, e = v.e, age = age, a = a } end
@@ -1157,8 +1157,9 @@ local function DrawWalkLine(D, scene)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
                         t1 = cutoff
                     end
-                    -- older than the join lag: settled, so hidden inside the area you're in too
-                    local settle = now - (Linger and Linger.LAG or 45)
+                    -- older than a few seconds: settled, so hidden inside the area you're in too
+                    -- (steps that haven't joined yet lie outside its outline, so they still show)
+                    local settle = now - (Linger and Linger.SHOW or 3)
                     if t2 <= settle then
                         Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
                     elseif t1 >= settle or t2 <= t1 then

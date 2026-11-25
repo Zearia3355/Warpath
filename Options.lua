@@ -27,6 +27,9 @@ local NEW_IN = {
     "/warpath trail clear clears today's trail and lingering areas (as /warpath clear trail does).",
     "This window now opens after every update, small ones included.",
   } },
+  { "3.8.2", {
+    "Inside the area you're lingering in, only a short tail of trail shows behind you, not a scribble of the last 45 seconds.",
+  } },
 }
 
 local Older = ns.VersionOlder
