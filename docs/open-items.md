@@ -89,7 +89,7 @@ Branched off `roads-snap`; committed on `trail-areas` (not merged). Design in `h
 - A long slow drift (grinding along a road) caps an area at 0.30 and starts a new one: may look like a chain of blobs. Judge on real data.
 - How far the Forever world map zooms (arrows are judged zoomed in).
 - Real data: ask for the friend's Silithus `SavedVariables\Warpath.lua`; none of Joe's characters has a messy trail.
-- Real data kept (2026-11-24): Lethality's Plaguelands trail, copied to `tools/out/trail-data-2026-11-24-plaguelands/` (untracked; character save plus `WarpathGlobal`). As saved at 19:03: Eastern Plaguelands (1423) 5 strokes, 330 points, 3 areas; Undercity (1458) 480 points. Western Plaguelands had no trail on disk yet: SavedVariables are only written at logout or `/reload`, so play after 19:03 needs another copy. The trail is pruned after 12 h and areas after 24 h, so the game's own copy won't last; these files will.
+- Real data kept (2026-11-24): Lethality's Plaguelands trail, in `tools/out/trail-data-2026-11-24-plaguelands/` (untracked; character save plus `WarpathGlobal`, as written at 19:03 and, after Joe's `/reload`, at 20:29). The 20:29 copy: Eastern Plaguelands (1423) 14 strokes, 863 points, 4 areas; Western Plaguelands (1422) 28 points; Undercity (1458) 480 points, 1 area; map 1454 136 points. The game prunes the trail after 12 h and areas after 24 h; these files keep it. To use it in the harness, point `WARPATH_WTF`/`render.py --wtf` at a copy laid out like the WTF folder.
 
 ## Flight legs (3.8.0): installed as 3.8.0-test7, watching in game
 
