@@ -42,6 +42,17 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Roads, trail and areas pile up where they overlap
+- From: Joe, 2026-11-25 (screenshot, Eastern Plaguelands; earlier offered by Claude as "calmer long trails")
+- Status: needs a design
+- What: where roads, today's trail and lingering areas share ground, they draw on top of each other and the map becomes a mess, worse with the game's quest markers on it. Joe's screenshot had the trail off; with it on, Eastern Plaguelands would be unreadable.
+- Notes:
+  - Most of the overlap is the trail running along roads you walk every day: the same path drawn twice in two styles. Ideas: where the trail follows a road, draw only the road (or only the newest part of the trail, the bit that says where you just went); hide old trail dashes on silver and gold roads.
+  - Areas: roads crossing a filled area draw over it; dim or thin roads inside areas, or draw the area outline only.
+  - Fewer marks overall: cap trail dashes per map square, rank-based, never newest-wins, or marks will crawl (anchored, only fade).
+  - Quest markers belong to the game and can't be moved; leave room around them only if the map tells us where they are.
+  - Real data to render from: Lethality's Plaguelands trail, kept in `tools/out/trail-data-2026-11-24-plaguelands/` (863 points, 4 areas in Eastern Plaguelands). Render options over Joe's screenshot of the same map for him to pick.
+
 ### Area time labels are hard to read
 - From: Joe, 2026-11-24
 - Status: needs a design
@@ -76,12 +87,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - From: Claude (offered, not asked for)
 - Status: new
 - What: a chat warning when Wake (the 1.0 ancestor) is also enabled, like the PvPKillShot one.
-
-### Calmer long trails
-- From: Claude (offered, not asked for)
-- Status: new
-- What: hide old trail dashes on silver and gold roads, or cap dashes per map square.
-- Notes: any cap must be rank-based, never newest-wins, or marks will crawl.
 
 ### Tuning knobs, if Joe asks
 - From: Claude
