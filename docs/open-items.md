@@ -16,7 +16,6 @@ Tagged on `main` (`5425eb5`); CI run 45519414319 uploaded to CurseForge ("Succes
 
 - `/warpath trail clear` as another way to say `/warpath clear trail` (noun-first, where Joe looked first), listed under "Map" next to the trail length; `/warpath help` doesn't show `clear trail` today, only `help all` under "Data".
 - `/warpath help all` still says the trail lasts "(default 1h)"; it's 12 h since 3.8.0 (`Commands.lua`, the `trail` row).
-- No update screen for Joe on 3.8.0: his `seenVersion` was `3.8.0-test4`, same minor. Expected; guildmates on 3.7.x get it.
 
 ## Asked about: telling players a newer version exists
 
