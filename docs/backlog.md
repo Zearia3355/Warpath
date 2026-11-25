@@ -42,6 +42,12 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### No chat line when the map button shows or hides Warpath
+- From: Joe, 2026-11-24
+- Status: wanted
+- What: left-clicking the map button to show or hide Warpath on the map prints "Warpath on the map shown." / "hidden (still recording)." in chat. Not needed: you can see the result on the map.
+- Notes: the line is in `MapButton.lua` `SetShown()`. Layer toggles from the button's menu already print nothing. Keep the reply for the slash command (`/warpath map`), since every slash toggle replies with its new state (`how-it-works.md`, Commands); only the button click goes quiet. Check whether the button's tooltip should then say "still recording" when hidden, since that hint lived only in the chat line.
+
 ### Reopen the "New in" box on demand
 - From: Claude (offered, not asked for)
 - Status: new
