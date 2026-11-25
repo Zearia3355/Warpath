@@ -56,6 +56,17 @@ _None reported outside the work in `open-items.md`. The guild-sharing-in-battleg
 
 ## Feature requests
 
+### Catch up on guildmates' kills and deaths missed while offline
+- From: Joe, 2026-11-24
+- Status: wanted (Joe: "immediately"), needs a design
+- What: when you log in, get the kill and death pins guildmates made while you were offline, and send yours to guildmates who were offline when you made them.
+- Notes:
+  - Today the login sync (`Sync.lua`) catches up only **battle haze** cells. Kills and deaths go out once, live over GUILD, so anyone offline never gets them.
+  - Natural fit: on the login hello, each guildmate whispers back their own kill/death pins newer than what you last got from them (a per-sender "last seen" time, like `db.syncSent`), trickled behind live traffic like the haze sync.
+  - Open question: only the person who made the pin sends it, or guildmates also relay pins they received from others? Own-only is simple, but you miss everything from guildmates who are offline when you log in. Relaying needs a pin id (sender + time) to drop duplicates, and never relays pins back to whoever made them.
+  - Same mechanism as the "catch-up on exit" fix for battlegrounds (see `open-items.md`, open investigation): leaving a battleground could send the same hello. Design them together.
+  - Guildmates need the new version for it to work both ways; older versions must keep ignoring the new message. Limits: how far back (days), how many pins per guildmate, and whether caught-up pins show differently from live ones.
+
 ### Victory pose in kill screenshots
 - From: Joe (deferred backlog)
 - Status: needs a test in game

@@ -98,7 +98,8 @@ Opened 2026-11-22. This is the one piece of live work.
 - One open-world kill by the guildmate also showed nothing for Joe. Unresolved whether the guildmate's own Warpath counted it — ask whether his own kill line printed (`/warpath debug kills`).
 - **Hypotheses.** (a) The client doesn't deliver GUILD addon messages into battlegrounds. (b) They arrive as secret values during `InChatMessagingLockdown` and `OnComm` dropped them before counting.
 - **Fix options.** A whisper relay only helps for (a). **Catch-up on exit** — the receiver asks guildmates what it missed when leaving — works for both.
-- **Next step:** install 3.7.10, have a guildmate send a test ping while Joe is inside, then read `/warpath share status`.
+- **Next step:** the diagnostics (3.7.10) are in every release since 3.7.11, so they're in Joe's game. Have a guildmate send `/warpath share test` while Joe is inside a battleground, then read `/warpath share status`.
+- Joe, 2026-11-24: wants this fixed now. Catch-up on exit shares its design with the backlog's "Catch up on guildmates' kills and deaths missed while offline": build them together.
 
 ## Found by the test harness
 
