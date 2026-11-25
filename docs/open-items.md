@@ -12,6 +12,16 @@ Tagged on `main` (`5425eb5`); CI run 45519414319 uploaded to CurseForge ("Succes
 - Installing through the CurseForge app (the project may still be awaiting moderation, so the app may not find it yet). The hand-copied `Interface\AddOns\Warpath` folder shows as an unknown local addon until replaced; removing it first is safe (saved data is in `WTF`).
 - After a full restart: the "New in 3.8" box, the window opening on the Map tab, the reset (his trail goes from 24 h to 12 h; set it back on the Map tab).
 
+## Queued for 3.8.1 (Joe, 2026-11-24: "not now, but queue")
+
+- `/warpath trail clear` as another way to say `/warpath clear trail` (noun-first, where Joe looked first), listed under "Map" next to the trail length; `/warpath help` doesn't show `clear trail` today, only `help all` under "Data".
+- `/warpath help all` still says the trail lasts "(default 1h)"; it's 12 h since 3.8.0 (`Commands.lua`, the `trail` row).
+- No update screen for Joe on 3.8.0: his `seenVersion` was `3.8.0-test4`, same minor. Expected; guildmates on 3.7.x get it.
+
+## Asked about: telling players a newer version exists
+
+Warpath has no version check today. Addons can't reach the internet, so the only source is guildmates: Joe asked 2026-11-24 whether it can say "a new version is out" like other addons do. Feasible without breaking old versions: the sync hello `1|H|<full>` is read only at character 5 by every version, so `1|H|<full>|<version>` is safe to send. On seeing a higher version from a guildmate, print one chat line per session. Not built; Joe to decide.
+
 ## Released, waiting on CurseForge moderation
 
 **3.7.11** (released 2026-11-23/24): on CurseForge as "Warpath Forever" (project 1826632) and GitHub Releases, installed in Joe's game. The CurseForge file and project aren't visible to others until a moderator approves the project.
