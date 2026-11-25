@@ -10,6 +10,8 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 - Update window after every release, `NEW_IN` keyed by version (`NewIn` tests). Joe's account last saw `3.8.0-test4`, so he gets the 3.8.0 and 3.8.1 entries together.
 - `/warpath trail clear`, listed under Map; help said "(default 1h)", now 12h.
 
+Listed on CurseForge after review (about 15–20 min after upload); Joe updated through the CurseForge app on 2026-11-24 and it worked.
+
 **Joe to check in game**
 - The update window opens after installing 3.8.1, headed "NEW IN 3.8.0 TO 3.8.1".
 - The version notice can only be seen once a release after 3.8.1 exists and a guildmate runs it.
