@@ -131,6 +131,54 @@ class Settings(unittest.TestCase):
         self.assertIn("never turns fully gold", " ".join(wow.chat[before:]))
 
 
+class NewIn(unittest.TestCase):
+    """The update window opens after every release (Joe, 2026-11-24)."""
+
+    def booted(self, seen):
+        wow = Wow()
+        wow.run(f'WarpathGlobal = {{ installed = "3.7.0", seenVersion = {lua_str(seen)}, cfg = {{}} }}')
+        return wow.login()
+
+    def shown(self, wow):
+        return wow.eval("WarpathSetup ~= nil and WarpathSetup:IsShown()")
+
+    def test_versions_order_with_test_builds_first(self):
+        wow = Wow()
+        for a, b in (("3.7.11", "3.8.0"), ("3.8.0", "3.8.1"), ("3.8.0-test4", "3.8.0"),
+                     ("3.8.9", "3.8.10"), ("3.3.5", "3.4")):
+            with self.subTest(a=a, b=b):
+                self.assertTrue(wow.eval(f"ns.NewIn.Older({lua_str(a)}, {lua_str(b)})"))
+                self.assertFalse(wow.eval(f"ns.NewIn.Older({lua_str(b)}, {lua_str(a)})"))
+        self.assertFalse(wow.eval('ns.NewIn.Older("3.8.0", "3.8.0")'))
+
+    def test_opens_after_a_release_in_the_same_series(self):
+        # The case 3.8.1 is for: before, an earlier 3.8 build kept it shut.
+        version = Wow().eval("ns.VERSION").split("-")[0]
+        self.assertTrue(self.shown(self.booted(version + "-test1")))
+
+    def test_opens_after_a_feature_release(self):
+        self.assertTrue(self.shown(self.booted("3.7.9")))
+
+    def test_stays_shut_once_seen_or_going_back(self):
+        wow = Wow()
+        version = wow.eval("ns.VERSION")
+        self.assertFalse(self.shown(self.booted(version)))
+        self.assertFalse(self.shown(self.booted("99.0.0")))
+
+    def test_the_current_release_has_an_entry(self):
+        wow = Wow()
+        version = wow.eval("ns.VERSION")
+        if "-" in version:
+            self.skipTest("a test build; its release needs an entry before shipping")
+        self.assertGreater(wow.eval(f"#ns.NewIn.Unseen({lua_str(version + '-test0')})"), 0)
+
+    def test_shows_only_what_this_account_has_not_seen(self):
+        wow = Wow()
+        self.assertGreater(wow.eval('#ns.NewIn.Unseen("3.7.9")'), 0)
+        self.assertEqual(wow.eval('#ns.NewIn.Unseen("99.0.0")'), 0)
+        self.assertLessEqual(wow.eval('#ns.NewIn.Unseen(nil)'), 8)
+
+
 class Share(unittest.TestCase):
     """The guild channel, including what 3.7.10's diagnostics count."""
 

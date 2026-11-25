@@ -10,13 +10,53 @@ ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction e
 
 local ShowSetup, MaybeShowSetup, setup
 do
--- One entry per change; the box wraps them, with a bullet and a hanging indent.
+-- Every release gets an entry (Joe, 2026-11-24), newest last; the window
+-- opens after each update and shows every entry newer than what this
+-- account last saw, at most NEW_MAX lines. One line per change; the box
+-- wraps them, with a bullet and a hanging indent.
+local NEW_MAX = 8
 local NEW_IN = {
+  { "3.8.0", {
     "Roads rebuilt: one road for each way you really travel, raised like gold trim. A road turns from silver to gold as it becomes a habit, and your most-worn roads carry a streak of your faction's colour. They only ever fade, never jump.",
     "Today's trail: where you lingered (questing, a town) becomes an outlined area; hover it for when and how long. Between areas, a solid line turns to dashes with arrows showing which way you went.",
     "Flight paths: the routes you fly most, on two or more days, show as blue dashes.",
     "Your map settings were reset for this release: every layer is on and today's trail stays 12 hours. Change them on the Map tab.",
+  } },
 }
+
+-- "3.8.0-test4" -> 3, 8, 0, true. A test build comes before its release.
+local function Parts(v)
+    if type(v) ~= "string" then return nil end
+    local a, b, c, rest = v:match("^(%d+)%.(%d+)%.?(%d*)(.*)$")
+    if not a then return nil end
+    return tonumber(a), tonumber(b), tonumber(c) or 0, rest ~= ""
+end
+
+-- Is version a older than b? Anything unreadable counts as oldest.
+local function Older(a, b)
+    local a1, a2, a3, at = Parts(a)
+    local b1, b2, b3, bt = Parts(b)
+    if not a1 then return b1 ~= nil end
+    if not b1 then return false end
+    if a1 ~= b1 then return a1 < b1 end
+    if a2 ~= b2 then return a2 < b2 end
+    if a3 ~= b3 then return a3 < b3 end
+    return at and not bt
+end
+
+-- The entries this account hasn't seen: { version, line } pairs, oldest
+-- first, the newest NEW_MAX of them.
+local function Unseen(seen)
+    local out = {}
+    for _, rel in ipairs(NEW_IN) do
+        if not seen or Older(seen, rel[1]) then
+            for _, line in ipairs(rel[2]) do out[#out + 1] = { rel[1], line } end
+        end
+    end
+    while #out > NEW_MAX do table.remove(out, 1) end
+    return out
+end
+ns.NewIn = { Older = Older, Unseen = Unseen } -- for tests
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
 local TRAIL = {}
@@ -479,9 +519,12 @@ local function BuildSetup()
     s.newBox:SetPoint("TOPRIGHT", -22, -76)
     local nh = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
     nh:SetPoint("TOPLEFT", 12, -10)
-    nh:SetText("NEW IN " .. (VERSION:match("^(%d+%.%d+)") or VERSION))
+    local news = Unseen(gdb.seenVersion)
+    local first, last = news[1] and news[1][1], news[#news] and news[#news][1]
+    nh:SetText(first and first ~= last and ("NEW IN " .. first .. " TO " .. last) or ("NEW IN " .. (last or VERSION)))
     local y = 10 + 14 + 6
-    for _, line in ipairs(NEW_IN) do
+    for _, item in ipairs(news) do
+        local line = item[2]
         -- a small gold square as the bullet (a bullet glyph may draw as a box in the game font)
         local dot = s.newBox:CreateTexture(nil, "ARTWORK")
         dot:SetColorTexture(1, 0.82, 0, 0.9)
@@ -585,13 +628,11 @@ function ShowSetup(isUpdate, tab)
     s:Show()
 end
 
--- "3.4" from "3.4.1": the window opens by itself for new features, not fix releases.
-local function Minor(v) return type(v) == "string" and v:match("^(%d+%.%d+)") or nil end
-
--- Once per account per feature release (3.4, 3.5...), never in combat.
+-- Once per account per release (every release since 3.8.1; before, only
+-- feature releases), never in combat. Not for going back to an older one.
 function MaybeShowSetup()
     if gdb.seenVersion == VERSION then return end
-    if gdb.seenVersion and Minor(gdb.seenVersion) == Minor(VERSION) then return end
+    if gdb.seenVersion and not Older(gdb.seenVersion, VERSION) then return end
     if S.inInstance then S.setupWaiting = true return end
     if InCombatLockdown() or UnitAffectingCombat("player") then
         S.setupWaiting = true

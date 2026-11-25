@@ -58,7 +58,7 @@ A new project is invisible to others and its files do not sync until a moderator
 ### Versioning
 - Tinkering with existing features stays in the current minor series (3.7.x).
 - A new minor version (3.8.0) is for new features.
-- The options window opens by itself only for **feature** releases (new minor), not fix releases. Fix releases get no `NEW_IN` entry — so `NEW_IN` ending at an older version than the current one is correct, not a bug.
+- The options window opens by itself after **every** release, fix releases included (Joe, 2026-11-24; before that, only feature releases). Every release gets a `NEW_IN` entry in `Options.lua`, keyed by its version; the box shows every entry newer than what the account last saw (a test build counts as before its release), at most 8 lines. The `NewIn` test fails if the current release has no entry.
 - `ns.VERSION` comes from the TOC via `GetAddOnMetadata`. The TOC is the only functional version site; the number at the top of `Warpath.lua` is a comment, so keep it in step but know it changes nothing.
 
 ### Upgrades and saved data
@@ -93,7 +93,7 @@ Moving a hand-copied install to the CurseForge app: saved data lives in `WTF`, n
 ### Release checklist
 1. Read this file and `docs/how-it-works.md`.
 2. Build; run `python tools/harness/check.py` and `python tools/harness/test_warpath.py` (with `WARPATH_WTF` set, so real characters boot too). CI runs both on every push and the release workflow won't publish unless they pass.
-3. In one pass: update `docs/how-it-works.md` (feature state + decision log), `CHANGELOG.txt`, and `docs/open-items.md` (close checks Joe has confirmed, add new ones).
+3. In one pass: update `docs/how-it-works.md` (feature state + decision log), `CHANGELOG.txt`, the release's `NEW_IN` entry in `Options.lua` (plain, one line per change, for players), and `docs/open-items.md` (close checks Joe has confirmed, add new ones).
 4. Bump `## Version:` in `Warpath.toc`, and the comment at the top of `Warpath.lua` to match.
 5. Release summary for Joe: files changed, saved-data impact, whether `/reload` is enough or a restart is needed, and any calls you made yourself.
 6. Commit, then on Joe's go-ahead: tag the bare version, push the tag (CI publishes), and run `tools/install.ps1`.

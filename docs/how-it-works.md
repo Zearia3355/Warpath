@@ -232,7 +232,7 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 
 ## Options window
 - `/warpath setup` (the name again since 3.6.4) or `/warpath options`. Tabs: General, Map, Screenshots, Chronicle & zones, Grudges. Settings shared by all characters.
-- Opens itself once after a **feature** release (new minor), with a "New in" box (`NEW_IN`, wrapped bullet entries). 3.8.0's box covers roads, the trail, flights and the map reset; when the reset changed anything (`S.mapWasReset`) the window opens on the Map tab.
+- Opens itself once after **every** release (from 3.8.1; until 3.8.0 only after a feature release), with a "New in" box: `NEW_IN` entries keyed by version, showing every entry newer than `gdb.seenVersion` (`ns.NewIn.Older`: numeric, a test build before its release; at most 8 lines, newest kept). Header "NEW IN 3.8.1", or "NEW IN 3.8.0 TO 3.8.1" across several. Not when going back to an older version. 3.8.0's box covers roads, the trail, flights and the map reset; when the reset changed anything (`S.mapWasReset`) the window opens on the Map tab.
 - **3.8.0 one-time map reset** (`Events.lua`, flag `cfg.mapReset = "3.8"`, inside `pcall`): every `C.LAYERS` layer and `cfg.guildHaze` on, `cfg.trailMin` to the 12 h default. Kept: `iconScale`, `shown`, `runHours`, `shimmer`. Settings only, no history. Reopen the box today: `/run WarpathGlobal.seenVersion = nil` then `/reload`.
 
 ## Commands (summary)
@@ -311,4 +311,6 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-24 | The reset also turns guild haze back on (it sits with the layers on the Map tab); the options window opens on the Map tab when the reset changed something | Claude (open to veto) |
 | 2026-11-24 | Faction-mark trials removed (streak only); "plate" road style kept as a constant; `/warpath roads` keeps its 1.5–10 range and says days to full gold, or "never" above about 5.4 | Claude (open to veto) |
 | 2026-11-24 | `z.roadOld` kept for 3.8.0, dropped in a later release | Joe |
+| 2026-11-24 | The update window opens after every release, fix releases included | Joe |
+| 2026-11-24 | `NEW_IN` keyed by version, showing everything unseen (8 lines max); a test build counts as before its release, so testers still see the release's box | Claude (open to veto) |
 | 2026-11-24 | Built: forming needs movement in 3 of the 4 minutes; every re-entry is its own visit record (tooltip merges those under 2 min apart); dusk = faction deep 60% towards earth brown; hidden trail skipped by visit time; arrow bend judged at full length, tip fixed | Claude (open to veto) |
