@@ -42,6 +42,12 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### A clown icon for deaths to mobs
+- From: feedback passed on by Joe, 2026-11-24
+- Status: needs a design
+- What: a pin for dying to a mob would show a clown instead of the grey cross.
+- Notes: today it's the raid-marker sheet's cross, desaturated (`TEX_RAID`, texcoords 0.5–0.75, 0.25–0.5; `Map.lua`, pin kind `mob`). Warpath uses only the game's own art, so this needs a Blizzard texture that reads as a clown, with its path checked in the Forever client; no candidate is known yet. Check at normal map size, where pins are small. Falls share the `mob` pin today, so decide whether they get the clown too.
+
 ### No chat line when the map button shows or hides Warpath
 - From: Joe, 2026-11-24
 - Status: wanted
