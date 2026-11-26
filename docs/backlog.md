@@ -30,6 +30,12 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Record flight legs as whole routes (3.9)
+- From: Joe, 2026-11-26 (Kalimdor's continent flights around Thunder Bluff and the Crossroads: "I just don't get what the heck is happening in this region visually")
+- Status: wanted, needs a design; changes saved data, so Joe agrees the upgrade before it's built
+- What: one route should be one leg. Today a flight that strays more than 100 yards (`AIR_SNAP`) from a leg starts a new one, so a few real routes are stored as many fragments (Lethality's Thunder Bluff approach is 9 legs, 1412#1 to #9), each with its own days flown, and the landing circles at a flight master are recorded as tiny legs of their own (1413#3, #27, #28, #30). On a continent that draws as broken pieces starting and stopping, which drawing can tidy (3.8.3) but not join.
+- Notes: candidates: legs between flight masters (a flight's start and end are taxi nodes); a wider snap scaled to the map (yards are tiny on a continent); merging existing legs once on upgrade (like the 3.7.12 lane merge, hiding over deleting). The 3.8.3 continent drawing (fitted dashes, tiny legs hidden, one look) stays useful on top. The per-leg diagnostic render that found this is in the 2026-11-26 trail session (each leg its own colour, labelled zone#leg and days flown); worth adding to `render.py` as a layer.
+
 ### Flesh out replay, and advertise it on the map
 - From: Joe, 2026-11-26 (didn't know replay existed: "when did we add this feature?"; wants it fleshed out and advertised on the map)
 - Status: wanted, needs a design

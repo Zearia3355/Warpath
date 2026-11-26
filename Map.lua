@@ -1718,7 +1718,7 @@ local RUN_LOOK = {
 -- (see DrawLegsFar).
 local AIR_LOOK = {
     dash = 10, gap = 9, far = 0.00088, zone = 0.0013,
-    simplify = 3.4, smooth = 3, hook = 4.5, rail = 10.7, touch = 2.5,
+    simplify = 3.4, smooth = 3, hook = 4.5, rail = 10.7, touch = 3.5, bend = 8, bendcos = 0.5, tiny = 16,
     { t0 = 3.2, t1 = 4.4, a0 = 0.75, a1 = 0.95, r = 0.08, g = 0.05, b = 0.10 },
     { t0 = 1.4, t1 = 2.2, a0 = 0.95, a1 = 1.00, r = 0.25, g = 0.45, b = 1.00 },
 }
@@ -1866,46 +1866,109 @@ local function AirPath(px, py, arc, n, tol, passes)
     return qx, qy, qa
 end
 
+-- First k with d[k + 1] >= a (binary search over a growing list).
+local function AirSeg(d, a)
+    local lo, hi = 1, #d - 1
+    while lo < hi do
+        local mid = math.floor((lo + hi) / 2)
+        if d[mid + 1] < a then lo = mid + 1 else hi = mid end
+    end
+    return lo
+end
+
 local function DrawLegsFar(D, z, sx, sy, ox, oy, queue)
-    local lo, look = C.AIR_SHOW - C.AIR_FADE, AIR_LOOK
+    -- shown from halfway up the zone map's fade-in, drawn whole (one look)
+    local lo, look = C.AIR_SHOW - C.AIR_FADE / 2, AIR_LOOK
     local thin = D.w * look.far
     local period = look.dash + look.gap
     for _, L in ipairs(z.air) do
         local px, py, v, arc, n = AirPoints(L, sx, sy, ox, oy, look.hook * thin)
-        if n >= 2 and arc[n] > 0 then
+        local wx0, wx1, wy0, wy1 = math.huge, -math.huge, math.huge, -math.huge
+        for k = 1, n do
+            wx0, wx1, wy0, wy1 = math.min(wx0, px[k]), math.max(wx1, px[k]), math.min(wy0, py[k]), math.max(wy1, py[k])
+        end
+        -- a leg under `tiny` widths across is a flight circling in to land
+        -- or take off: noise at this scale
+        if n >= 2 and arc[n] > 0 and math.max(wx1 - wx0, wy1 - wy0) >= look.tiny * thin then
             local qx, qy, qa = AirPath(px, py, arc, n, look.simplify * thin, look.smooth)
             local m, sa = #qx, { 0 }
-            for i = 2, m do sa[i] = sa[i - 1] + math.sqrt((qx[i] - qx[i - 1]) ^ 2 + (qy[i] - qy[i - 1]) ^ 2) end
-            local j, i = 1, 1
-            local function At(a) -- on the rounded path; a only grows, so walk on
-                while j < m - 1 and sa[j + 1] < a do j = j + 1 end
-                local f = sa[j + 1] > sa[j] and (a - sa[j]) / (sa[j + 1] - sa[j]) or 0
-                return qx[j] + (qx[j + 1] - qx[j]) * f, qy[j] + (qy[j + 1] - qy[j]) * f, qa[j] + (qa[j + 1] - qa[j]) * f
+            for k = 2, m do sa[k] = sa[k - 1] + math.sqrt((qx[k] - qx[k - 1]) ^ 2 + (qy[k] - qy[k - 1]) ^ 2) end
+            local total = sa[m]
+            local function At(a) -- on the rounded path, and the recorded arc there
+                local k = AirSeg(sa, a)
+                local f = sa[k + 1] > sa[k] and (a - sa[k]) / (sa[k + 1] - sa[k]) or 0
+                return qx[k] + (qx[k + 1] - qx[k]) * f, qy[k] + (qy[k + 1] - qy[k]) * f, qa[k] + (qa[k + 1] - qa[k]) * f
             end
             local function StrengthAt(a)
-                while i < n - 1 and arc[i + 1] < a do i = i + 1 end
-                return math.min(v[i], v[i + 1])
+                local k = AirSeg(arc, a)
+                return math.min(v[k], v[k + 1])
             end
-            local total, pos = sa[m], 0
-            while pos < total do
-                local stop = math.min(total, pos + look.dash)
-                if stop - pos > look.dash * 0.4 then -- no stubs at a leg's end
-                    local x1, y1 = At(pos)
-                    local _, _, ca = At((pos + stop) / 2)
-                    local x2, y2 = At(stop)
-                    local s = StrengthAt(ca)
-                    local vis = Clamp((s - lo) / C.AIR_FADE)
-                    local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
-                    if vis > 0 and len > 0 then
-                        queue[#queue + 1] = { L = L, s = s, vis = vis, thin = thin,
-                            u = Clamp((s - C.AIR_SHOW) / (C.ROAD_FULL - C.AIR_SHOW)),
-                            x1 = x1, y1 = y1, x2 = x2, y2 = y2, ux = (x2 - x1) / len, uy = (y2 - y1) / len }
+            -- cut at sharp bends (over about 60 degrees, judged `bend` widths
+            -- either side), at the middle of each bend
+            local cuts, w, b0, b1 = { 0 }, look.bend * thin, nil, nil
+            for a = w, total - w do
+                local x0, y0 = At(a - w)
+                local x1, y1 = At(a)
+                local x2, y2 = At(a + w)
+                local ux, uy, vx, vy = x1 - x0, y1 - y0, x2 - x1, y2 - y1
+                local lu, lv = math.sqrt(ux * ux + uy * uy), math.sqrt(vx * vx + vy * vy)
+                if lu > 0 and lv > 0 and (ux * vx + uy * vy) / (lu * lv) < look.bendcos then
+                    b0, b1 = b0 or a, a
+                elseif b0 then
+                    cuts[#cuts + 1], b0 = (b0 + b1) / 2, nil
+                end
+            end
+            if b0 then cuts[#cuts + 1] = (b0 + b1) / 2 end
+            cuts[#cuts + 1] = total
+            -- no piece shorter than a dash and its gap: drop a cut beside it
+            local merged = true
+            while merged and #cuts > 2 do
+                merged = false
+                for c = 1, #cuts - 1 do
+                    if cuts[c + 1] - cuts[c] < period then
+                        table.remove(cuts, c + 1 < #cuts and c + 1 or c)
+                        merged = true
+                        break
                     end
                 end
-                pos = pos + period
+            end
+            -- each piece gets whole dashes of the usual length, the gaps share
+            -- the rest evenly, with half a gap at both ends: every bend and
+            -- every hand-over between legs is one ordinary gap
+            for c = 1, #cuts - 1 do
+                local c0, len = cuts[c], cuts[c + 1] - cuts[c]
+                if len >= look.dash * 0.8 then
+                    local nd = math.max(1, math.floor(len / period + 0.5))
+                    local per = len / nd
+                    local dl = math.min(look.dash, per - 2)
+                    for k = 0, nd - 1 do
+                        local pos = c0 + k * per + (per - dl) / 2
+                        local x1, y1 = At(pos)
+                        local _, _, ca = At(pos + dl / 2)
+                        local x2, y2 = At(pos + dl)
+                        local s = StrengthAt(ca)
+                        local len2 = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+                        -- one look: every leg shown is drawn whole, no half-faded
+                        -- grey pieces starting and stopping along a route
+                        if s >= lo and len2 > 0 then
+                            queue[#queue + 1] = { L = L, s = s, vis = 1, thin = thin,
+                                edge = (c == 1 and k == 0) or (c == #cuts - 1 and k == nd - 1),
+                                u = Clamp((s - C.AIR_SHOW) / (C.ROAD_FULL - C.AIR_SHOW)),
+                                x1 = x1, y1 = y1, x2 = x2, y2 = y2, ux = (x2 - x1) / len2, uy = (y2 - y1) / len2 }
+                        end
+                    end
+                end
             end
         end
     end
+end
+
+-- How far a point is from a drawn dash.
+local function AirGap(px, py, o)
+    local dx, dy = o.x2 - o.x1, o.y2 - o.y1
+    local L2 = dx * dx + dy * dy
+    local t = L2 > 0 and math.max(0, math.min(1, ((px - o.x1) * dx + (py - o.y1) * dy) / L2)) or 0
+    return math.sqrt((px - o.x1 - t * dx) ^ 2 + (py - o.y1 - t * dy) ^ 2)
 end
 
 -- Draw the queued continent dashes, most-flown first; a dash beside a
@@ -1922,12 +1985,13 @@ local function FlushAir(D, queue)
             for j = -1, 1 do
                 for _, o in ipairs(seen[(gx + i) * 65536 + gy + j] or {}) do
                     if o.L ~= k.L and (o.X - X) ^ 2 + (o.Y - Y) ^ 2 < r * r then
-                        -- alongside it, or touching its end where legs meet
-                        -- (two dashes at an angle read as an L, not dashes)
+                        -- alongside it, or touching it where legs meet (two
+                        -- dashes at an angle read as an L or a V, not dashes)
+                        -- (only a leg's first or last dash: mid-leg, it's a crossing)
                         local touch = AIR_LOOK.touch * k.thin
                         if math.abs(o.ux * k.ux + o.uy * k.uy) > C.TRAIL_YIELD_COS
-                            or math.min((o.x1 - k.x1) ^ 2 + (o.y1 - k.y1) ^ 2, (o.x1 - k.x2) ^ 2 + (o.y1 - k.y2) ^ 2,
-                                (o.x2 - k.x1) ^ 2 + (o.y2 - k.y1) ^ 2, (o.x2 - k.x2) ^ 2 + (o.y2 - k.y2) ^ 2) < touch * touch then
+                            or (k.edge or o.edge) and math.min(AirGap(k.x1, k.y1, o), AirGap(k.x2, k.y2, o),
+                                AirGap(o.x1, o.y1, k), AirGap(o.x2, o.y2, k)) < touch then
                             beside = true
                         end
                     end
@@ -1937,7 +2001,7 @@ local function FlushAir(D, queue)
         if not beside then
             local key = gx * 65536 + gy
             seen[key] = seen[key] or {}
-            table.insert(seen[key], { L = k.L, X = X, Y = Y, ux = k.ux, uy = k.uy, x1 = k.x1, y1 = k.y1, x2 = k.x2, y2 = k.y2 })
+            table.insert(seen[key], { L = k.L, X = X, Y = Y, ux = k.ux, uy = k.uy, x1 = k.x1, y1 = k.y1, x2 = k.x2, y2 = k.y2, edge = k.edge })
             for pi, P in ipairs(AIR_LOOK) do -- casing, then the colour over it
                 D.nair, D.nl = D.nair + 1, D.nl + 1
                 PutLine(D.nl, pi - 3, "BLEND", k.thin * (P.t0 + (P.t1 - P.t0) * k.u),

@@ -2109,7 +2109,7 @@ class FlightsOnContinents(Flights):
         self.assertEqual(len(dark), len(blue), "every dash sits on its casing")
         # start and end where you flew: Felwood 0.10 and 0.90 on Kalimdor
         xs = [v for (x1, _, x2, _), _ in blue for v in (x1, x2)]
-        self.assertLess(abs(min(xs) - (0.419158 + 0.10 * 0.156251) * 1002), 3)
+        self.assertLess(abs(min(xs) - (0.419158 + 0.10 * 0.156251) * 1002), 6)   # half a gap in
         self.assertLess(abs(max(xs) - (0.419158 + 0.90 * 0.156251) * 1002), 12)
 
     def test_a_hook_at_a_legs_end_is_dropped(self):
@@ -2169,6 +2169,78 @@ class FlightsOnContinents(Flights):
                         gap = min(math.dist(p, q) for p in (a, b) for q in (c, d))
                         self.assertGreater(gap, 1.5, f"two dashes meet in an L (leg starting {start} back)")
 
+    # Fitted dashes (3.8.3, Joe: "stretches where dashes are far away"):
+    # each piece between sharp bends gets whole dashes with even gaps and
+    # half a gap at each end, so no stubs are dropped and a bend is one gap.
+    @staticmethod
+    def along(blue, horizontal=True):
+        ax = 0 if horizontal else 1
+        return sorted((min(s[ax], s[ax + 2]), max(s[ax], s[ax + 2])) for s, _ in blue)
+
+    def test_dashes_along_a_leg_are_evenly_spaced_end_to_end(self):
+        self.put_leg(1448, [(0.10 + 0.01 * i, 0.50) for i in range(73)])   # a length that isn't whole dashes
+        self.view()
+        marks = self.along(self.strokes()[0])
+        self.assertGreater(len(marks), 5)
+        gaps = [b[0] - a[1] for a, b in zip(marks, marks[1:])]
+        self.assertLess(max(gaps) - min(gaps), 0.6, f"uneven gaps: {[round(g, 1) for g in gaps]}")
+        x0, x1 = (0.419158 + 0.10 * 0.156251) * 1002, (0.419158 + 0.82 * 0.156251) * 1002
+        self.assertLess(abs((marks[0][0] - x0) - (x1 - marks[-1][1])), 1.0, "the two ends aren't alike")
+        self.assertLess(marks[0][0] - x0, min(gaps), "more than half a gap before the first dash")
+
+    def test_a_sharp_bend_is_one_gap_not_a_bent_dash(self):
+        # A U-turn with a short side (switchbacks keep their sharp bends;
+        # a single corner between long runs is rounded into a wide curve).
+        # Without the cuts, a dash lands across the tip at up to 90 degrees.
+        import math
+        self.view()
+        for k in range(16):                                  # the bend at every place in the rhythm
+            x0 = 0.10 + 0.008 * k
+            self.wow.run("ns.ZoneData(1448).air = {}")
+            pts = ([(x0 + (0.50 - x0) * i / 40, 0.50) for i in range(41)]
+                   + [(0.50, 0.50 + 0.01 * i) for i in range(1, 7)]
+                   + [(0.50 - 0.01 * i, 0.56) for i in range(1, 41)])
+            self.put_leg(1448, pts)
+            blue, _ = self.strokes()
+            self.assertGreaterEqual(len(blue), 4)            # two sides of 50 to 63 px
+            for (x1, y1, x2, y2), _ in blue:
+                ang = math.degrees(math.atan2(abs(y2 - y1), abs(x2 - x1)))
+                self.assertLess(ang, 20, f"a dash cuts across the bend ({ang:.0f} degrees, start {x0:.3f})")
+    def test_a_tiny_leg_is_not_drawn_on_a_continent(self):
+        # a flight circling in to land at a flight master: a loop a few pixels across
+        import math
+        self.put_leg(1448, [(0.30 + 0.03 * math.cos(a / 8 * math.pi), 0.50 + 0.03 * math.sin(a / 8 * math.pi)) for a in range(17)])
+        self.view()
+        self.assertEqual(self.strokes()[0], [], "a landing loop was drawn on the continent")
+        self.view(1448)
+        self.assertTrue(self.strokes()[0], "the zone map should still show it")
+
+    def test_every_leg_shown_is_drawn_whole(self):
+        # one look: a leg flown on about two days isn't drawn half faded
+        self.put_leg(1448, [(0.10 + 0.02 * i, 0.50) for i in range(41)], days=1.8)
+        self.view()
+        from render import COLLECT
+        self.wow.eval("ns.Redraw()")
+        alphas = [float(f.split("\t")[5]) for f in self.wow.run(COLLECT).split("\n")
+                  if f.startswith("L\t") and float(f.split("\t")[4]) > 0.9]
+        self.assertTrue(alphas)
+        self.assertGreater(min(alphas), 0.9, "a shown leg drawn half faded")
+
+    def test_where_a_leg_meets_another_side_on_no_t_forms(self):
+        # a weaker leg ending against the middle of a stronger one
+        import math
+        self.put_leg(1448, [(0.10 + 0.01 * i, 0.50) for i in range(81)], days=4)
+        self.view()
+        for start in (0.0, 0.01, 0.02, 0.03, 0.04, 0.05):
+            self.wow.run("local z = ns.ZoneData(1448) z.air[2] = nil")
+            self.put_leg(1448, [(0.42 + 0.003 * start * 100, 0.20 + 0.0075 * i + start) for i in range(41)], days=2)
+            blue, _ = self.strokes()
+            flat = [s for s, _ in blue if abs(s[0] - s[2]) > abs(s[1] - s[3])]
+            for s, _ in blue:
+                if abs(s[1] - s[3]) > abs(s[0] - s[2]):
+                    gap = min(Steadiness.dist(x, y, f) for f in flat for x, y in ((s[0], s[1]), (s[2], s[3])))
+                    self.assertGreater(gap, 2.0, f"a leg's end dash butts into another leg (start {start})")
+
     def test_a_leg_crossing_another_keeps_every_dash(self):
         cross = [(0.50, 0.10 + 0.02 * i) for i in range(41)]
         self.put_leg(1448, cross, days=2)
@@ -2199,7 +2271,6 @@ class FlightsOnContinents(Flights):
             with self.subTest(play_day=d):
                 self.assertEqual(st.new_ink(prev, cur), [], "continent dashes moved as a leg faded")
             prev = cur
-
 
 
 class Upgrades(unittest.TestCase):
