@@ -1105,6 +1105,68 @@ class OldTrail(unittest.TestCase):
                         if span[0] < l["seg"][0] < span[1])
             self.assertGreater(inked, 0.5 * (span[1] - span[0]), f"the pass along {y} hid itself")
 
+    # Sharp turns stay solid (3.8.3, Joe): at a hairpin the dashes broke into
+    # scattered pieces. Ink near the turn must be one unbroken piece.
+    @staticmethod
+    def pieces(segs, tol=0.8):
+        """How many separate runs of ink: segments joined end to end."""
+        parent = list(range(len(segs)))
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+        ends = [((s[0], s[1]), (s[2], s[3])) for s in segs]
+        for i in range(len(segs)):
+            for j in range(i + 1, len(segs)):
+                if any(abs(p[0] - q[0]) < tol and abs(p[1] - q[1]) < tol for p in ends[i] for q in ends[j]):
+                    parent[find(i)] = find(j)
+        return len({find(i) for i in range(len(segs))})
+
+    def hairpin(self):
+        self.walk(0.20, 0.50, 0.50, 0.50, steps=90)        # out
+        self.walk(0.50, 0.50, 0.50, 0.508, steps=2)        # round the tip
+        self.walk(0.50, 0.508, 0.20, 0.508, steps=90)      # and back, 5 px over
+        self.walk(0.20, 0.508, 0.20, 0.80, steps=90)       # then away
+
+    def near(self, ls, x, y, r):
+        return [l["seg"] for l in self.red(ls)
+                if ((l["seg"][0] + l["seg"][2]) / 2 - x) ** 2 + ((l["seg"][1] + l["seg"][3]) / 2 - y) ** 2 < r * r]
+
+    def test_a_hairpin_stays_solid_through_the_turn(self):
+        self.hairpin()
+        ls = self.lines(after=3600)
+        near = self.near(ls, 0.50 * 1002, 0.504 * self.H, 3 * self.SLOT)
+        tipx = max(max(s[0], s[2]) for s in near)
+        tip = [s for s in near if max(s[0], s[2]) > tipx - 1.0 * self.SLOT]
+        self.assertEqual(self.pieces(tip), 1, "the turn broke into dashes")
+        # one solid piece from a slot before the turn to a slot after it
+        for row in (0.50 * self.H, 0.508 * self.H):
+            on = [s for s in tip if abs((s[1] + s[3]) / 2 - row) < 1.5]
+            self.assertTrue(on, "the solid stretch doesn't reach along both sides")
+            self.assertLessEqual(min(min(s[0], s[2]) for s in on), tipx - 1.0 * self.SLOT,
+                                 "the solid stretch starts too close to the turn")
+        legs = self.near(ls, 0.35 * 1002, 0.504 * self.H, 3 * self.SLOT)
+        self.assertGreater(self.pieces(legs), 3, "the straight legs should still be dashes")
+
+    def test_a_gentle_bend_stays_dashed(self):
+        import math
+        for i in range(121):
+            a = i / 120 * math.pi
+            self.wow.H.player.x, self.wow.H.player.y = 0.40 + 0.08 * math.cos(a), 0.50 + 0.08 * math.sin(a)
+            self.wow.advance(1)
+        segs = [l["seg"] for l in self.red(self.lines(after=3600))]
+        self.assertGreater(self.pieces(segs), 12, "a gentle bend turned solid")
+
+    def test_a_turn_only_fades(self):
+        self.hairpin()
+        before = [l["seg"] for l in self.red(self.lines(after=3 * 60))]
+        steady = Steadiness()
+        for minutes in (5, 30, 120):
+            after = [l["seg"] for l in self.red(self.lines(after=minutes * 60))]
+            self.assertEqual(steady.new_ink(before, after), [], "trail ink appeared at a turn as time passed")
+            before = after
+
     def test_giving_way_only_fades_even_when_the_newer_pass_fades_on_a_road(self):
         # The newer pass runs on a road and gives way to it after 10-15 min;
         # the older one, just off the road, must not come back when it does.
@@ -1487,8 +1549,9 @@ class Lingering(unittest.TestCase):
         self.assertLess(lab["back_alpha"], 0.7)
 
     # 3.8.3: an old area's outline keeps its gaps to at most a third of a
-    # dash slot (Joe's pick D), so it stays joined up instead of thinning to
-    # sparse dots. The dash itself still shortens with age.
+    # dash slot, so it stays joined up instead of thinning to sparse dots.
+    # From pick C (2026-11-26) it uses the trail's own dash (85% -> 65% of a
+    # slot), so the dash still shortens with age.
     def outline_gaps(self, hours_later):
         import math
         self.walk(0.20, 0.50, 0.40, 0.50)
@@ -1517,8 +1580,33 @@ class Lingering(unittest.TestCase):
 
     def test_an_old_area_outline_stays_joined_up(self):
         gap, dash = self.outline_gaps(hours_later=6)
-        self.assertLess(dash, 0.5, "the dash no longer shortens with age")
+        self.assertLess(dash, 0.8, "the dash no longer shortens with age")
+        self.assertGreater(dash, 0.6, "the outline's dash is not the trail's")
         self.assertLessEqual(gap, 0.36, "old outline gaps are wider than a third of a slot")
+
+    def test_an_old_area_outline_sits_on_the_casing(self):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.70, 0.50)
+        self.wow.run("__H.now = __H.now + 3600")
+        import math
+        from render import COLLECT
+        poly = self.outline_px()
+        poly = poly + poly[:1]
+        def off(x, y):
+            return min(Steadiness.dist(x, y, (ax, ay, bx, by)) for (ax, ay), (bx, by) in zip(poly, poly[1:]))
+        self.wow.eval("ns.Redraw()")
+        segs = {}
+        for p in self.wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L":
+                x1, y1, x2, y2 = (float(v) for v in f[6:10])
+                if off(x1, abs(y1)) < 0.5 and off(x2, abs(y2)) < 0.5 and math.hypot(x2 - x1, y2 - y1) > 0.5:
+                    segs.setdefault(tuple(f[6:10]), []).append(float(f[2]))
+        self.assertTrue(segs, "no outline drawn")
+        for k, reds in segs.items():
+            self.assertTrue(any(r < 0.15 for r in reds) and any(r > 0.3 for r in reds),
+                            "an outline dash without its casing")
 
     def test_standing_still_is_not_lingering(self):
         self.walk(0.20, 0.50, 0.40, 0.50)

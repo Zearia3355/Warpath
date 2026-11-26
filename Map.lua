@@ -1443,11 +1443,92 @@ local function Yields(D, e, s, d, at, slot, t)
     table.insert(seen[k], { x = X, y = Y, dx = dx, dy = dy, t = t })
 end
 
+-- Where a mark sits along the stroke at its full (fresh) length: the arrow
+-- with its whole shaft, a dash 0.425 of a slot either side of its centre.
+local function MarkExtent(base, i, slot)
+    local at = base + MARKS[i] * slot
+    local half = (i == 1 and SHAFT0 / 2 or 0.425) * slot
+    return at - half, at + half
+end
+
+-- Sharp turns stay solid (3.8.3, Joe): at a hairpin the dashes broke into
+-- scattered pieces, so where the path turns more than TURN_SHARP over a
+-- slot either side, the trail never breaks into dashes. The solid stretch
+-- runs TURN_PAD slots before and after the turn, out to the full length
+-- of any mark it touches, so the next dash keeps the usual gap. Judged on
+-- the smoothed path at fixed places along the stroke, only where the path
+-- after it is already final, so a turn's stretch never moves.
+local function TurnSpans(D, p, s, d, slot)
+    local last, sw, sh = d[#d], p.sx * D.w, p.sy * D.h
+    local function Turn(a)
+        local x0, y0 = PathAt(s, d, a - slot)
+        local x1, y1 = PathAt(s, d, a)
+        local x2, y2 = PathAt(s, d, a + slot)
+        local ux, uy, vx, vy = (x1 - x0) * sw, (y1 - y0) * sh, (x2 - x1) * sw, (y2 - y1) * sh
+        local lu, lv = math.sqrt(ux * ux + uy * uy), math.sqrt(vx * vx + vy * vy)
+        if lu == 0 or lv == 0 then return 0 end
+        return math.acos(math.max(-1, math.min(1, (ux * vx + uy * vy) / (lu * lv))))
+    end
+    local spans, pad, s0, s1 = {}, C.TURN_PAD * slot, nil, nil
+    local stop = last - slot - 2 * smoothW
+    for k = 4, math.huge do
+        local a = k * 0.25 * slot
+        local sharp = a <= stop and Turn(a) > C.TURN_SHARP
+        if sharp then
+            s0, s1 = s0 or a, a
+        elseif s0 then
+            local x0, x1 = s0 - pad, s1 + pad
+            -- out to the full length of every mark it touches
+            local per = PERIOD * slot
+            for m = math.floor(x0 / per) - 1, math.floor(x1 / per) + 1 do
+                for i = 1, #MARKS do
+                    local lo, hi = MarkExtent(m * per, i, slot)
+                    if hi > x0 and lo < x1 then x0, x1 = math.min(x0, lo), math.max(x1, hi) end
+                end
+            end
+            local n = #spans
+            if n > 0 and x0 <= spans[n] then
+                spans[n] = math.max(spans[n], x1)
+            else
+                spans[n + 1], spans[n + 2] = math.max(0, x0), math.min(last, x1)
+            end
+            s0 = nil
+        end
+        if a > stop then break end
+    end
+    return spans
+end
+
+local function InTurn(spans, lo, hi)
+    for j = 1, #spans, 2 do
+        if hi > spans[j] and lo < spans[j + 1] then return true end
+    end
+end
+
+-- One turn's solid stretch, in the look of its age at its middle.
+local function DrawTurn(D, e, s, d, x0, x1, slot, life, line)
+    local c = (x0 + x1) / 2
+    local held, age = MarkAge(D, e, s, d, c, life)
+    if not held or Yields(D, e, s, d, c, slot, D.now - age) then return end
+    local r, g, b, _, tk = TrailLook(age, life)
+    local _, _, _, a = TrailLook(held, life)
+    if e.roadSegs and age > C.TRAIL_ROAD_KEEP then
+        local x, y = OnStroke(s, d, c)
+        if OnRoad(e, x, y) then a = a * (1 - Smooth((age - C.TRAIL_ROAD_KEEP) / C.TRAIL_ROAD_FADE)) end
+    end
+    if a >= 0.01 then Stretch(D, e.p, e.lg.dash, line * tk, r, g, b, a, s, d, x0, x1) end
+end
+
 local function StrokeDashes(D, e, s, life, slot, line)
     local p, clips = e.p, e.lg.dash
     local d = StrokeArc(s)
     local last = d[#d]
     smoothW = (C.TRAIL_SMOOTH or 0) * slot
+    local turns = TurnSpans(D, p, s, d, slot)
+    for j = #turns - 1, 1, -2 do -- newest first, like the marks
+        if D.ndash >= C.DASH_BUDGET then return end
+        DrawTurn(D, e, s, d, turns[j], turns[j + 1], slot, life, line)
+    end
     for m = math.floor(last / (PERIOD * slot)), 0, -1 do
         local base = m * PERIOD * slot
         for i = 1, #MARKS do -- newest first: the arrow, then the two dashes
@@ -1455,6 +1536,7 @@ local function StrokeDashes(D, e, s, life, slot, line)
             local at = base + MARKS[i] * slot
             local held, age = MarkAge(D, e, s, d, at, life)
             if held == false then return end -- older than the trail: the rest is too
+            if held and #turns > 0 and InTurn(turns, MarkExtent(base, i, slot)) then held = nil end
             if held and Yields(D, e, s, d, at, slot, D.now - age) then held = nil end
             local r, g, b, tk, fill, a, _
             if held then
@@ -1515,12 +1597,10 @@ local function Spent(sec)
     return (("%.1f"):format(sec / 3600):gsub("%.0$", "")) .. "h"
 end
 
--- Past areas' dashes: one every AREA_PERIOD trail slots, filling AREA_NEW of
--- it when fresh down to AREA_OLD at the trail's end (the trail's own dashes
--- go 0.85 -> 0.65 of a full slot, from 3.8.3).
-local AREA_PERIOD, AREA_NEW, AREA_OLD = 0.75, 0.8, 0.55
-
-local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap)
+-- Past areas' outlines are drawn like the trail (3.8.3, Joe's pick C): the
+-- trail's own dash, one per slot, on the same dark casing. The period never
+-- changes with age, so each dash keeps its place and only shortens.
+local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap, cased)
     local pos = 0
     for i = 1, #poly / 2 - 1 do
         local x1, y1, x2, y2 = poly[2 * i - 1], poly[2 * i], poly[2 * i + 1], poly[2 * i + 2]
@@ -1531,10 +1611,14 @@ local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap)
             if gap == 0 or ph < dash then
                 local v = gap == 0 and L or math.min(L, u + math.max(dash - ph, 1e-7))
                 local f0, f1 = u / L, v / L
+                local px0, py0 = (p.ox + (x1 + (x2 - x1) * f0) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f0) * p.sy) * D.h
+                local px1, py1 = (p.ox + (x1 + (x2 - x1) * f1) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f1) * p.sy) * D.h
+                if cased then
+                    D.nl = D.nl + 1
+                    PutLine(D.nl, 5, "BLEND", thick * C.TRAIL_CASE, 0.10, 0.04, 0.03, a * 0.75, px0, py0, px1, py1)
+                end
                 D.nl = D.nl + 1
-                PutLine(D.nl, 6, "BLEND", thick, r, g, b, a,
-                    (p.ox + (x1 + (x2 - x1) * f0) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f0) * p.sy) * D.h,
-                    (p.ox + (x1 + (x2 - x1) * f1) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f1) * p.sy) * D.h)
+                PutLine(D.nl, 6, "BLEND", thick, r, g, b, a, px0, py0, px1, py1)
                 u = v
             else
                 u = u + math.max(dash + gap - ph, 1e-7)
@@ -1571,19 +1655,8 @@ local function DrawAreas(D, scene)
                 r, g, b, a = faction.r, faction.g, faction.b, 0.95
                 DrawOutline(D, p, ar.poly, line * 1.05, r, g, b, a, 1, 0)
             else
-                local age = math.max(ar.age, C.LINE_SOLID + 1)
-                r, g, b, a, tk = TrailLook(age, life)
-                -- 3.8.3: a shorter, fixed period than the trail's, so old
-                -- outlines stay joined up instead of thinning to sparse
-                -- dots (Joe). The period never changes with age, so each
-                -- dash keeps its place and only shortens. Its length follows
-                -- age on its own scale (the trail's dashes stopped shrinking
-                -- to dots in 3.8.3; the outline, pick H, is unchanged).
-                local tg = TrailG(age, life)
-                fill = 1 - (0.35 * Smooth((tg - 0.27) / 0.12) + 0.25 * Smooth((tg - 0.60) / 0.12)) / 0.6
-                local per = AREA_PERIOD * slot
-                local dash = per * (AREA_OLD + (AREA_NEW - AREA_OLD) * fill)
-                DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, dash, per - dash)
+                r, g, b, a, tk, fill = TrailLook(math.max(ar.age, C.LINE_SOLID + 1), life)
+                DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, slot * fill, slot * (1 - fill), true)
             end
             if not p.far and a > 0.05 then AreaTag(D, p, ar, a) end
         end
