@@ -36,7 +36,7 @@ local NEW_IN = {
     "What's new now lives in your chronicle, on its Warpath tab, with a welcome page and a Settings button. The book opens there after each update, instead of the settings window.",
     "World map: one score for each continent. Continent maps: a small score for each zone. Blue when you're ahead, yellow when it's close, red when you're behind.",
     "A zone's own map shows its score in the top-left corner.",
-    "Where pins crowd on continent and world maps, they combine into one big sword or skull with a count. Hover it to see how many were yours.",
+    "Where pins crowd on continent and world maps, they combine into one larger sword or skull. Hover it to see how many, and how many were yours.",
     "Your trail along roads fades after 10 minutes, so the roads read clean. Trail across open ground stays.",
     "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their time labels are yellow on a dark patch and stay readable longer, and older areas' outlines are dashed closer together so they stay easy to see.",
     "Dangerous-ground warnings stay up long enough to read.",

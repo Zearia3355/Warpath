@@ -196,7 +196,7 @@ function Widget:UnregisterAllEvents() self.__events = {} self.__allEvents = nil 
 function Widget:IsEventRegistered(ev) return self.__events[ev] == true end
 
 -- text
-function Widget:SetText(t) self.__text = t end
+function Widget:SetText(t) self.__text = t ~= nil and tostring(t) or nil end -- the client takes numbers too
 function Widget:SetFormattedText(fmt, ...) self.__text = string.format(fmt, ...) end
 function Widget:GetText() return self.__text end
 function Widget:GetStringWidth() return #(self.__text or "") * 6 end

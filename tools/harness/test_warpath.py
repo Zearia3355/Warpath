@@ -689,7 +689,7 @@ class MapDrawing(unittest.TestCase):
             for _, f in ipairs(WarpathOverlay.__children) do
                 if f.kind and f.tex and f:IsShown() then
                     local _, _, _, x, y = f:GetPoint(1)
-                    t[#t + 1] = table.concat({ f.kind, f.count:IsShown() and f.count:GetText() or "",
+                    t[#t + 1] = table.concat({ f.kind, f.kind == "many" and f.d.n or "",
                         x, y, f:GetWidth() }, ",")
                 end
             end return table.concat(t, ";") end)()""")
@@ -719,10 +719,11 @@ class MapDrawing(unittest.TestCase):
         pins = self.pins_on(1414)
         big = [p for p in pins if p[0] == "many"]
         self.assertEqual(len(big), 1, pins)
-        self.assertEqual(big[0][1], "5", "the big pin shows how many it stands for")
+        self.assertEqual(big[0][1], "5", "the big pin stands for all five")
         self.assertEqual(len([p for p in pins if p[0] == "skill"]), 1, "the lone kill stays a pin")
         normal = float([p for p in pins if p[0] == "skill"][0][4])
-        self.assertGreater(float(big[0][4]), normal * 1.4, "the big pin is bigger")
+        self.assertGreater(float(big[0][4]), normal * 1.2, "the big pin is bigger")
+        self.assertLessEqual(float(big[0][4]), normal * 1.5 + 0.01, "but not by much (Joe: 'a little big')")
 
     def test_two_crowded_kills_stay_separate_pins(self):
         self.guild("K", 0.40, 0.40, n=2, step=0.01)
@@ -761,8 +762,21 @@ class MapDrawing(unittest.TestCase):
         self.set_record({1448: (1, 5), 2482: (0, 2)})
         s = {r[0]: (float(r[4]), float(r[5])) for r in self.scores_on(1414)}
         self.assertEqual(len(s), 2)
-        self.assertGreater(abs(s["1 : 5"][1] - s["0 : 2"][1]), 9, "the smaller one steps down")
-        self.assertGreater(s["1 : 5"][1], s["0 : 2"][1], "the most-fought zone keeps its centre (y is negative down)")
+        self.assertGreater(abs(s["1 : 5"][1] - s["0 : 2"][1]), 9, "they step apart")
+        # (which one keeps the centre isn't checked: set_record's kill pin sits there, so both step)
+
+    def test_a_score_steps_around_pins_and_the_pins_stay_put(self):
+        self.guild("K", 0.5, 0.5, n=4, step=0.002)         # a big sword on Felwood's centre
+        self.wow.run("ns.db.maps[1448].kills, ns.db.maps[1448].pdeaths = 0, 0")
+        before = [p for p in self.pins_on(1414) if p[0] == "many"]
+        self.set_record({1448: (4, 0)})
+        pins = [p for p in self.pins_on(1414) if p[0] == "many"]
+        self.assertEqual(pins, before, "the pin doesn't move for the score")
+        (sx, sy), (_, _, px, py, pw) = [(float(r[4]), float(r[5])) for r in self.scores_on(1414)][0], pins[0]
+        clear_y = abs(sy - float(py)) >= (15 + float(pw)) / 2 - 0.01
+        clear_x = abs(sx - float(px)) >= (30 + float(pw)) / 2
+        self.assertTrue(clear_x or clear_y, f"score at {sx},{sy} sits on the pin at {px},{py}")
+        self.assertLess(abs(sy - float(py)), 40, "and stays near the zone's centre")
 
     def test_the_world_view_shows_one_score_per_continent(self):
         self.wow.run("""__H.rects[1414] = { [947] = { 0.0, 0.5, 0.1, 0.9 } }

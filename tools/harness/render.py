@@ -61,7 +61,14 @@ end
 
 -- centre and size of a region, in image pixels (y down). Offsets from the
 -- overlay are from its top-left, as Map.lua places everything.
-local function rect(o)
+-- -1 for a point on the first side, +1 on the second, 0 centred
+local function Off(pt, a, b)
+    if pt:find(a) then return -1 elseif pt:find(b) then return 1 end
+    return 0
+end
+
+local rect
+function rect(o)
     for _, p in ipairs(o.__points) do
         if p[2] == overlay and type(p[1]) == "string" then
             local x, y, w, h = p[4] or 0, -(p[5] or 0), o.__w, o.__h
@@ -69,6 +76,36 @@ local function rect(o)
             if p[1]:find("LEFT") then x = x + w * s / 2 elseif p[1]:find("RIGHT") then x = x - w * s / 2 end
             if p[1]:find("TOP") then y = y + h * s / 2 elseif p[1]:find("BOTTOM") then y = y - h * s / 2 end
             return x, y, w, h
+        end
+    end
+    -- anchored to another region (a pin, a font string), with its offset
+    local p = o.__points[1]
+    if p and p[1] ~= "ALL" then
+        local rel, rp, ox, oy = o.__parent, p[1], p[2] or 0, p[3] or 0
+        if type(p[2]) == "table" then rel, rp, ox, oy = p[2], p[3] or p[1], p[4] or 0, p[5] or 0 end
+        if rel and rel ~= overlay then
+            local x, y, w, h
+            if rel.__kind == "FontString" then
+                local q = rel.__points[1]
+                if q then
+                    local r2, rp2, ox2, oy2 = rel.__parent, q[1], q[2] or 0, q[3] or 0
+                    if type(q[2]) == "table" then r2, rp2, ox2, oy2 = q[2], q[3] or q[1], q[4] or 0, q[5] or 0 end
+                    local px, py, pw, ph = rect(r2)
+                    if px then
+                        local tw, th = #(rel.__text or "") * 6, 12
+                        local ax, ay = px + Off(rp2, "LEFT", "RIGHT") * pw / 2 + ox2, py + Off(rp2, "TOP", "BOTTOM") * ph / 2 - oy2
+                        x, y, w, h = ax - Off(q[1], "LEFT", "RIGHT") * tw / 2, ay - Off(q[1], "TOP", "BOTTOM") * th / 2, tw, th
+                    end
+                end
+            else
+                x, y, w, h = rect(rel)
+            end
+            if x then
+                local ow, oh = o.__w or 0, o.__h or 0
+                local ax, ay = x + Off(rp, "LEFT", "RIGHT") * w / 2 + ox, y + Off(rp, "TOP", "BOTTOM") * h / 2 - oy
+                return ax - Off(p[1], "LEFT", "RIGHT") * ow / 2, ay - Off(p[1], "TOP", "BOTTOM") * oh / 2,
+                    ow > 0 and ow or w, oh > 0 and oh or h
+            end
         end
     end
     local par = o.__parent

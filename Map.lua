@@ -275,9 +275,6 @@ local function GetPin(i)
         f.label:SetPoint("LEFT", f, "RIGHT", 2, 0)
         f.label:SetTextColor(1, 0.35, 0.25)
         f.label:Hide()
-        f.count = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") -- how many a big pin stands for
-        f.count:SetPoint("TOP", f, "BOTTOM", 0, 3)
-        f.count:Hide()
         f:EnableMouse(true)
         if f.SetMouseClickEnabled then f:SetMouseClickEnabled(false) end
         f:SetScript("OnEnter", PinEnter)
@@ -1728,7 +1725,7 @@ end
 -- Crowded pins on continent and world views (3.8.3). Every pin is still
 -- drawn, but kills (yours and guildmates') within a pin's width of each other
 -- chain into one group, and so do deaths; a group of C.CROWD_MIN or more is
--- one big sword or skull with its count under it. Groups come from the pins'
+-- one bigger sword or skull; its tooltip says how many. Groups come from the pins'
 -- places alone, so a big pin only changes when pins are added or fade out.
 -- Big pins that would overlap are pushed apart. Pin(...) draws one pin.
 local CROWD = { kill = "kill", skill = "kill", death = "death", sdeath = "death" }
@@ -1778,8 +1775,10 @@ local function Crowd(D, Pin, reach)
                     if q.kind == "skill" or q.kind == "sdeath" then guild = guild + 1 end
                     size, a = math.max(size, q.size), math.max(a, q.a)
                 end
+                -- a little bigger than one pin; the tooltip says how many (Joe, 3.8.3: smaller, no count)
+                local grow = math.min(1.5, 1.1 + 0.04 * n)
                 big[#big + 1] = { kind = CROWD[first.kind], x = sx / n, y = sy / n, n = n, guild = guild,
-                    tex = first.tex, size = size * math.min(2.4, 1.5 + 0.12 * n), a = a }
+                    tex = first.tex, size = size * grow, a = a }
             end
         end
     end
@@ -1802,16 +1801,12 @@ local function Crowd(D, Pin, reach)
     end
     for _, g in ipairs(big) do
         local tint = g.guild * 2 > g.n and 0.55 or 1
-        local f = Pin("many", g, FLAT, g.x / D.w, g.y / D.h, g.tex, g.size, tint, tint == 1 and 1 or 0.8, 1, g.a, true)
-        if f then
-            f.count:SetText(g.n)
-            f.count:SetTextColor(1, 1, 1, g.a) -- fades with its pin
-            f.count:Show()
-        end
+        Pin("many", g, FLAT, g.x / D.w, g.y / D.h, g.tex, g.size, tint, tint == 1 and 1 or 0.8, 1, g.a, true)
     end
 end
 
--- A score on a continent or world view, stepped down past any already placed.
+-- A score on a continent or world view, stepped past any score or pin already
+-- placed (pins mark where fights were, so the score is the one that moves).
 local function Score(D, x, y, k, d, big)
     D.nb = D.nb + 1
     local f = GetLabel(D.nb)
@@ -1820,13 +1815,16 @@ local function Score(D, x, y, k, d, big)
     local c = Standing(k, d)
     f.text:SetTextColor(c[1], c[2], c[3])
     local tw, th = (f.text:GetStringWidth() or 30) + 8, big and 18 or 15
-    for _ = 1, 12 do
+    -- nearest clear spot: down a step, up a step, down two, ... (pins stay put)
+    local y0 = y
+    for i = 1, 24 do
         local clear = true
         for _, b in ipairs(D.placed) do
             if math.abs(x - b[1]) < (tw + b[3]) / 2 and math.abs(y - b[2]) < (th + b[4]) / 2 then clear = false break end
         end
         if clear then break end
-        y = y + th * 0.7
+        local n = math.ceil(i / 2)
+        y = y0 + (i % 2 == 1 and n or -n) * th * 0.7
     end
     D.placed[#D.placed + 1] = { x, y, tw, th }
     f.back:SetSize(tw + 16, th + 14)
@@ -1868,13 +1866,15 @@ local function DrawMarks(D, scene, from, upTo)
             f.label:Hide()
         end
         f.tex:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
-        f.count:Hide()
         -- Stack by kind, not draw order: sightings at the bottom, kills and
         -- deaths above them, grudges on top.
         f:SetFrameLevel(overlay:GetFrameLevel() + (PIN_LEVEL[kind] or 2))
         f:SetSize(size / k, size / k)
         At(f, p, x, y, w, h)
         f:Show()
+        if p.far or placed then -- scores step around it (placed: drawn by Crowd, so far)
+            D.placed[#D.placed + 1] = { (p.ox + x * p.sx) * w, (p.oy + y * p.sy) * h, size / k, size / k }
+        end
         return f
     end
     local reach = base * 1.4 / k -- about a pin and a half, in map units
