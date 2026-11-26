@@ -1341,6 +1341,40 @@ class Lingering(unittest.TestCase):
         self.assertLess(lab["alpha"], 0.9)
         self.assertLess(lab["back_alpha"], 0.7)
 
+    # 3.8.3: an old area's outline keeps its gaps to at most a third of a
+    # dash slot (Joe's pick D), so it stays joined up instead of thinning to
+    # sparse dots. The dash itself still shortens with age.
+    def outline_gaps(self, hours_later):
+        import math
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.70, 0.50)
+        self.wow.run(f"ns.cfg.trailMin = 720; __H.now = __H.now + {int(hours_later * 3600)}")
+        poly = self.outline_px()
+        poly = poly + poly[:1] if poly[0] != poly[-1] else poly
+        def off(x, y):  # distance from the outline
+            best = 1e9
+            for (ax, ay), (bx, by) in zip(poly, poly[1:]):
+                dx, dy = bx - ax, by - ay
+                t = max(0, min(1, ((x - ax) * dx + (y - ay) * dy) / ((dx * dx + dy * dy) or 1)))
+                best = min(best, math.hypot(x - ax - t * dx, y - ay - t * dy))
+            return best
+        on = [(x1, abs(y1), x2, abs(y2)) for x1, y1, x2, y2 in self.lines()
+              if off(x1, abs(y1)) < 0.5 and off(x2, abs(y2)) < 0.5]
+        self.assertTrue(on, "no outline drawn")
+        # pieces split at a corner are one dash: count dash starts only
+        ends = {(round(x2, 2), round(y2, 2)) for _, _, x2, y2 in on}
+        dashes = sum(1 for x1, y1, _, _ in on if (round(x1, 2), round(y1, 2)) not in ends)
+        drawn = sum(math.hypot(x2 - x1, y2 - y1) for x1, y1, x2, y2 in on)
+        perim = sum(math.hypot(bx - ax, by - ay) for (ax, ay), (bx, by) in zip(poly, poly[1:]))
+        slot = 5 * 0.0020 * 1002                     # C.DASH_PERIOD x a zone map's thin line
+        return (perim - drawn) / dashes / slot, drawn / dashes / slot
+
+    def test_an_old_area_outline_stays_joined_up(self):
+        gap, dash = self.outline_gaps(hours_later=6)
+        self.assertLess(dash, 0.5, "the dash no longer shortens with age")
+        self.assertLessEqual(gap, 0.36, "old outline gaps are wider than a third of a slot")
+
     def test_standing_still_is_not_lingering(self):
         self.walk(0.20, 0.50, 0.40, 0.50)
         for _ in range(15 * 60):

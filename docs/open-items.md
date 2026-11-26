@@ -22,9 +22,12 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test
 
 - Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). In test3.
 
+- Past area outlines dashed closer together (Joe's pick H, from renders of test areas aged 10 min to 10 h on a parchment stand-in): a fixed period of 0.75 trail slots, dash 80% -> 55%, so old areas stay joined up. D, his first pick, made dashes slide as they aged (only-fade test). Test `test_an_old_area_outline_stays_joined_up` (mutation-checked: the old spacing fails it). Not in his game yet; `/reload` is enough.
+
 - Welcome and What's New in the chronicle (Joe, 2026-11-25): a permanent **Warpath** tab, right of the title plate; the book opens there after each update instead of the options window, and closing it marks the release seen. 3.8.3's `NEW_IN` entry is written (10 lines). Tests in `NewIn` (4 new; mutation-checked: never opening, not marking seen, everything marked new, no paging each fail). The harness's `Hide` now runs `OnHide`, and buttons keep `Enable`/`Disable`.
 
 **Joe to check in game**
+- Old lingering areas (a few hours old) are easy to see with the closer dashes, and the outline of the area you're in still stands out as the solid one.
 - After a full restart: the book opens on the Warpath tab, 3.8.3 headed "new since you last played"; the welcome and the notes read well; Settings opens the options window; Earlier reaches 3.8.0; closing it and logging in again doesn't reopen it.
 - Walk onto dangerous or contested ground: the warning can be read before it fades.
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".

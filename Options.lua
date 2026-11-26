@@ -38,7 +38,7 @@ local NEW_IN = {
     "A zone's own map shows its score in the top-left corner.",
     "Where pins crowd on continent and world maps, they combine into one big sword or skull with a count. Hover it to see how many were yours.",
     "Your trail along roads fades after 10 minutes, so the roads read clean. Trail across open ground stays.",
-    "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their time labels are yellow on a dark patch and stay readable longer.",
+    "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their time labels are yellow on a dark patch and stay readable longer, and older areas' outlines are dashed closer together so they stay easy to see.",
     "Dangerous-ground warnings stay up long enough to read.",
     "A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too).",
     "The map button no longer prints a chat line when clicked.",

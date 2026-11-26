@@ -1475,6 +1475,11 @@ local function Spent(sec)
     return (("%.1f"):format(sec / 3600):gsub("%.0$", "")) .. "h"
 end
 
+-- Past areas' dashes: one every AREA_PERIOD trail slots, filling AREA_NEW of
+-- it when fresh down to AREA_OLD at the trail's end (the trail's own dashes
+-- go 0.85 -> 0.25 of a full slot).
+local AREA_PERIOD, AREA_NEW, AREA_OLD = 0.75, 0.8, 0.55
+
 local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap)
     local pos = 0
     for i = 1, #poly / 2 - 1 do
@@ -1527,7 +1532,13 @@ local function DrawAreas(D, scene)
                 DrawOutline(D, p, ar.poly, line * 1.05, r, g, b, a, 1, 0)
             else
                 r, g, b, a, tk, fill = TrailLook(math.max(ar.age, C.LINE_SOLID + 1), life)
-                DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, fill * slot, (1 - fill) * slot)
+                -- 3.8.3: a shorter, fixed period than the trail's, so old
+                -- outlines stay joined up instead of thinning to sparse
+                -- dots (Joe). The period never changes with age, so each
+                -- dash keeps its place and only shortens.
+                local per = AREA_PERIOD * slot
+                local dash = per * (AREA_OLD + (AREA_NEW - AREA_OLD) * Clamp((fill - 0.25) / 0.6))
+                DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, dash, per - dash)
             end
             if not p.far and a > 0.05 then AreaTag(D, p, ar, a) end
         end
