@@ -4,9 +4,9 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3 batch (branch `areas-merge`, not in Joe's game yet beyond test1's areas)
+## 3.8.3 batch: installed as 3.8.3-test2 (branch `areas-merge`)
 
-Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Not yet: `NEW_IN`, changelog, version.
+Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Installed 2026-11-25 by script (commit `8977243`; `/reload` is enough; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test2/`). Not yet: `NEW_IN`, changelog, release version.
 
 - Ground warnings ("DANGEROUS GROUND" etc.) stay up 4–6.5 s by line length instead of under 2 s (`Overlay.Show` takes `hold`; `Overlay.ReadHold`). Kill text unchanged. Tests in `Overlay` (mutation-checked: without the hold, the reading test fails).
 - The map button's left-click shows/hides Warpath without a chat line; `/warpath map` still replies. Tests in `MapButton` (mutation-checked).
