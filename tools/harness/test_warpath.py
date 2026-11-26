@@ -2038,6 +2038,170 @@ class Flights(unittest.TestCase):
             self.assertTrue(self.inked(x, 0.50), f"a route flown on 3 days isn't etched at x={x}")
 
 
+class FlightsOnContinents(Flights):
+    """Flight legs on a continent (3.8.3, Joe): accurate start, path and end,
+    without janky dashes. At continent scale a leg's points are under a
+    pixel apart, so dashes drawn along them came out as kinked shapes, and
+    legs recorded on the continent map itself were drawn zone-style. Each
+    leg is simplified, rounded and dashed with straight strokes; a weaker
+    leg beside a stronger one gives way. Felwood sits on Kalimdor about 156
+    px across, so 0.064 of Felwood is one dash."""
+
+    def setUp(self):
+        super().setUp()
+
+    def view(self, mapID=1414):
+        self.wow.run(f"__H.mapShown = {mapID}")
+
+    def strokes(self):
+        """Blue dash strokes (the colour pass) and dark casing strokes."""
+        from render import COLLECT
+        self.wow.eval("ns.Redraw()")
+        blue, dark = [], []
+        for p in self.wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L" and float(f[5]) > 0.02:
+                rgb = tuple(float(v) for v in f[2:5])
+                seg = tuple(float(v) for v in f[6:10])
+                if rgb[2] > 0.9 and rgb[0] < 0.4:
+                    blue.append((seg, float(f[10])))
+                elif max(rgb) < 0.15:
+                    dark.append((seg, float(f[10])))
+        return blue, dark
+
+    WIGGLE = [(0.10 + 0.02 * i, 0.50 + (0.012 if i % 2 else -0.012)) for i in range(41)]  # about 2 px either side on Kalimdor
+
+    def flown(self, path, days=2, dy=0.0):
+        for d in range(days):
+            if d:
+                self.next_day()
+            self.fly(path if d % 2 == 0 else list(reversed(path)), dy=dy)
+
+    def put_leg(self, mapID, pts, days=3):
+        """A leg straight into saved data, flown on `days` days, now."""
+        flat = ", ".join(f"{x}, {y}" for x, y in pts)
+        self.wow.run(f"""
+            local z = ns.ZoneData({mapID})
+            z.air = z.air or {{}}
+            local leg = {{ {flat} }}
+            leg.l, leg.t, leg.d = {{}}, {{}}, {{}}
+            for i = 1, #leg / 2 do leg.l[i], leg.t[i], leg.d[i] = {days}, ns.PlayNow(), 1 end
+            z.air[#z.air + 1] = leg""")
+
+    def zigzag(self, x0, x1, y, amp, n=40):
+        return [(x0 + (x1 - x0) * i / n, y + (0 if i in (0, n) else amp if i % 2 else -amp)) for i in range(n + 1)]
+
+    def test_each_dash_is_one_straight_stroke_along_the_route(self):
+        import math
+        self.put_leg(1448, self.zigzag(0.10, 0.90, 0.50, 0.012))   # about 2 px either side on Kalimdor
+        self.view()
+        blue, dark = self.strokes()
+        self.assertGreater(len(blue), 6, "no flight drawn on the continent")
+        ends = {}
+        for (x1, y1, x2, y2), _ in blue:
+            for pt in ((round(x1, 1), round(y1, 1)), (round(x2, 1), round(y2, 1))):
+                ends[pt] = ends.get(pt, 0) + 1
+        self.assertEqual(max(ends.values()), 1, "a dash is made of several pieces")
+        y0 = (0.230975 + 0.50 * 0.156251) * 668
+        for (x1, y1, x2, y2), th in blue:
+            self.assertLess(max(abs(y1 - y0), abs(y2 - y0)), 0.8, "a dash follows the recorded wiggle instead of the route")
+            self.assertLessEqual(th, 1002 * 0.00088 * 1.6, "continent flights are not the thinner width")
+        self.assertEqual(len(dark), len(blue), "every dash sits on its casing")
+        # start and end where you flew: Felwood 0.10 and 0.90 on Kalimdor
+        xs = [v for (x1, _, x2, _), _ in blue for v in (x1, x2)]
+        self.assertLess(abs(min(xs) - (0.419158 + 0.10 * 0.156251) * 1002), 3)
+        self.assertLess(abs(max(xs) - (0.419158 + 0.90 * 0.156251) * 1002), 12)
+
+    def test_a_hook_at_a_legs_end_is_dropped(self):
+        # a leg's end joins the leg it met, which can double back a pixel or
+        # three: that hook mustn't bend the last dash
+        import math
+        pts = [(0.10 + 0.02 * i, 0.50) for i in range(41)] + [(0.885, 0.52)]
+        self.put_leg(1448, pts)
+        self.view()
+        blue, _ = self.strokes()
+        self.assertGreater(len(blue), 6)
+        y0 = (0.230975 + 0.50 * 0.156251) * 668
+        for (x1, y1, x2, y2), _ in blue:
+            self.assertLess(max(abs(y1 - y0), abs(y2 - y0)), 0.5, "the hook pulled the leg's end")
+
+    def test_the_zone_map_is_unchanged(self):
+        self.flown(self.WIGGLE)
+        self.view(1448)
+        blue, _ = self.strokes()
+        self.assertTrue(any(th > 1002 * 0.0013 * 1.3 for _, th in blue), "the zone map's flights changed width")
+
+    def test_a_leg_recorded_on_the_continent_map_is_drawn_the_same_way(self):
+        import math
+        self.put_leg(1414, self.zigzag(0.40, 0.56, 0.30, 0.002))
+        self.view()
+        blue, _ = self.strokes()
+        self.assertGreater(len(blue), 4)
+        for (x1, y1, x2, y2), th in blue:
+            self.assertLessEqual(th, 1002 * 0.00088 * 1.6, "drawn at zone width")
+            self.assertLess(math.degrees(math.atan2(abs(y2 - y1), abs(x2 - x1))), 12, "drawn zone-style along the wiggle")
+
+    def test_a_weaker_leg_beside_a_stronger_one_gives_way(self):
+        self.put_leg(1448, [(0.10 + 0.02 * i, 0.50) for i in range(41)], days=4)   # the main leg
+        self.put_leg(1448, [(0.10 + 0.02 * i, 0.54) for i in range(41)], days=2)   # 6 px over on Kalimdor
+        self.view()
+        blue, _ = self.strokes()
+        y0 = (0.230975 + 0.50 * 0.156251) * 668
+        mid = [s for s, _ in blue if abs(s[0] - s[2]) > abs(s[1] - s[3]) and 470 < (s[0] + s[2]) / 2 < 490]
+        rows = sorted({round((s[1] + s[3]) / 2) for s in mid})
+        self.assertTrue(mid, "the main leg isn't drawn")
+        self.assertLess(max(rows) - min(rows), 3, f"both legs drawn side by side: rows {rows}")
+
+    def test_where_legs_meet_no_two_dashes_make_an_l(self):
+        # one leg ends where another begins, at a right angle: their end dashes
+        # touched and read as an L. The weaker leg's dash gives way.
+        import math
+        self.put_leg(1448, [(0.10 + 0.01 * i, 0.50) for i in range(41)], days=4)
+        self.view()
+        for start in (0.0, 0.01, 0.02, 0.03, 0.04, 0.05, 0.06):   # wherever its dashes fall
+            self.wow.run("local z = ns.ZoneData(1448) z.air[2] = nil")
+            self.put_leg(1448, [(0.50, 0.50 - start + 0.01 * i) for i in range(41)], days=2)
+            blue, _ = self.strokes()
+            ends = [((s[0], s[1]), (s[2], s[3]), abs(s[0] - s[2]) > abs(s[1] - s[3])) for s, _ in blue]
+            for a, b, flat in ends:
+                for c, d, flat2 in ends:
+                    if flat and not flat2:
+                        gap = min(math.dist(p, q) for p in (a, b) for q in (c, d))
+                        self.assertGreater(gap, 1.5, f"two dashes meet in an L (leg starting {start} back)")
+
+    def test_a_leg_crossing_another_keeps_every_dash(self):
+        cross = [(0.50, 0.10 + 0.02 * i) for i in range(41)]
+        self.put_leg(1448, cross, days=2)
+        self.view()
+        alone = len(self.strokes()[0])
+        self.put_leg(1448, [(0.10 + 0.02 * i, 0.50) for i in range(41)], days=4)   # a stronger leg across it
+        self.put_leg(1448, [(0.10 + 0.02 * i, 0.47) for i in range(41)], days=4)
+        blue, _ = self.strokes()
+        upright = [s for s, _ in blue if abs(s[1] - s[3]) > abs(s[0] - s[2])]
+        self.assertEqual(len(upright), alone, "the crossing leg gave way where it crosses")
+
+    def test_continent_dashes_only_fade(self):
+        bend = [(0.10, 0.50), (0.30, 0.42), (0.50, 0.40), (0.70, 0.44), (0.90, 0.50)]
+        self.fly(bend)
+        self.next_day()
+        self.fly(bend)
+        self.next_day()
+        self.fly(bend[2:])
+        self.view()
+        st = Steadiness()
+        prev = st.segments(self.wow)
+        self.assertGreater(len(prev), 0)
+        base = int(self.wow.eval("ns.db.play.days"))
+        for d in range(1, 13):
+            self.wow.run(f"ns.db.play.days = {base + d}")
+            self.wow.H.now += 1
+            cur = st.segments(self.wow)
+            with self.subTest(play_day=d):
+                self.assertEqual(st.new_ink(prev, cur), [], "continent dashes moved as a leg faded")
+            prev = cur
+
+
+
 class Upgrades(unittest.TestCase):
     """Saved data from every past release upgrades with nothing lost.
 

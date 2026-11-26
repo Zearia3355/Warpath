@@ -1713,9 +1713,12 @@ local RUN_LOOK = {
 -- colours vanish and a cool colour reads. Passes: t = thickness in line
 -- widths, a = alpha, each from two days to well flown. A line width is a
 -- fraction of the map's width: 65% of what was first rendered on both
--- (Joe found both a little thick in game, test6).
+-- (Joe found both a little thick in game, test6); continents 75% of that
+-- again (3.8.3, Joe). simplify, hook and rail are in continent line widths
+-- (see DrawLegsFar).
 local AIR_LOOK = {
-    dash = 10, gap = 9, far = 0.00117, zone = 0.0013,
+    dash = 10, gap = 9, far = 0.00088, zone = 0.0013,
+    simplify = 3.4, smooth = 3, hook = 4.5, rail = 10.7, touch = 2.5,
     { t0 = 3.2, t1 = 4.4, a0 = 0.75, a1 = 0.95, r = 0.08, g = 0.05, b = 0.10 },
     { t0 = 1.4, t1 = 2.2, a0 = 0.95, a1 = 1.00, r = 0.25, g = 0.45, b = 1.00 },
 }
@@ -1783,16 +1786,184 @@ local function DrawLegs(D, z, far, sx, sy, ox, oy)
     end
 end
 
+-- Flight legs on a continent or the world (3.8.3, Joe: "take a bit more
+-- artistic liberty; keep the start, path and end as accurate as possible
+-- without the dashes looking janky"). At continent scale a leg's points,
+-- 30 yards apart, are under a pixel, so dashes drawn along them came out
+-- as kinked shapes. Each leg is drawn from its own points alone:
+--  * an end that doubles back (over 120 degrees) within a few pixels is dropped: a leg's ends
+--    join the leg it left or met, which may not be shown, leaving a hook;
+--  * simplified (points off the line by more than `simplify` line widths
+--    stay; both ends always), then rounded (`smooth` passes of corner
+--    cutting, ends fixed);
+--  * dashed from the leg's start, each dash a straight stroke between its
+--    two ends on that path;
+--  * where two legs run side by side (within `rail` widths, within about
+--    30 degrees, either way) the less-flown one gives way, like the trail's
+--    older pass. All leg points fade at the same rate, so which is stronger
+--    changes only when you fly, never as time passes.
+-- The shape depends only on the leg's points, which change only when you
+-- fly it, so dashes stay put and only fade. Zone maps are unchanged.
+local function AirDP(px, py, i0, i1, tol, keep)
+    local x0, y0, x1, y1 = px[i0], py[i0], px[i1], py[i1]
+    local dx, dy = x1 - x0, y1 - y0
+    local L = math.sqrt(dx * dx + dy * dy)
+    local best, bi = 0, nil
+    for i = i0 + 1, i1 - 1 do
+        local d = L > 0 and math.abs((px[i] - x0) * dy - (py[i] - y0) * dx) / L
+            or math.sqrt((px[i] - x0) ^ 2 + (py[i] - y0) ^ 2)
+        if d > best then best, bi = d, i end
+    end
+    if bi and best > tol then
+        keep[bi] = true
+        AirDP(px, py, i0, bi, tol, keep)
+        AirDP(px, py, bi, i1, tol, keep)
+    end
+end
+
+-- A leg in pixels with its hooked ends dropped: x, y, strength, arc length.
+local function AirPoints(L, sx, sy, ox, oy, hook)
+    local Strength = ns.Flights.Strength
+    local px, py, v = {}, {}, {}
+    for i = 1, #L / 2 do px[i], py[i], v[i] = ox + L[2 * i - 1] * sx, -(oy + L[2 * i] * sy), Strength(L, i) end
+    local function Hooked(a, b, c)
+        local ux, uy, vx, vy = px[b] - px[a], py[b] - py[a], px[c] - px[b], py[c] - py[b]
+        local lu, lv = math.sqrt(ux * ux + uy * uy), math.sqrt(vx * vx + vy * vy)
+        return lu > 0 and lv > 0 and lu < hook and (ux * vx + uy * vy) / (lu * lv) < -0.5
+    end
+    while #px >= 3 and Hooked(1, 2, 3) do
+        table.remove(px, 1) table.remove(py, 1) table.remove(v, 1)
+    end
+    local n = #px
+    while n >= 3 and Hooked(n, n - 1, n - 2) do
+        px[n], py[n], v[n], n = nil, nil, nil, n - 1
+    end
+    local arc = { 0 }
+    for i = 2, n do arc[i] = arc[i - 1] + math.sqrt((px[i] - px[i - 1]) ^ 2 + (py[i] - py[i - 1]) ^ 2) end
+    return px, py, v, arc, n
+end
+
+-- The leg simplified and rounded: x, y and, per point, the arc on the
+-- leg as recorded (to read its strength there).
+local function AirPath(px, py, arc, n, tol, passes)
+    local keep = { [1] = true, [n] = true }
+    AirDP(px, py, 1, n, tol, keep)
+    local qx, qy, qa = {}, {}, {}
+    for i = 1, n do if keep[i] then qx[#qx + 1], qy[#qy + 1], qa[#qa + 1] = px[i], py[i], arc[i] end end
+    for _ = 1, passes do
+        local m = #qx
+        if m < 3 then break end
+        local rx, ry, ra = { qx[1] }, { qy[1] }, { qa[1] }
+        for i = 1, m - 1 do
+            for _, f in ipairs(i == 1 and { 0.75 } or i == m - 1 and { 0.25 } or { 0.25, 0.75 }) do
+                rx[#rx + 1], ry[#ry + 1] = qx[i] + (qx[i + 1] - qx[i]) * f, qy[i] + (qy[i + 1] - qy[i]) * f
+                ra[#ra + 1] = qa[i] + (qa[i + 1] - qa[i]) * f
+            end
+        end
+        rx[#rx + 1], ry[#ry + 1], ra[#ra + 1] = qx[m], qy[m], qa[m]
+        qx, qy, qa = rx, ry, ra
+    end
+    return qx, qy, qa
+end
+
+local function DrawLegsFar(D, z, sx, sy, ox, oy, queue)
+    local lo, look = C.AIR_SHOW - C.AIR_FADE, AIR_LOOK
+    local thin = D.w * look.far
+    local period = look.dash + look.gap
+    for _, L in ipairs(z.air) do
+        local px, py, v, arc, n = AirPoints(L, sx, sy, ox, oy, look.hook * thin)
+        if n >= 2 and arc[n] > 0 then
+            local qx, qy, qa = AirPath(px, py, arc, n, look.simplify * thin, look.smooth)
+            local m, sa = #qx, { 0 }
+            for i = 2, m do sa[i] = sa[i - 1] + math.sqrt((qx[i] - qx[i - 1]) ^ 2 + (qy[i] - qy[i - 1]) ^ 2) end
+            local j, i = 1, 1
+            local function At(a) -- on the rounded path; a only grows, so walk on
+                while j < m - 1 and sa[j + 1] < a do j = j + 1 end
+                local f = sa[j + 1] > sa[j] and (a - sa[j]) / (sa[j + 1] - sa[j]) or 0
+                return qx[j] + (qx[j + 1] - qx[j]) * f, qy[j] + (qy[j + 1] - qy[j]) * f, qa[j] + (qa[j + 1] - qa[j]) * f
+            end
+            local function StrengthAt(a)
+                while i < n - 1 and arc[i + 1] < a do i = i + 1 end
+                return math.min(v[i], v[i + 1])
+            end
+            local total, pos = sa[m], 0
+            while pos < total do
+                local stop = math.min(total, pos + look.dash)
+                if stop - pos > look.dash * 0.4 then -- no stubs at a leg's end
+                    local x1, y1 = At(pos)
+                    local _, _, ca = At((pos + stop) / 2)
+                    local x2, y2 = At(stop)
+                    local s = StrengthAt(ca)
+                    local vis = Clamp((s - lo) / C.AIR_FADE)
+                    local len = math.sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2)
+                    if vis > 0 and len > 0 then
+                        queue[#queue + 1] = { L = L, s = s, vis = vis, thin = thin,
+                            u = Clamp((s - C.AIR_SHOW) / (C.ROAD_FULL - C.AIR_SHOW)),
+                            x1 = x1, y1 = y1, x2 = x2, y2 = y2, ux = (x2 - x1) / len, uy = (y2 - y1) / len }
+                    end
+                end
+                pos = pos + period
+            end
+        end
+    end
+end
+
+-- Draw the queued continent dashes, most-flown first; a dash beside a
+-- stronger leg's dash (another leg) gives way.
+local function FlushAir(D, queue)
+    table.sort(queue, function(a, b) return a.s > b.s end)
+    local seen = {}
+    for _, k in ipairs(queue) do
+        if D.nair + #AIR_LOOK > C.AIR_BUDGET then break end
+        local X, Y, r = (k.x1 + k.x2) / 2, (k.y1 + k.y2) / 2, AIR_LOOK.rail * k.thin
+        local gx, gy = math.floor(X / r), math.floor(Y / r)
+        local beside = false
+        for i = -1, 1 do
+            for j = -1, 1 do
+                for _, o in ipairs(seen[(gx + i) * 65536 + gy + j] or {}) do
+                    if o.L ~= k.L and (o.X - X) ^ 2 + (o.Y - Y) ^ 2 < r * r then
+                        -- alongside it, or touching its end where legs meet
+                        -- (two dashes at an angle read as an L, not dashes)
+                        local touch = AIR_LOOK.touch * k.thin
+                        if math.abs(o.ux * k.ux + o.uy * k.uy) > C.TRAIL_YIELD_COS
+                            or math.min((o.x1 - k.x1) ^ 2 + (o.y1 - k.y1) ^ 2, (o.x1 - k.x2) ^ 2 + (o.y1 - k.y2) ^ 2,
+                                (o.x2 - k.x1) ^ 2 + (o.y2 - k.y1) ^ 2, (o.x2 - k.x2) ^ 2 + (o.y2 - k.y2) ^ 2) < touch * touch then
+                            beside = true
+                        end
+                    end
+                end
+            end
+        end
+        if not beside then
+            local key = gx * 65536 + gy
+            seen[key] = seen[key] or {}
+            table.insert(seen[key], { L = k.L, X = X, Y = Y, ux = k.ux, uy = k.uy, x1 = k.x1, y1 = k.y1, x2 = k.x2, y2 = k.y2 })
+            for pi, P in ipairs(AIR_LOOK) do -- casing, then the colour over it
+                D.nair, D.nl = D.nair + 1, D.nl + 1
+                PutLine(D.nl, pi - 3, "BLEND", k.thin * (P.t0 + (P.t1 - P.t0) * k.u),
+                    P.r, P.g, P.b, (P.a0 + (P.a1 - P.a0) * k.u) * k.vis, k.x1, k.y1, k.x2, k.y2)
+            end
+        end
+    end
+end
+
 -- Corpse runs (dashed ice blue with a soft glow), fading along their length
 -- over their lifetime; the flight legs you keep flying underneath. Today's
 -- flights are no longer drawn on their own (3.8): they're in the legs.
 local function DrawRuns(D, scene)
     local w, h, now = D.w, D.h, D.now
+    -- on a continent or the world, its own legs (recorded while the game
+    -- placed you on the continent map) are drawn the continent way too
+    local info = scene.viewed and C_Map.GetMapInfo(scene.viewed)
+    local wide = info and info.mapType and info.mapType <= 2
+    local queue = {}
     for _, e in ipairs(scene.zones) do
         local p, z = e.p, e.z
         local thin = p.far and w * 0.0011 or w * 0.0020
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
-        if z.air and ns.Flights then DrawLegs(D, z, p.far, sx, sy, ox, oy) end
+        if z.air and ns.Flights then
+            if p.far or wide then DrawLegsFar(D, z, sx, sy, ox, oy, queue) else DrawLegs(D, z, p.far, sx, sy, ox, oy) end
+        end
         for ri = #z.runs, 1, -1 do -- newest first
             local s = z.runs[ri]
             local look, life = RUN_LOOK[s.k], RunSeconds(s.k)
@@ -1816,6 +1987,7 @@ local function DrawRuns(D, scene)
             end
         end
     end
+    FlushAir(D, queue)
 end
 
 -- Replay: the march so far, as one line; returns the head and the time reached.
