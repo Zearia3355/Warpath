@@ -4,7 +4,7 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3 batch: installed as 3.8.3-test3 (branch `areas-merge`)
+## 3.8.3 batch: installed as 3.8.3-test4 (branch `areas-merge`)
 
 Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN` for 3.8.3 is written. Not yet: changelog, release version.
 
@@ -22,7 +22,7 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test
 
 - Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). In test3.
 
-- Past area outlines dashed closer together (Joe's pick H, from renders of test areas aged 10 min to 10 h on a parchment stand-in): a fixed period of 0.75 trail slots, dash 80% -> 55%, so old areas stay joined up. D, his first pick, made dashes slide as they aged (only-fade test). Test `test_an_old_area_outline_stays_joined_up` (mutation-checked: the old spacing fails it). Not in his game yet; `/reload` is enough.
+- Past area outlines dashed closer together (Joe's pick H, from renders of test areas aged 10 min to 10 h on a parchment stand-in): a fixed period of 0.75 trail slots, dash 80% -> 55%, so old areas stay joined up. D, his first pick, made dashes slide as they aged (only-fade test). Test `test_an_old_area_outline_stays_joined_up` (mutation-checked: the old spacing fails it). In test4 (installed 2026-11-25 by script, commit `f88ef16`; `/reload` is enough; backup `-3.8.3-test4/`).
 
 - Welcome and What's New in the chronicle (Joe, 2026-11-25): a permanent **Warpath** tab, right of the title plate; the book opens there after each update instead of the options window, and closing it marks the release seen. 3.8.3's `NEW_IN` entry is written (10 lines). Tests in `NewIn` (4 new; mutation-checked: never opening, not marking seen, everything marked new, no paging each fail). The harness's `Hide` now runs `OnHide`, and buttons keep `Enable`/`Disable`.
 
