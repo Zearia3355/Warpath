@@ -4,23 +4,23 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3 batch: installed as 3.8.3-test2 (branch `areas-merge`)
+## 3.8.3 batch: installed as 3.8.3-test3 (branch `areas-merge`)
 
-Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Installed 2026-11-25 by script (commit `8977243`; `/reload` is enough; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test2/`). Not yet: `NEW_IN`, changelog, release version.
+Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN` for 3.8.3 is written. Not yet: changelog, release version.
 
 - Ground warnings ("DANGEROUS GROUND" etc.) stay up 4–6.5 s by line length instead of under 2 s (`Overlay.Show` takes `hold`; `Overlay.ReadHold`). Kill text unchanged. Tests in `Overlay` (mutation-checked: without the hold, the reading test fails).
 - The map button's left-click shows/hides Warpath without a chat line; `/warpath map` still replies. Tests in `MapButton` (mutation-checked).
 - Several guildmates killing one enemy: one line, one pin (`Share.lua` `NoteKill`; `Record.lua` skips your own line when a guildmate said it first). Found in Lethality's data: 5 of Joe's kills on 2026-11-24 in Eastern Plaguelands had Plains Stomper's pin 0–1 s later, 0.1–0.8% of the map away. No near-identical pins from two different guildmates were in the data. Tests in `Share` (8; mutation-checked: no folding, no own-line skip, no same-reporter rule, no pin removal each fail). Receiver-side, so only players on 3.8.3 stop seeing the duplicates; patch notes say so.
 
-- Wake and PvPKillShot mentioned nowhere in the addon (Joe, 2026-11-25): the PvPKillShot login warning, its field in `/warpath debug`, the `/killshot` and `/pks` aliases and the public `Warpath` global (kill callbacks; Claude's call) are gone. Not in test2. Changelog: say `/killshot` and `/pks` no longer work, use `/warpath shot`.
+- Wake and PvPKillShot mentioned nowhere in the addon (Joe, 2026-11-25): the PvPKillShot login warning, its field in `/warpath debug`, the `/killshot` and `/pks` aliases and the public `Warpath` global (kill callbacks; Claude's call) are gone. In test3. Changelog: say `/killshot` and `/pks` no longer work, use `/warpath shot`.
 
-- Area time labels: WoW yellow on a soft dark patch, staying full strength until the trail's last quarter (Joe's pick, style D with yellow text, from renders over his Undercity screenshot). Tests in `Lingering` (3; mutation-checked: the old colour and fade fail two). Not in test2.
+- Area time labels: WoW yellow on a soft dark patch, staying full strength until the trail's last quarter (Joe's pick, style D with yellow text, from renders over his Undercity screenshot). Tests in `Lingering` (3; mutation-checked: the old colour and fade fail two). In test3.
 
-- Zone standing on the zone's own map: crest and "kills : deaths" in the map's top-left corner (Joe's pick, B of four placements rendered over his Eastern Plaguelands screenshot). From the first kill or death; continent views unchanged. Tests in `MapDrawing` (3; mutation-checked: always hidden fails two, shown on continents fails one). Not in test2.
+- Zone standing on the zone's own map: crest and "kills : deaths" in the map's top-left corner (Joe's pick, B of four placements rendered over his Eastern Plaguelands screenshot). From the first kill or death; continent views unchanged. Tests in `MapDrawing` (3; mutation-checked: always hidden fails two, shown on continents fails one). In test3.
 
-- Continent and world maps (Joe's picks from renders over his clean screenshots): scores in blue/yellow/red (ahead, close, behind), the zone-map corner too; the world view shows one score per continent; continents a small score per zone on a dark patch; every pin drawn, and 3+ kills or deaths close together become one big sword or skull with a count, pushed apart where they'd overlap. Tests in `MapDrawing` (8 new; mutation-checked: no combining, no push, no step-down, one colour, zone scores on the world each fail). `render.py` now draws text, and frames by level. Not in test2.
+- Continent and world maps (Joe's picks from renders over his clean screenshots): scores in blue/yellow/red (ahead, close, behind), the zone-map corner too; the world view shows one score per continent; continents a small score per zone on a dark patch; every pin drawn, and 3+ kills or deaths close together become one big sword or skull with a count, pushed apart where they'd overlap. Tests in `MapDrawing` (8 new; mutation-checked: no combining, no push, no step-down, one colour, zone scores on the world each fail). `render.py` now draws text, and frames by level. In test3.
 
-- Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). Not in test2.
+- Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). In test3.
 
 - Welcome and What's New in the chronicle (Joe, 2026-11-25): a permanent **Warpath** tab, right of the title plate; the book opens there after each update instead of the options window, and closing it marks the release seen. 3.8.3's `NEW_IN` entry is written (10 lines). Tests in `NewIn` (4 new; mutation-checked: never opening, not marking seen, everything marked new, no paging each fail). The harness's `Hide` now runs `OnHide`, and buttons keep `Enable`/`Disable`.
 
