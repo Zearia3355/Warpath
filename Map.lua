@@ -325,6 +325,11 @@ local function GetTag(i)
         f:SetSize(36, 14)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         f.text:SetPoint("CENTER")
+        -- a soft dark patch behind the text, so it reads on any map art (3.8.3)
+        f.back = f:CreateTexture(nil, "BACKGROUND")
+        f.back:SetTexture(C.TEX_DOT)
+        f.back:SetVertexColor(0.06, 0.03, 0.02)
+        f.back:SetPoint("CENTER", f.text, "CENTER")
         f:EnableMouse(true)
         if f.SetMouseClickEnabled then f:SetMouseClickEnabled(false) end
         f:SetScript("OnEnter", TagEnter)
@@ -339,6 +344,8 @@ function ns.PlaceTag(i, ar, text, r, g, b, a, px, py)
     f.ar, f.px, f.py = ar, px, py
     f.text:SetText(text)
     f.text:SetTextColor(r, g, b, a)
+    f.back:SetSize((f.text:GetStringWidth() or 20) + 22, 26)
+    f.back:SetAlpha(0.7 * a)
     f:SetFrameLevel(overlay:GetFrameLevel() + 1)
     TagAnchor(f)
     f:Show()
@@ -1422,14 +1429,17 @@ local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap)
     end
 end
 
-local function AreaTag(D, p, ar, r, g, b, a)
+local function AreaTag(D, p, ar, a)
     local total = 0
     for _, v in ipairs(ar.a.v) do total = total + (v.t or 0) end
     local poly, top, ty = ar.poly, 1, math.huge
     for i = 2, #poly, 2 do if poly[i] < ty then top, ty = i - 1, poly[i] end end
     D.ntag = D.ntag + 1
-    ns.PlaceTag(D.ntag, ar, Spent(total), Lerp(r, 1, 0.35), Lerp(g, 0.8, 0.35), Lerp(b, 0.3, 0.35),
-        math.min(1, a + 0.2), (p.ox + poly[top] * p.sx) * D.w, -(p.oy + ty * p.sy) * D.h)
+    -- WoW's own yellow on a dark patch (Joe's pick, 3.8.3). The label stays
+    -- full strength while the outline fades, and goes only in its last quarter.
+    local y = NORMAL_FONT_COLOR or { r = 1, g = 0.82, b = 0 }
+    ns.PlaceTag(D.ntag, ar, Spent(total), y.r, y.g, y.b,
+        math.min(1, 0.2 + 1.6 * a), (p.ox + poly[top] * p.sx) * D.w, -(p.oy + ty * p.sy) * D.h)
 end
 
 local function DrawAreas(D, scene)
@@ -1449,7 +1459,7 @@ local function DrawAreas(D, scene)
                 r, g, b, a, tk, fill = TrailLook(math.max(ar.age, C.LINE_SOLID + 1), life)
                 DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, fill * slot, (1 - fill) * slot)
             end
-            if not p.far and a > 0.05 then AreaTag(D, p, ar, r, g, b, a) end
+            if not p.far and a > 0.05 then AreaTag(D, p, ar, a) end
         end
     end
 end

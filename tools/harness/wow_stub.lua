@@ -188,7 +188,8 @@ function Widget:GetStringHeight() return 12 end
 function Widget:GetUnboundedStringWidth() return #(self.__text or "") * 6 end
 function Widget:GetNumLines() return 1 end
 function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "" end
-function Widget:GetTextColor() return 1, 1, 1, 1 end
+function Widget:SetTextColor(r, g, b, a) self.__textColor = { r, g, b, a or 1 } end
+function Widget:GetTextColor() return unpack(self.__textColor or { 1, 1, 1, 1 }) end
 function Widget:GetNumber() return tonumber(self.__text) or 0 end
 -- checks / sliders
 function Widget:SetChecked(v) self.__checked = not not v end

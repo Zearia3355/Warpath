@@ -14,6 +14,8 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Inst
 
 - Wake and PvPKillShot mentioned nowhere in the addon (Joe, 2026-11-25): the PvPKillShot login warning, its field in `/warpath debug`, the `/killshot` and `/pks` aliases and the public `Warpath` global (kill callbacks; Claude's call) are gone. Not in test2. Changelog: say `/killshot` and `/pks` no longer work, use `/warpath shot`.
 
+- Area time labels: WoW yellow on a soft dark patch, staying full strength until the trail's last quarter (Joe's pick, style D with yellow text, from renders over his Undercity screenshot). Tests in `Lingering` (3; mutation-checked: the old colour and fade fail two). Not in test2.
+
 **Joe to check in game**
 - Walk onto dangerous or contested ground: the warning can be read before it fades.
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".

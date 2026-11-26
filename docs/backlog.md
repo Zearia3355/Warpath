@@ -47,7 +47,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - What: zoomed out, Warpath draws every kill and death pin, roads, trail scraps and flight dashes at small size, plus each zone's win/loss label. Where they cluster (north Kalimdor, the Plaguelands) it's a pile of overlapping icons, and the win/loss numbers are too small to read among them.
 - Notes:
   - What a continent view is for: which zones you win and lose in, and where you've been fighting. Individual pins and road squiggles at that size don't add much.
-  - Ideas: on continent and world views, show one readable win/loss badge per zone and drop (or heavily thin) individual pins; or group a zone's pins into one marker with a count; leave out roads and trail scraps there, keep flight legs only if they read; make the win/loss label larger and give it contrast (see "Area time labels are hard to read", same font problem).
+  - Ideas: on continent and world views, show one readable win/loss badge per zone and drop (or heavily thin) individual pins; or group a zone's pins into one marker with a count; leave out roads and trail scraps there, keep flight legs only if they read; make the win/loss label larger and give it contrast (area time labels got WoW yellow on a dark patch in 3.8.3; the same look may suit).
   - Pairs with "Zone standing on the zone's own map": decide the badge's look once for both.
   - The world view (both continents) should probably show even less than a continent.
   - Render options from Lethality's real data over these screenshots for Joe to pick; continent placement is already verified against real map rects (`tools/harness/map_rects.lua`).
@@ -62,12 +62,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - Fewer marks overall: cap trail dashes per map square, rank-based, never newest-wins, or marks will crawl (anchored, only fade).
   - Quest markers belong to the game and can't be moved; leave room around them only if the map tells us where they are.
   - Real data to render from: Lethality's Plaguelands trail, kept in `tools/out/trail-data-2026-11-24-plaguelands/` (863 points, 4 areas in Eastern Plaguelands). Render options over Joe's screenshot of the same map for him to pick.
-
-### Area time labels are hard to read
-- From: Joe, 2026-11-24
-- Status: needs a design
-- What: the time labels over lingering areas ("23m") are hard to see on the map.
-- Notes: from the code (`Map.lua` `GetTag`, `PlaceTag`, `AreaTag`): `GameFontNormalSmall`, no outline; colour is the area's own colour moved 35% towards gold, so a faction red or a faded dusk brown on the yellow parchment, low contrast; alpha follows the area's fade (+0.2), so older areas' labels go dim too. Options to render for Joe over his screenshots: an outline or heavier shadow on the text; a dark Blizzard backing behind it; a stronger, more saturated colour; a slightly larger font; fading the label less than the outline. Keep it warm (brightness from saturation, never towards white) and small.
 
 ### Zone standing on the zone's own map
 - From: Joe, 2026-11-24

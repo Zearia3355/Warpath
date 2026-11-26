@@ -1029,6 +1029,47 @@ class Lingering(unittest.TestCase):
         self.assertGreater(len(before), 0)
         self.assertGreater(self.spent(), 5 * 60)
 
+    # 3.8.3: the time label is WoW's yellow on a soft dark patch (Joe's pick
+    # from renders over his Undercity screenshot) and stays readable as the
+    # area ages, fading only in the trail's last quarter.
+    def label(self, hours_later=0):
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.70, 0.50)
+        self.wow.run(f"ns.cfg.trailMin = 720; __H.now = __H.now + {int(hours_later * 3600)}")
+        self.wow.eval("ns.Redraw()")
+        found = self.wow.eval("""(function()
+            for _, f in ipairs(WarpathOverlay.__children) do
+                if f.back and f.text and f:IsShown() then
+                    local r, g, b, a = f.text:GetTextColor()
+                    return table.concat({ f.text:GetText(), r, g, b, a,
+                        f.back:IsShown() and 1 or 0, f.back:GetAlpha(), f.back:GetWidth(),
+                        f.text:GetStringWidth() }, "|")
+                end
+            end
+        end)()""")
+        self.assertTrue(found, "no area label drawn")
+        t = found.split("|")
+        return dict(text=t[0], colour=tuple(float(v) for v in t[1:4]), alpha=float(t[4]),
+                    back=t[5] == "1", back_alpha=float(t[6]), back_w=float(t[7]), text_w=float(t[8]))
+
+    def test_the_area_label_is_yellow_on_a_dark_patch(self):
+        lab = self.label()
+        self.assertRegex(lab["text"], r"^\d+m$")
+        self.assertEqual(lab["colour"], (1, 0.82, 0))
+        self.assertEqual(lab["alpha"], 1)
+        self.assertTrue(lab["back"])
+        self.assertGreater(lab["back_alpha"], 0.5)
+        self.assertGreater(lab["back_w"], lab["text_w"])
+
+    def test_an_old_area_label_stays_readable(self):
+        self.assertGreaterEqual(self.label(hours_later=3)["alpha"], 0.9)
+
+    def test_the_label_fades_in_the_trails_last_quarter(self):
+        lab = self.label(hours_later=10.5)
+        self.assertLess(lab["alpha"], 0.9)
+        self.assertLess(lab["back_alpha"], 0.7)
+
     def test_standing_still_is_not_lingering(self):
         self.walk(0.20, 0.50, 0.40, 0.50)
         for _ in range(15 * 60):
