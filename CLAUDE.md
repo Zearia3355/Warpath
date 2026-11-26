@@ -1,6 +1,6 @@
 # Warpath — project guide for Claude Code
 
-Warpath is a World of Warcraft addon for **WoW Forever** (open-world PvP, Interface `16001` / client 1.60.1). It draws your war on the world map — today's trail, worn roads, battle haze, kill and death pins, enemy sightings, flight routes — takes kill screenshots (it absorbed the older PvPKillShot addon), keeps a chronicle book of campaigns and a grudge ledger, and shares kills, deaths and sightings with guildmates. Guildmates run it too, so releases are shared with them.
+Warpath is a World of Warcraft addon for **WoW Forever** (open-world PvP, Interface `16001` / client 1.60.1). It draws your war on the world map — today's trail, worn roads, battle haze, kill and death pins, enemy sightings, flight routes — takes kill screenshots, keeps a chronicle book of campaigns and a grudge ledger, and shares kills, deaths and sightings with guildmates. Guildmates run it too, so releases are shared with them.
 
 Originally named **Wake** (1.0).
 
@@ -113,7 +113,7 @@ Libraries in `Libs\`: LibStub, CallbackHandler-1.0, LibDataBroker-1.1, LibDBIcon
 
 Each file takes `local ADDON, ns = ...` and shares state through `ns`. Saved data arrives via `ns.OnBind(fn)`: each module registers a closure, and `ns.Rebind()` re-hands `db`, `gdb`, `cfg` and `faction` to all of them at load and login.
 
-Globals written: `Warpath` (public API, for PvPKillShot and friends), `WarpathGlobal` and `WarpathDB` (saved), `SLASH_WARPATH1/2`, and `SLASH_WARPATHSHOT1/2` (only when PvPKillShot is not loaded, so `/killshot` and `/pks` keep working). Nothing else leaks — values defined after their use are forward-declared as locals.
+Globals written: `WarpathGlobal` and `WarpathDB` (saved), `SLASH_WARPATH1/2`, and Warpath's own named frames. Nothing else leaks — values defined after their use are forward-declared as locals.
 
 Constraints:
 - The original single file hit Lua's limits (192/200 top-level locals; `Draw()` at 47/60 upvalues). Keep files and functions small.

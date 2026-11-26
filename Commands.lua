@@ -486,9 +486,8 @@ function H.debug(arg)
     Print(("in a neutral town: %s (zone PvP type %s, subzone \"%s\")"):format(
         ns.InNeutralTown() and "yes, sightings aren't recorded" or "no",
         tostring(GetZonePVPInfo and Foes.Safe(GetZonePVPInfo)), tostring(GetSubZoneText and Foes.Safe(GetSubZoneText))))
-    Print(("version %s | data v%s | options seen %s | install %s | PvPKillShot loaded %s")
-        :format(VERSION, tostring(db.v), tostring(gdb.seenVersion), tostring(gdb.installed),
-            tostring(C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("PvPKillShot"))))
+    Print(("version %s | data v%s | options seen %s | install %s")
+        :format(VERSION, tostring(db.v), tostring(gdb.seenVersion), tostring(gdb.installed)))
     Print(("sharing %s | %d sent, %d refused, %d received%s")
         :format(cfg.share and "on" or "off", shareStats.sent, shareStats.refused, shareStats.got,
             shareStats.lastRefusal and (" | last refusal " .. shareStats.lastRefusal) or ""))
@@ -645,18 +644,5 @@ end
 
 SLASH_WARPATH1, SLASH_WARPATH2 = "/warpath", "/wpath"
 SlashCmdList.WARPATH = Dispatch
-
--- /killshot and /pks keep working for anyone used to PvPKillShot, unless that
--- addon is still installed and owns them.
-local pksLoaded = C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("PvPKillShot")
-if not pksLoaded then
-    SLASH_WARPATHSHOT1, SLASH_WARPATHSHOT2 = "/killshot", "/pks"
-    SlashCmdList.WARPATHSHOT = function(msg)
-        local m = (msg or ""):lower():gsub("^%s+", "")
-        if m == "toggle" then m = cfg.shot.on and "off" or "on" end
-        if m == "status" then m = "" end
-        Dispatch("shot " .. m)
-    end
-end
 
 ns.Dispatch = Dispatch

@@ -4,7 +4,7 @@ local C, S = ns.C, ns.S
 local Cell, Credit, FullName, MapName, Notice, PlayerPos = ns.Cell, ns.Credit, ns.FullName, ns.MapName, ns.Notice, ns.PlayerPos
 local PlayNow = ns.PlayNow
 local Long, Print, Q, Recent, Secret, Simplify, Sound = ns.Long, ns.Print, ns.Q, ns.Recent, ns.Secret, ns.Simplify, ns.Sound
-local WorldXY, ZoneData, cur, killCallbacks, recentSight, session = ns.WorldXY, ns.ZoneData, ns.cur, ns.killCallbacks, ns.recentSight, ns.session
+local WorldXY, ZoneData, cur, recentSight, session = ns.WorldXY, ns.ZoneData, ns.cur, ns.recentSight, ns.session
 local Foes, Victim, Share = ns.Foes, ns.Victim, ns.Share
 
 local db, gdb, cfg, faction, foe, myName, myFull
@@ -714,14 +714,6 @@ local function OnKill(full, short, class)
         Announce()
     end
 
-    if m then
-        local ctx = {
-            mapID = mapID, zone = MapName(mapID), x = m[1], y = m[2], time = m[3],
-            streak = session.streak, victim = short, victimFull = full, timesKilled = times,
-            chain = n, feat = k.feat,
-        }
-        for _, fn in ipairs(killCallbacks) do pcall(fn, ctx) end
-    end
     ns.UpdateHUD()
 end
 

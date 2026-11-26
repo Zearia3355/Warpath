@@ -2,7 +2,7 @@
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Migrate, Print, Prune, Simplify, VERSION, cur = ns.Migrate, ns.Print, ns.Prune, ns.Simplify, ns.VERSION, ns.cur
-local killCallbacks, outQ, session, Foes, FlushShare, OnComm = ns.killCallbacks, ns.outQ, ns.session, ns.Foes, ns.FlushShare, ns.OnComm
+local outQ, session, Foes, FlushShare, OnComm = ns.outQ, ns.session, ns.Foes, ns.FlushShare, ns.OnComm
 local FinishShot, OnDeath, Sample, See, CloseStroke = ns.FinishShot, ns.OnDeath, ns.Sample, ns.See, ns.CloseStroke
 local Redraw, SetupMap, CreateHUD, UpdateHUD, MaybeShowSetup = ns.Redraw, ns.SetupMap, ns.CreateHUD, ns.UpdateHUD, ns.MaybeShowSetup
 local Campaign, Zone, Chronicle = ns.Campaign, ns.Zone, ns.Chronicle
@@ -13,20 +13,6 @@ ns.OnBind(function()
 end)
 
 local tick = 0
-
----------------------------------------------------------------------------
--- Public API (for PvPKillShot and friends)
----------------------------------------------------------------------------
-
-Warpath = {
-    RegisterKillCallback = function(fn)
-        if type(fn) == "function" then killCallbacks[#killCallbacks + 1] = fn end
-    end,
-    GetSession = function()
-        return { kills = session.kills, deaths = session.deaths, streak = session.streak, best = session.best }
-    end,
-    GetKillCount = function(fullName) return db and db.victims[fullName] or 0 end,
-}
 
 ---------------------------------------------------------------------------
 -- Events
@@ -238,9 +224,6 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             Foes.dead = UnitIsDeadOrGhost("player") and true or false
             ns.Sync.Start()
             Zone.Enter()
-            if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("PvPKillShot") then
-                Print("PvPKillShot is also running, so every kill gets two screenshots. Warpath does its job now: disable or delete PvPKillShot.")
-            end
             C_Timer.After(2, MaybeShowSetup)
             -- A new campaign began and the last one had fighting.
             local last = db.campaigns[1]

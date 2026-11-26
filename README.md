@@ -11,7 +11,7 @@ Warpath remembers where you fight and where you travel, and draws it back to you
 - **Corpse runs and flights** — their own layer, plus the flight routes you keep taking.
 - **Enemy sightings**, **dangerous ground** warnings, and a **grudge ledger** that only forgets when you forgive.
 - **Multi-kills, streaks and feats**, announced in chat and on screen, shared with guildmates running Warpath.
-- **Kill screenshots** with a caption (it absorbs the older PvPKillShot addon).
+- **Kill screenshots** with a caption.
 - **A chronicle book** of your campaigns, and your record in each zone as you enter it.
 
 Two memories sit on the same grid of ground. Long memory builds one mark per *day* you use a piece of ground and halves every 14 days you **play**, so a weekend away costs nothing. Short memory builds with every pass and fades on real time.

@@ -81,11 +81,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - What: a pin for dying to a mob would show a clown instead of the grey cross.
 - Notes: today it's the raid-marker sheet's cross, desaturated (`TEX_RAID`, texcoords 0.5–0.75, 0.25–0.5; `Map.lua`, pin kind `mob`). Warpath uses only the game's own art, so this needs a Blizzard texture that reads as a clown, with its path checked in the Forever client; no candidate is known yet. Check at normal map size, where pins are small. Falls share the `mob` pin today, so decide whether they get the clown too.
 
-### Warn when the old Wake addon is loaded
-- From: Claude (offered, not asked for)
-- Status: new
-- What: a chat warning when Wake (the 1.0 ancestor) is also enabled, like the PvPKillShot one.
-
 ### Tuning knobs, if Joe asks
 - From: Claude
 - Status: new
@@ -154,6 +149,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Declined and dropped
 
+- Declined 2026-11-25: a warning when the old Wake addon is loaded. Only Joe ever had Wake or PvPKillShot, so 3.8.3 removes every mention of both from the addon instead.
 - Declined 2026-11-22: receiver-side multi-kill counting for guildmates still on 3.6.
 - Dropped: map presets.
 - Dropped 2026-11-21: the explainer one-pager.

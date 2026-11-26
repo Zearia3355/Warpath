@@ -187,10 +187,10 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 
 ---
 
-## Kill screenshots (absorbed PvPKillShot in 3.3.0)
+## Kill screenshots
 - Open world only. Default **every kill**; option notable only (first kill of a player, grudges, avenged, streaks 3/5/every 10, 5+ kills of a player, and since 3.7 every feat and multi-kill).
 - Caption: floating text (default), one-line strip, or none. Banners and sounds wait until after the shot. `cfg.shot.delay` before the shot.
-- `/warpath shot [on|off]`, `shot all|notable`, `shot caption text|strip|none`, `shot test`. `/killshot`, `/pks` still work. Warns if PvPKillShot is installed.
+- `/warpath shot [on|off]`, `shot all|notable`, `shot caption text|strip|none`, `shot test`. (3.8.3 removed the `/killshot` and `/pks` aliases and everything else kept for the older PvPKillShot addon.)
 
 ## Chronicle (book)
 - `/warpath chronicle` opens a book on a leather cover, 880 × 580. Tabs **Campaigns** and **Grudges** on the top edge.
@@ -330,3 +330,5 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-25 | 3.8.3: ground warnings held 4–6.5 s by line length (1 s per 15 letters) instead of the kill flash's 1.2 s; a second ground warning waits for the first, a kill replaces it | Claude (open to veto) |
 | 2026-11-25 | 3.8.3: the map button's left-click no longer prints a chat line; `/warpath map` still does | Joe |
 | 2026-11-25 | 3.8.3: repeat kill reports fold silently (no "A and B killed X" line); windows 30 s by name, 10 s and 0.015 by place without one; folded reports still add to that guildmate's haze; your own later kill removes the guildmate's just-received pin of it | Claude (open to veto) |
+| 2026-11-25 | 3.8.3: every mention of Wake and PvPKillShot comes out of the addon, since only Joe ever had them: the PvPKillShot warning, its field in `/warpath debug`, the `/killshot` and `/pks` aliases; the Wake warning was declined | Joe |
+| 2026-11-25 | 3.8.3: the public `Warpath` global (kill callbacks, session and kill-count reads) removed with them, since PvPKillShot was its only user | Claude (open to veto) |

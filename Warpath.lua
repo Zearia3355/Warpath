@@ -1,5 +1,5 @@
 
--- Warpath 3.8.3-test1
+-- Warpath 3.8.3-test2
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
@@ -34,9 +34,6 @@
 --   * Who you killed. Read from your target, the last enemy you targeted, or
 --     an enemy seen dying nearby. The game's honorable-kill counter says how
 --     many died.
---
--- Other addons can hook kills:  Warpath.RegisterKillCallback(function(ctx) end)
---   ctx = { mapID, zone, x, y, time, streak, victim, victimFull, timesKilled }
 
 local ADDON, ns = ...
 
@@ -200,7 +197,6 @@ ns.OnBind(function() db, gdb, cfg = ns.db, ns.gdb, ns.cfg end)
 local cur = { map = nil, stroke = nil, mode = nil, x = nil, y = nil, wx = nil, wy = nil, cell = nil }
 local session = { kills = 0, deaths = 0, streak = 0, best = 0, start = 0, yards = 0, sightings = 0, avenged = 0, zones = {} }
 local recentSight, shared, outQ = {}, {}, {}
-local killCallbacks = {}
 local VERSION = (C_AddOns and C_AddOns.GetAddOnMetadata and C_AddOns.GetAddOnMetadata(ADDON, "Version"))
     or (GetAddOnMetadata and GetAddOnMetadata(ADDON, "Version")) or "3.7.10"
 
@@ -996,7 +992,6 @@ ns.Waypoint = Waypoint
 ns.WorldXY = WorldXY
 ns.ZoneData = ZoneData
 ns.cur = cur
-ns.killCallbacks = killCallbacks
 ns.outQ = outQ
 ns.recentSight = recentSight
 ns.session = session

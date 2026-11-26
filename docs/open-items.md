@@ -12,6 +12,8 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Inst
 - The map button's left-click shows/hides Warpath without a chat line; `/warpath map` still replies. Tests in `MapButton` (mutation-checked).
 - Several guildmates killing one enemy: one line, one pin (`Share.lua` `NoteKill`; `Record.lua` skips your own line when a guildmate said it first). Found in Lethality's data: 5 of Joe's kills on 2026-11-24 in Eastern Plaguelands had Plains Stomper's pin 0–1 s later, 0.1–0.8% of the map away. No near-identical pins from two different guildmates were in the data. Tests in `Share` (8; mutation-checked: no folding, no own-line skip, no same-reporter rule, no pin removal each fail). Receiver-side, so only players on 3.8.3 stop seeing the duplicates; patch notes say so.
 
+- Wake and PvPKillShot mentioned nowhere in the addon (Joe, 2026-11-25): the PvPKillShot login warning, its field in `/warpath debug`, the `/killshot` and `/pks` aliases and the public `Warpath` global (kill callbacks; Claude's call) are gone. Not in test2. Changelog: say `/killshot` and `/pks` no longer work, use `/warpath shot`.
+
 **Joe to check in game**
 - Walk onto dangerous or contested ground: the warning can be read before it fades.
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".
