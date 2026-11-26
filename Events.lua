@@ -235,6 +235,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
                     local function TryOpen()
                         tries = tries + 1
                         if S.inInstance or tries > 40 then return end
+                        if Chronicle.Shown() then return end -- already open (an update's notes, say)
                         if InCombatLockdown() or UnitAffectingCombat("player") or (ns.SetupShown and ns.SetupShown()) then
                             C_Timer.After(3, TryOpen)
                         else

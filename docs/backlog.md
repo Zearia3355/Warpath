@@ -39,7 +39,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - Start from an inventory: every setting, its default, where it lives (tab, map button menu, slash command), and whether anyone changes it. Some settings exist in two or three places.
   - Defaults to look at: guild sharing is off by default (`cfg.share`), so the guild features, the version check included, do nothing until someone finds the switch; kill screenshots default to every kill; trail length 12 h; which map layers start on.
   - Changing defaults affects only new installs; existing players keep their settings (preserve saved data). Any reset for existing players is called out first, as 3.8.0's map reset was.
-  - Do it with or after "Welcome and What's new pages in the chronicle", which moves the update box out of this window.
+  - The update box left this window in 3.8.3 (it's the chronicle's Warpath tab now), so the window no longer opens by itself.
 
 ### A clown icon for deaths to mobs
 - From: feedback passed on by Joe, 2026-11-24
@@ -55,17 +55,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 ---
 
 ## Feature requests
-
-### Welcome and "What's new" pages in the chronicle
-- From: Joe, 2026-11-25 (folds in Claude's earlier offer to reopen the "New in" box on demand)
-- Status: needs a design
-- What: players may never find the chronicle. Move the first-install welcome and the update box out of the options window and into the chronicle, and after an update open the chronicle on its "What's new" page. Opening the book shows the rest of it (campaigns, grudges) on the way.
-- Notes:
-  - Today `Options.lua` opens the options window after every release (`gdb.seenVersion`, `NEW_IN`, `Unseen`): a "NEW IN x TO y" box, or a welcome line on first install. The `NewIn` tests cover it; they would move with it.
-  - The chronicle (`Chronicle.lua`) is a two-page book with section tabs (Campaigns, Grudges). A third section, or a page in front: welcome on first install (what Warpath does, where the settings are, the map button), "What's new" after an update, always reachable from its tab, which also answers "reopen it on demand".
-  - Keep a way to the settings from that page (a button or line pointing to the options window), since the welcome used to sit on top of them.
-  - Hold the book until it's safe to open, as the options window is held today (not in combat, not inside a battleground).
-  - Update `CLAUDE.md` (Versioning: "the options window opens by itself after every release") when built.
 
 ### What you did in a lingering area, on hover
 - From: Joe, 2026-11-25

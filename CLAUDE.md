@@ -61,7 +61,7 @@ A new project is invisible to others and its files do not sync until a moderator
 ### Versioning
 - Tinkering with existing features stays in the current minor series (3.7.x).
 - A new minor version (3.8.0) is for new features.
-- The options window opens by itself after **every** release, fix releases included (Joe, 2026-11-24; before that, only feature releases). Every release gets a `NEW_IN` entry in `Options.lua`, keyed by its version; the box shows every entry newer than what the account last saw (a test build counts as before its release), at most 8 lines. The `NewIn` test fails if the current release has no entry.
+- After **every** release, fix releases included (Joe, 2026-11-24), the chronicle opens by itself on its **Warpath** tab: a welcome and What's New (from 3.8.3; the options window before). Every release gets a `NEW_IN` entry in `Options.lua`, keyed by its version, plain lines for players; the page lists every release newest first and marks those newer than what the account last saw (a test build counts as before its release). The `NewIn` test fails if the current release has no entry.
 - `ns.VERSION` comes from the TOC via `GetAddOnMetadata`. The TOC is the only functional version site; the number at the top of `Warpath.lua` is a comment, so keep it in step but know it changes nothing.
 
 ### Upgrades and saved data

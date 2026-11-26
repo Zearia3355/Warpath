@@ -199,7 +199,8 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 - `/warpath shot [on|off]`, `shot all|notable`, `shot caption text|strip|none`, `shot test`. (3.8.3 removed the `/killshot` and `/pks` aliases and everything else kept for the older PvPKillShot addon.)
 
 ## Chronicle (book)
-- `/warpath chronicle` opens a book on a leather cover, 880 × 580. Tabs **Campaigns** and **Grudges** on the top edge.
+- `/warpath chronicle` opens a book on a leather cover, 880 × 580. Tabs **Campaigns** and **Grudges** on the top edge, left of the title plate; **Warpath** right of it (3.8.3).
+- **Warpath tab** (3.8.3, Joe: players may never find the chronicle, so the update notes moved here): left page a welcome (what Warpath does, where the book and the map button are, whether guild sharing is on, `/warpath help`) and a **Settings** button; right page **What's New**, every `NEW_IN` release newest first, Earlier/Later to older ones. After every install or update the book opens here by itself (`MaybeShowSetup` → `Chronicle.News`), held out of combat and battlegrounds; releases newer than the account last saw are headed "new since you last played" (none on a first install). Closing the book, any way, marks the release seen (`gdb.seenVersion`). Always reachable from the tab. Joe asked for it to be permanent.
 - **Campaign** = play with gaps under 2 h (Joe's decision); a reload/quick relog continues it. Duration = time played. Empty campaigns (no kills/deaths/sightings) aren't saved. **Last 30 per character**; kills list cap 200, deaths 100 per campaign. Per character.
 - Headline word by kills+deaths (Claude's call): Patrol 0, Clash 1–2, Skirmish 3–12, Battle 13–24, War 25+; place = bloodiest zone's first word, kept whole for multi-word names (Dun Morogh, Mount Hyjal…).
 - Page: write-up paragraph, numbers, **7 highlights** (nemesis, favourite victim, bloodiest ground, longest streak + who ended it, grudges settled/deaths avenged, screenshot numbers, Best burst), Deeds and Losses list on the facing page (hover for level/race/guild; click → waypoint). "Earlier"/"Later" with spellbook arrows.
@@ -246,8 +247,8 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 
 ## Options window
 - `/warpath setup` (the name again since 3.6.4) or `/warpath options`. Tabs: General, Map, Screenshots, Chronicle & zones, Grudges. Settings shared by all characters.
-- Opens itself once after **every** release (from 3.8.1; until 3.8.0 only after a feature release), with a "New in" box: `NEW_IN` entries keyed by version, showing every entry newer than `gdb.seenVersion` (`ns.NewIn.Older`: numeric, a test build before its release; at most 8 lines, newest kept). Header "NEW IN 3.8.1", or "NEW IN 3.8.0 TO 3.8.1" across several. Not when going back to an older version. 3.8.0's box covers roads, the trail, flights and the map reset; when the reset changed anything (`S.mapWasReset`) the window opens on the Map tab.
-- **3.8.0 one-time map reset** (`Events.lua`, flag `cfg.mapReset = "3.8"`, inside `pcall`): every `C.LAYERS` layer and `cfg.guildHaze` on, `cfg.trailMin` to the 12 h default. Kept: `iconScale`, `shown`, `runHours`, `shimmer`. Settings only, no history. Reopen the box today: `/run WarpathGlobal.seenVersion = nil` then `/reload`.
+- Opened by hand only, from 3.8.3: `/warpath setup`, the minimap button's right-click, or the chronicle's Settings button. Until 3.8.2 it opened itself after every release (from 3.8.1; before, only feature releases) with a "New in" box; that moved to the chronicle's Warpath tab. `NEW_IN` (in `Options.lua`) is still one entry per release, keyed by version (`ns.NewIn.Older`: numeric, a test build before its release).
+- **3.8.0 one-time map reset** (`Events.lua`, flag `cfg.mapReset = "3.8"`, inside `pcall`): every `C.LAYERS` layer and `cfg.guildHaze` on, `cfg.trailMin` to the 12 h default. Kept: `iconScale`, `shown`, `runHours`, `shimmer`. Settings only, no history. To see the update opening again: `/run WarpathGlobal.seenVersion = nil` then `/reload` (the Warpath tab is always there anyway).
 
 ## Commands (summary)
 Everyday (`/warpath help`): `/warpath` (totals + "Type /warpath help"), `zone`, `chronicle`, `map`, `grudge`, `options`, `help all`.
@@ -342,6 +343,8 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-25 | 3.8.3: backing made from the addon's own `glow.tga`, not a new texture; patch alpha 0.7; label alpha `min(1, 0.2 + 1.6a)`, so it stays full until the trail's last quarter | Claude (open to veto) |
 | 2026-11-25 | 3.8.3: zone standing on the zone's own map, top-left corner | Joe |
 | 2026-11-25 | 3.8.3: the corner standing shows from the first kill or death (continent still needs 3); font `GameFontNormal`, one size up from the continent's; same dark patch as area labels; hidden in replays | Claude (open to veto) |
+| 2026-11-25 | 3.8.3: welcome and What's New move into the chronicle on a permanent Warpath tab; the book opens there after every update instead of the options window | Joe |
+| 2026-11-25 | 3.8.3: the Warpath tab sits right of the title plate (no room left of it); closing the book any way marks the release seen (the options window counted only "To war" or its close button); a first install marks nothing "new"; the welcome text; release notes paged by what fits | Claude (open to veto) |
 | 2026-11-25 | 3.8.3: older trail gives way to the roads it runs along (option B of four); roads dimming inside areas not chosen | Joe |
 | 2026-11-25 | 3.8.3: trail on roads kept 10 min, fades over 5; "along" = within 0.8 road cells; only roads drawn above 0.3 alpha count | Claude (open to veto) |
 | 2026-11-25 | 3.8.3 continent and world maps: blue/yellow/red scores; world view one score per continent; continents a small score per zone on a dark patch; every pin drawn, crowded ones combine into a big sword or skull with a count | Joe |

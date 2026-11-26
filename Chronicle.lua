@@ -1,6 +1,7 @@
 -- Warpath: Chronicle
 -- The chronicle as a book: an open two-page spread on a leather cover, with
--- two sections (Campaigns and Grudges) on tabs at the book's right edge.
+-- sections on tabs along its top edge: Campaigns and Grudges left of the
+-- title plate, Warpath (a welcome and what's new, 3.8.3) right of it.
 -- Built only from the game's own textures and fonts.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
@@ -32,7 +33,8 @@ local TEX = {
 local TAG_TEXT = { first = "first blood", grudge = "a grudge settled", avenged = "avenged", streak = "streak" }
 
 local book
-local view = { section = "campaigns", list = {}, page = 1, preview = false, grudges = {}, pick = 1 }
+local view = { section = "campaigns", list = {}, page = 1, preview = false, grudges = {}, pick = 1,
+    newsStack = {} }
 
 ---------------------------------------------------------------------------
 -- Small helpers
@@ -223,7 +225,15 @@ local function BuildBook()
     f:SetScript("OnDragStart", f.StartMoving)
     f:SetScript("OnDragStop", f.StopMovingOrSizing)
     tinsert(UISpecialFrames, "WarpathChronicle")
-    f:SetScript("OnHide", function() UISound("IG_QUEST_LOG_CLOSE", 845) end)
+    f:SetScript("OnHide", function()
+        UISound("IG_QUEST_LOG_CLOSE", 845)
+        -- opened by an update: closing the book, however, marks it seen
+        if view.newsPending then
+            view.newsPending = nil
+            gdb.seenVersion = ns.VERSION
+            gdb.installed = gdb.installed or ns.VERSION
+        end
+    end)
 
     -- leather cover with a gilt tooled line
     local leather = Solid(f, "BACKGROUND", LEATHER[1], LEATHER[2], LEATHER[3], 1, -8)
@@ -255,7 +265,8 @@ local function BuildBook()
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
 
-    f.tabs = { SectionTab(f, "Campaigns", "campaigns", 36), SectionTab(f, "Grudges", "grudges", 158) }
+    f.tabs = { SectionTab(f, "Campaigns", "campaigns", 36), SectionTab(f, "Grudges", "grudges", 158),
+        SectionTab(f, "Warpath", "warpath", W - 36 - 116) }
     return f
 end
 
@@ -787,24 +798,178 @@ local function RenderGrudges()
 end
 
 ---------------------------------------------------------------------------
+-- Warpath (3.8.3): a welcome and the way to the settings (left), what's new
+-- in each release, newest first (right). Opens by itself after an update
+-- (Options.lua, MaybeShowSetup), marking what this account hasn't seen.
+---------------------------------------------------------------------------
+
+local NEWS_TOP, NEWS_FLOOR = 66, PH - 44   -- the right page's notes run between these
+
+local function BuildNewsPages(f)
+    local L = CreateFrame("Frame", nil, f.left)
+    L:SetAllPoints()
+    local R = CreateFrame("Frame", nil, f.right)
+    R:SetAllPoints()
+    f.news = { L = L, R = R, heads = {}, lines = {} }
+    local n = f.news
+    local inner = PW - 64
+
+    n.version = Font(L, QuestFontNormalSmall, GameFontNormalSmall, FADED)
+    n.version:SetPoint("TOP", 0, -30)
+    n.version:SetJustifyH("CENTER")
+    n.headline = Font(L, QuestTitleFont, GameFontNormalLarge, INK)
+    n.headline:SetPoint("TOP", 0, -46)
+    n.headline:SetWidth(inner)
+    n.headline:SetJustifyH("CENTER")
+    Ornament(L, -80)
+    n.prose = Font(L, QuestFont, GameFontHighlight, INK)
+    n.prose:SetPoint("TOPLEFT", 32, -96)
+    n.prose:SetWidth(inner)
+    n.prose:SetJustifyV("TOP")
+    n.prose:SetSpacing(3)
+    local settings = CreateFrame("Button", nil, L, "UIPanelButtonTemplate")
+    settings:SetSize(130, 24)
+    settings:SetPoint("BOTTOM", 0, 40)
+    settings:SetText("Settings")
+    settings:SetScript("OnClick", function() if not view.preview then ns.Dispatch("setup") end end)
+
+    local head = Font(R, QuestTitleFont, GameFontNormal, RUBRIC, 15)
+    head:SetPoint("TOP", 0, -30)
+    head:SetText("What's New")
+    Ornament(R, -54)
+    n.earlier = TurnButton(R, "Earlier", true)
+    n.earlier:SetPoint("BOTTOMLEFT", 24, 8)
+    n.earlier:SetScript("OnClick", function()
+        if view.newsNext then
+            table.insert(view.newsStack, view.newsStart)
+            view.newsStart = view.newsNext
+            UISound("IG_ABILITY_PAGE_TURN", 836)
+            Render()
+        end
+    end)
+    n.later = TurnButton(R, "Later", false)
+    n.later:SetPoint("BOTTOMRIGHT", -24, 8)
+    n.later:SetScript("OnClick", function()
+        if #view.newsStack > 0 then
+            view.newsStart = table.remove(view.newsStack)
+            UISound("IG_ABILITY_PAGE_TURN", 836)
+            Render()
+        end
+    end)
+end
+
+local function Welcome()
+    local share = cfg.share
+        and "Guild sharing is on: guildmates running Warpath see your kills and deaths on their maps, and you see theirs."
+        or "Guild sharing is off. Turn it on in Settings to see guildmates' kills and deaths on your map, and to share yours."
+    return table.concat({
+        "Warpath draws your war on the world map: the roads you travel, today's trail, where you fought, killed and fell, and the enemies you've seen.",
+        "This book keeps a campaign for each time you ride out, and your ledger of grudges. Open it from the minimap button or with /warpath chronicle.",
+        "On the world map, the crossed swords in the top-right corner hide Warpath or choose what it shows.",
+        share,
+        "Type /warpath help for every command.",
+    }, "\n\n")
+end
+
+-- Pooled pieces of the notes page: release headings, and lines with a bullet.
+local function NewsHead(n, i)
+    local h = n.heads[i]
+    if not h then
+        h = Font(n.R, QuestTitleFont, GameFontNormal, RUBRIC, 13)
+        n.heads[i] = h
+    end
+    h:Show()
+    return h
+end
+
+local function NewsLine(n, i)
+    local l = n.lines[i]
+    if not l then
+        l = Font(n.R, QuestFont, GameFontHighlight, INK)
+        l:SetWidth(PW - 64 - 14)
+        l:SetJustifyV("TOP")
+        l:SetSpacing(2)
+        l.dot = Diamond(n.R, 5)
+        n.lines[i] = l
+    end
+    l:Show()
+    l.dot:Show()
+    return l
+end
+
+local function RenderNews()
+    local f, n = book, book.news
+    local list = ns.NewIn and ns.NewIn.List or {}
+    f.left.number:SetText("")
+    f.right.number:SetText("")
+    n.version:SetText("Version " .. tostring(ns.VERSION))
+    n.headline:SetText(gdb.installed and "Warpath" or "Welcome to Warpath")
+    n.prose:SetText(Welcome())
+    local Older = ns.NewIn and ns.NewIn.Older
+    view.newsStart = math.min(view.newsStart or #list, #list)
+    view.newsNext = nil
+    local y, nh, nl = NEWS_TOP, 0, 0
+    local i = view.newsStart
+    while i >= 1 do
+        local rel = list[i]
+        local h0, l0, y0 = nh, nl, y
+        nh = nh + 1
+        local h = NewsHead(n, nh)
+        local new = view.newSince and Older and Older(view.newSince, rel[1])
+        h:SetText(rel[1] .. (new and "   \194\183   new since you last played" or ""))
+        h:ClearAllPoints()
+        h:SetPoint("TOPLEFT", 32, -y)
+        y = y + 20
+        for _, text in ipairs(rel[2]) do
+            nl = nl + 1
+            local l = NewsLine(n, nl)
+            l:SetText(text)
+            l:ClearAllPoints()
+            l:SetPoint("TOPLEFT", 46, -y)
+            l.dot:ClearAllPoints()
+            l.dot:SetPoint("CENTER", n.R, "TOPLEFT", 38, -(y + 7))
+            local lh = l:GetStringHeight() or 0
+            if lh < 10 then lh = math.ceil(#text * 6 / (PW - 78)) * 15 end -- not measured yet
+            y = y + lh + 6
+        end
+        y = y + 10
+        if y > NEWS_FLOOR and i ~= view.newsStart then
+            -- doesn't fit under the newer ones: it starts the next page
+            for k = h0 + 1, nh do n.heads[k]:Hide() end
+            for k = l0 + 1, nl do n.lines[k]:Hide() n.lines[k].dot:Hide() end
+            nh, nl, y = h0, l0, y0
+            view.newsNext = i
+            break
+        end
+        i = i - 1
+    end
+    for k = nh + 1, #n.heads do n.heads[k]:Hide() end
+    for k = nl + 1, #n.lines do n.lines[k]:Hide() n.lines[k].dot:Hide() end
+    if view.newsNext then n.earlier:Enable() else n.earlier:Disable() end
+    if #view.newsStack > 0 then n.later:Enable() else n.later:Disable() end
+end
+
+---------------------------------------------------------------------------
 -- Rendering and opening
 ---------------------------------------------------------------------------
 
 function Render()
     if not book then return end
     book.title:SetText("Chronicle of " .. (myName or "you"))
-    local camp = view.section == "campaigns"
+    local camp, gr, news = view.section == "campaigns", view.section == "grudges", view.section == "warpath"
     book.camp.L:SetShown(camp)
     book.camp.R:SetShown(camp)
-    book.gr.L:SetShown(not camp)
-    book.gr.R:SetShown(not camp)
+    book.gr.L:SetShown(gr)
+    book.gr.R:SetShown(gr)
+    book.news.L:SetShown(news)
+    book.news.R:SetShown(news)
     for _, t in ipairs(book.tabs) do
         local on = t.key == view.section
         t:SetHeight(on and 32 or 26)
         t.bg:SetColorTexture(on and 0.16 or 0.08, on and 0.09 or 0.06, on and 0.04 or 0.04, 1)
         t.text:SetTextColor(on and 1 or 0.62, on and 0.82 or 0.58, on and 0 or 0.50)
     end
-    if camp then RenderCampaign() else RenderGrudges() end
+    if camp then RenderCampaign() elseif gr then RenderGrudges() else RenderNews() end
 end
 
 local function Popups()
@@ -839,12 +1004,13 @@ local function Build()
     book = BuildBook()
     BuildCampaignPages(book)
     BuildGrudgePages(book)
+    BuildNewsPages(book)
     Popups()
 end
 
 local Chronicle = {}
 
--- section: "campaigns" (default) or "grudges".
+-- section: "campaigns" (default), "grudges" or "warpath".
 function Chronicle.Open(preview, section)
     if S.inInstance and not preview then Print("the chronicle waits until you leave the battleground.") return end
     if not book then Build() end
@@ -855,6 +1021,7 @@ function Chronicle.Open(preview, section)
     if #view.list == 0 then view.list = { db.campaign } end
     book.camp.scroll:SetVerticalScroll(0)
     book.gr.scroll:SetVerticalScroll(0)
+    view.newsStart, view.newsStack, view.newsNext, view.newSince = nil, {}, nil, nil
     Render()
     if not book:IsShown() then UISound("IG_QUEST_LOG_OPEN", 844) end
     book:Show()
@@ -865,6 +1032,18 @@ function Chronicle.Toggle()
 end
 
 function Chronicle.Hide() if book then book:Hide() end end
+
+-- After an update (or a first install): open on the Warpath tab, marking
+-- the releases newer than `since` (nil on a first install: nothing marked).
+-- Closing the book marks this release seen (OnHide).
+function Chronicle.News(since)
+    Chronicle.Open(false, "warpath")
+    if not (book and book:IsShown()) then return end
+    view.newSince, view.newsPending = since, true
+    Render()
+end
+
+function Chronicle.Shown() return book and book:IsShown() and view.section end
 
 function Chronicle.Refresh()
     if book and book:IsShown() and not view.preview then

@@ -207,15 +207,81 @@ class MapButton(unittest.TestCase):
 
 
 class NewIn(unittest.TestCase):
-    """The update window opens after every release (Joe, 2026-11-24)."""
+    """After every release the chronicle opens on its Warpath tab (Joe,
+    2026-11-24 for every release; the book instead of the options window
+    from 3.8.3)."""
 
-    def booted(self, seen):
+    def booted(self, seen, installed="3.7.0"):
         wow = Wow()
-        wow.run(f'WarpathGlobal = {{ installed = "3.7.0", seenVersion = {lua_str(seen)}, cfg = {{}} }}')
+        inst = "nil" if installed is None else lua_str(installed)
+        seen = "nil" if seen is None else lua_str(seen)
+        wow.run(f'WarpathGlobal = {{ installed = {inst}, seenVersion = {seen}, cfg = {{}} }}')
         return wow.login()
 
     def shown(self, wow):
-        return wow.eval("WarpathSetup ~= nil and WarpathSetup:IsShown()")
+        return wow.eval('ns.Chronicle.Shown() == "warpath"')
+
+    def page(self, wow):
+        """The notes page's visible text, top to bottom."""
+        return wow.eval("""(function() local t = {}
+            local function add(fs) if fs:IsShown() and fs:GetText() then
+                local _, _, _, _, y = fs:GetPoint(1) t[#t + 1] = { y or 0, fs:GetText() } end end
+            for _, f in ipairs(WarpathChronicle.__children) do
+                for _, c in ipairs(f.__children) do
+                    for _, r in ipairs(c.__children) do
+                        if r.__kind == "FontString" and r:IsVisible() then add(r) end
+                    end
+                end
+            end
+            table.sort(t, function(a, b) return a[1] > b[1] end)
+            local out = {} for _, v in ipairs(t) do out[#out + 1] = v[2] end
+            return table.concat(out, "|") end)()""").replace("|", "\n")
+
+    def test_an_update_opens_the_book_on_whats_new(self):
+        wow = self.booted("3.8.2")
+        self.assertTrue(self.shown(wow), "the book didn't open on the Warpath tab")
+        self.assertFalse(wow.eval("WarpathSetup ~= nil and WarpathSetup:IsShown()"),
+                         "the options window no longer opens by itself")
+        text = self.page(wow)
+        self.assertIn("What's New", text)
+        self.assertIn("3.8.3   \u00b7   new since you last played", text)
+        self.assertNotIn("3.8.2   \u00b7   new", text, "3.8.2 was already seen")
+        self.assertIn("Settings", wow.eval("""(function() for _, f in ipairs(WarpathChronicle.__children) do
+            for _, c in ipairs(f.__children) do for _, b in ipairs(c.__children) do
+            if b.__template == "UIPanelButtonTemplate" and b:IsVisible() then return b:GetText() end end end end end)()"""))
+
+    def test_closing_the_book_marks_the_release_seen(self):
+        wow = self.booted("3.8.2")
+        wow.run("WarpathChronicle:Hide()")
+        self.assertEqual(wow.eval("WarpathGlobal.seenVersion"), wow.eval("ns.VERSION"))
+
+    def test_a_first_install_opens_the_welcome(self):
+        wow = self.booted(None, installed=None)
+        self.assertTrue(self.shown(wow))
+        text = self.page(wow)
+        self.assertIn("Welcome to Warpath", text)
+        self.assertNotIn("new since you last played", text, "nothing is 'new' on a first install")
+        self.assertIn("Guild sharing is off", text)
+
+    def test_older_releases_are_a_page_turn_away(self):
+        wow = self.booted("3.8.2")
+        # enough releases that they can't all fit on one page
+        wow.run("""for i = 1, 12 do table.insert(ns.NewIn.List, 1, { "2.0." .. i,
+            { "An old change that takes up a line or two of the page, for this test.", "And another." } }) end""")
+        wow.run("ns.Chronicle.News('3.8.2')")
+        first = self.page(wow)
+        self.assertIn("3.8.3", first)
+        self.assertNotIn("2.0.1\n", first + "\n", "the oldest release can't fit on the first page")
+        earlier = "WarpathChronicle.news.earlier"
+        self.assertTrue(wow.eval(f"{earlier}:IsEnabled()"))
+        for _ in range(20):
+            if not wow.eval(f"{earlier}:IsEnabled()"):
+                break
+            wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
+        self.assertFalse(wow.eval(f"{earlier}:IsEnabled()"), "Earlier never reached the oldest page")
+        self.assertIn("2.0.1", self.page(wow), "the oldest release is on the last page")
+        wow.run("WarpathChronicle.news.later:GetScript('OnClick')(WarpathChronicle.news.later)")
+        self.assertNotIn("2.0.1\n", self.page(wow) + "\n")
 
     def test_versions_order_with_test_builds_first(self):
         wow = Wow()

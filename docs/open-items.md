@@ -22,7 +22,10 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Inst
 
 - Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). Not in test2.
 
+- Welcome and What's New in the chronicle (Joe, 2026-11-25): a permanent **Warpath** tab, right of the title plate; the book opens there after each update instead of the options window, and closing it marks the release seen. 3.8.3's `NEW_IN` entry is written (10 lines). Tests in `NewIn` (4 new; mutation-checked: never opening, not marking seen, everything marked new, no paging each fail). The harness's `Hide` now runs `OnHide`, and buttons keep `Enable`/`Disable`.
+
 **Joe to check in game**
+- After a full restart: the book opens on the Warpath tab, 3.8.3 headed "new since you last played"; the welcome and the notes read well; Settings opens the options window; Earlier reaches 3.8.0; closing it and logging in again doesn't reopen it.
 - Walk onto dangerous or contested ground: the warning can be read before it fades.
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".
 - Killing with a guildmate who also gets credit (party, Plains Stomper): one chat line and one pin per kill.

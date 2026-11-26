@@ -1,6 +1,8 @@
 -- Warpath: Options
 -- The options window, with tabs: General, Map, Screenshots, Chronicle & zones, Grudges.
--- Opens once after each install or update; /warpath setup any time.
+-- /warpath setup, the minimap button's right-click, or the chronicle's
+-- Settings button. After each install or update the chronicle opens on its
+-- Warpath tab instead (3.8.3): a welcome and what's new (NEW_IN, below).
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
 local Print, VERSION, UpdateHUD = ns.Print, ns.VERSION, ns.UpdateHUD
@@ -10,10 +12,10 @@ ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction e
 
 local ShowSetup, MaybeShowSetup, setup
 do
--- Every release gets an entry (Joe, 2026-11-24), newest last; the window
--- opens after each update and shows every entry newer than what this
--- account last saw, at most NEW_MAX lines. One line per change; the box
--- wraps them, with a bullet and a hanging indent.
+-- Every release gets an entry (Joe, 2026-11-24), newest last. The
+-- chronicle's Warpath tab shows them all, newest first, and opens by itself
+-- after each update, marking the releases this account hasn't seen. One
+-- plain line per change, for players.
 local NEW_MAX = 8
 local NEW_IN = {
   { "3.8.0", {
@@ -29,6 +31,18 @@ local NEW_IN = {
   } },
   { "3.8.2", {
     "Inside the area you're lingering in, only a short tail of trail shows behind you, not a scribble of the last 45 seconds.",
+  } },
+  { "3.8.3", {
+    "What's new now lives in your chronicle, on its Warpath tab, with a welcome page and a Settings button. The book opens there after each update, instead of the settings window.",
+    "World map: one score for each continent. Continent maps: a small score for each zone. Blue when you're ahead, yellow when it's close, red when you're behind.",
+    "A zone's own map shows its score in the top-left corner.",
+    "Where pins crowd on continent and world maps, they combine into one big sword or skull with a count. Hover it to see how many were yours.",
+    "Your trail along roads fades after 10 minutes, so the roads read clean. Trail across open ground stays.",
+    "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their time labels are yellow on a dark patch and stay readable longer.",
+    "Dangerous-ground warnings stay up long enough to read.",
+    "A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too).",
+    "The map button no longer prints a chat line when clicked.",
+    "/killshot and /pks are gone; use /warpath shot.",
   } },
 }
 
@@ -46,7 +60,7 @@ local function Unseen(seen)
     while #out > NEW_MAX do table.remove(out, 1) end
     return out
 end
-ns.NewIn = { Older = Older, Unseen = Unseen } -- for tests
+ns.NewIn = { Older = Older, Unseen = Unseen, List = NEW_IN } -- List: for the chronicle
 local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
 local TRAIL = {}
@@ -451,7 +465,6 @@ end
 
 local function BuildSetup()
     local s = CreateFrame("Frame", "WarpathSetup", UIParent, "BackdropTemplate")
-    local TEXT_W = 516 - 12 - 14 - 12  -- box width less padding and the bullet
     s:SetSize(560, 430)
     s:SetPoint("TOP", 0, -90)
     s:SetFrameStrata("DIALOG")
@@ -495,46 +508,6 @@ local function BuildSetup()
     close:SetPoint("TOPRIGHT", -6, -6)
     close:SetScript("OnClick", function() s.MarkSeen() s:Hide() end)
 
-    -- "New in" box (updates only)
-    s.newBox = CreateFrame("Frame", nil, s, "BackdropTemplate")
-    s.newBox:SetBackdrop({
-        bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true, tileSize = 16, edgeSize = 12,
-        insets = { left = 3, right = 3, top = 3, bottom = 3 },
-    })
-    s.newBox:SetBackdropColor(0.14, 0.11, 0.08, 0.9)
-    s.newBox:SetBackdropBorderColor(0.55, 0.45, 0.28, 0.9)
-    s.newBox:SetPoint("TOPLEFT", 22, -76)
-    s.newBox:SetPoint("TOPRIGHT", -22, -76)
-    local nh = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    nh:SetPoint("TOPLEFT", 12, -10)
-    local news = Unseen(gdb.seenVersion)
-    local first, last = news[1] and news[1][1], news[#news] and news[#news][1]
-    nh:SetText(first and first ~= last and ("NEW IN " .. first .. " TO " .. last) or ("NEW IN " .. (last or VERSION)))
-    local y = 10 + 14 + 6
-    for _, item in ipairs(news) do
-        local line = item[2]
-        -- a small gold square as the bullet (a bullet glyph may draw as a box in the game font)
-        local dot = s.newBox:CreateTexture(nil, "ARTWORK")
-        dot:SetColorTexture(1, 0.82, 0, 0.9)
-        dot:SetSize(4, 4)
-        dot:SetPoint("TOPLEFT", 14, -(y + 4))
-        local fs = s.newBox:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        fs:SetPoint("TOPLEFT", 12 + 14, -y)
-        fs:SetWidth(TEXT_W)
-        fs:SetJustifyH("LEFT")
-        fs:SetWordWrap(true)
-        if fs.SetSpacing then fs:SetSpacing(2) end
-        fs:SetText(line)
-        local h = fs:GetStringHeight() or 0
-        if h < 10 then -- not measured yet: estimate from the length
-            h = math.ceil(#line * 5.6 / TEXT_W) * 14
-        end
-        y = y + h + 6
-    end
-    s.newH = y + 6
-    s.newBox:SetHeight(s.newH)
     s.welcome = s:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
     s.welcome:SetPoint("TOPLEFT", 22, -78)
     s.welcome:SetWidth(516)
@@ -579,13 +552,12 @@ local function BuildSetup()
     return s
 end
 
--- Title, then the "new in" box (updates) or a welcome line (first install),
--- then the tabs, then the tab body, then the buttons.
+-- Title, then a welcome line (first install), then the tabs, then the tab
+-- body, then the buttons.
 local BODY_H = 330
-local function Arrange(s, showNew, showWelcome)
+local function Arrange(s, showWelcome)
     local tabTop = 78
-    if showNew then tabTop = tabTop + s.newH + 10
-    elseif showWelcome then tabTop = tabTop + 40 end
+    if showWelcome then tabTop = tabTop + 40 end
     s.tabBar:ClearAllPoints()
     s.tabBar:SetPoint("TOPLEFT", 22, -tabTop)
     s.tabBar:SetPoint("TOPRIGHT", -22, -tabTop)
@@ -596,43 +568,35 @@ local function Arrange(s, showNew, showWelcome)
     s.body:SetPoint("BOTTOMRIGHT", -22, 56)
 end
 
-function ShowSetup(isUpdate, tab)
+function ShowSetup(_, tab)
     if not setup then setup = BuildSetup() end
     local s = setup
-    if isUpdate then
-        s.title:SetText("Warpath updated to " .. VERSION)
-        s.sub:SetText(S.mapWasReset and "Your settings are kept, except the map's: see the Map tab."
-            or "Your current settings are already filled in.")
-        s.newBox:Show()
-        s.welcome:Hide()
-    else
-        s.title:SetText(gdb.installed and "Warpath options" or "Welcome to Warpath")
-        s.sub:SetText(gdb.installed and ("Version " .. VERSION .. ". Settings are shared by all your characters.")
-            or "These are the defaults. Change anything you like.")
-        s.newBox:Hide()
-        s.welcome:SetShown(not gdb.installed)
-    end
-    Arrange(s, isUpdate, not isUpdate and not gdb.installed)
+    s.title:SetText(gdb.installed and "Warpath options" or "Welcome to Warpath")
+    s.sub:SetText(gdb.installed and ("Version " .. VERSION .. ". Settings are shared by all your characters.")
+        or "These are the defaults. Change anything you like.")
+    s.welcome:SetShown(not gdb.installed)
+    Arrange(s, not gdb.installed)
     SetupLoad(s, cfg)
     SelectTab(s, tab or s.tab or 1)
     s:Show()
 end
 
 -- Once per account per release (every release since 3.8.1; before, only
--- feature releases), never in combat. Not for going back to an older one.
+-- feature releases), never in combat or a battleground: the chronicle on
+-- its Warpath tab (3.8.3; the options window before). Closing the book
+-- marks the release seen. Not for going back to an older one.
 function MaybeShowSetup()
     if gdb.seenVersion == VERSION then return end
     if gdb.seenVersion and not Older(gdb.seenVersion, VERSION) then return end
-    if S.inInstance then S.setupWaiting = true return end
-    if InCombatLockdown() or UnitAffectingCombat("player") then
+    if S.inInstance or InCombatLockdown() or UnitAffectingCombat("player") then
         S.setupWaiting = true
         return
     end
     S.setupWaiting = false
-    local ok, err = pcall(ShowSetup, gdb.installed and true or false, S.mapWasReset and gdb.installed and 2 or 1)
+    local ok, err = pcall(ns.Chronicle.News, gdb.seenVersion)
     if not ok then
-        Print("the options window failed to open: " .. tostring(err))
-        Print("please send that line to whoever gave you Warpath. Settings are still at their defaults.")
+        Print("the chronicle failed to open: " .. tostring(err))
+        Print("please send that line to whoever gave you Warpath. Your settings are unchanged.")
         gdb.seenVersion = VERSION -- don't fail again on every login
     end
 end

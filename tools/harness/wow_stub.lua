@@ -114,7 +114,12 @@ function Widget:GetName() return self.__name end
 function Widget:GetParent() return self.__parent end
 function Widget:SetParent(p) self.__parent = p end
 function Widget:Show() self.__shown = true end
-function Widget:Hide() self.__shown = false end
+-- as in the client, hiding a shown frame runs its OnHide
+function Widget:Hide()
+    local was = self.__shown
+    self.__shown = false
+    if was and self.__scripts and self.__scripts.OnHide then self.__scripts.OnHide(self) end
+end
 function Widget:SetShown(v) self.__shown = not not v end
 function Widget:IsShown() return self.__shown end
 function Widget:IsVisible()
@@ -161,7 +166,16 @@ function Widget:ClearAllPoints() self.__points = {} end
 function Widget:SetFontObject(font) self.__font = font and font.__name end
 function Widget:GetPoint(i) local p = self.__points[i or 1] if p then return unpack(p) end end
 function Widget:IsMouseOver() return false end
-function Widget:IsEnabled() return true end
+function Widget:IsEnabled() return not self.__disabled end
+function Widget:Enable()
+    self.__disabled = false
+    if self.__scripts.OnEnable then self.__scripts.OnEnable(self) end
+end
+function Widget:Disable()
+    self.__disabled = true
+    if self.__scripts.OnDisable then self.__scripts.OnDisable(self) end
+end
+function Widget:SetEnabled(on) if on then self:Enable() else self:Disable() end end
 function Widget:GetChildren() return unpack(self.__children) end
 function Widget:GetRegions() return end
 function Widget:GetID() return self.__id or 0 end
