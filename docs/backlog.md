@@ -30,6 +30,12 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Flesh out replay, and advertise it on the map
+- From: Joe, 2026-11-26 (didn't know replay existed: "when did we add this feature?"; wants it fleshed out and advertised on the map)
+- Status: wanted, needs a design
+- What: `/warpath replay [hours]` has animated your last hours of trail on the map since 3.0.0 (20 s, up to 24 h, `Map.lua` `StartReplay`), but it's listed only in `/warpath help all`, so nobody finds it. Joe wants it **fleshed out** and **advertised on the world map, next to Warpath's map button** (crossed swords, top-right of the map; Claude's reading of "near the mini map toggle", confirm with Joe). Fleshing out is open: candidates are play/pause and speed, a time scrubber, a clock showing the time reached, kills and deaths appearing as the line reaches them, choosing the window (1 h, 6 h, today).
+- Notes: replay draws the march "as one line" (`DrawReplay`) and predates the 3.8 lingering areas, trail-gives-way-to-roads and flight legs. Check in game and in a render that it still looks right with them before advertising it. It's also the base for match replay in battleground mode (Feature requests).
+
 ### Rework the settings panel, and first-install defaults
 - From: Joe, 2026-11-25
 - Status: needs a design
@@ -55,6 +61,29 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 ---
 
 ## Feature requests
+
+### Battleground mode (3.9.x main feature)
+- From: Joe, 2026-11-26 ("we are not done tinkering with 3.8.x, but let's begin planning")
+- Status: needs a design. First step: one in-game session to see what the client gives inside a match (below).
+- What: Warpath does something useful in battlegrounds instead of resting. Today it records, draws and sends nothing in any instance (`Events.lua` `InsideMatch`).
+- Research (2026-11-26), what other addons do: objective timers (Capping, Capped), enemy frames (BattleGroundEnemies, Gladius, sArena), flag carriers (Warsong Flag Carrier, Zurk Maps), incoming calls (BG Defender), enemy detection (Spy), healer marks (Healers Have To Die), honour standing (HonorSpy), match history (REFlex, now retail-only; PVPHistoryClassic+, BG Historian, small on Classic). Nothing remembers a player's battlegrounds over time. Joe's picks from these (2026-11-26): match history, grudges, objective timers, flag carrier tracking, healer marks. Not picked: enemy frames, enemy detection, incoming calls, honour tracking.
+- Targets (Joe, 2026-11-26):
+  - **Match replay** (Joe: "amazing"): after a match, play your path through it on the battleground map, built on the existing replay. Keep only the last few matches.
+  - **Match history and battleground stats**, in the chronicle: a page per match (result, length, killing blows, deaths, nemesis, grudges met) and totals per battleground, with win rates by battleground and faction and personal bests folded in (most killing blows, longest life, least time dead, fastest win).
+  - **Grudges inside battlegrounds**: the skull on nameplates and the target frame when a grudge is on the other team (the code exists, switched off by `S.inInstance` in `Grudge.lua`), the match noted in their ledger entry. No banners or sounds mid-fight unless Joe wants them.
+  - **Objective timers**: capture countdowns for bases and towers, flag respawn in Warsong Gulch. Built from the game's own status-bar art. Source to find on this client: the battleground system chat messages, or the map's landmark/POI timers.
+  - **Flag carrier tracking** (Warsong Gulch): who carries each flag, from the "picked up by" system messages, which needs no addon messages. Health only while the carrier is your target, mouseover or nameplate. Sharing the carrier's health with teammates (Warsong Flag Carrier's trick) needs messages inside: wait for the open investigation.
+  - **Healer marks**: mark enemy healers on nameplates, like the grudge skull. Detecting them is the open question: the scoreboard's healing column and class (no combat reads) if this client has it; the combat log likely hides it in combat.
+  - **Enemies you meet again** ("decent idea"): count enemy names from the scoreboard across matches ("faced Thrall in 14 matches, your side won 9"), group by guild to spot premades. Ties in with grudges.
+  - **Time spent dead**: share of the match dead, and the graveyard you came back at most. Pairs with "Spirit healers on the map".
+  - **Victory screenshot**: the scoreboard open at the match's end, through the kill-shot pipeline.
+  - **War table for battlegrounds**: this match's killing blows and deaths, your current life, grudges on the other team.
+  - **Guild group record**: wins together when two or more guildmates share a match; an opt-in line to guild chat. Depends on messages getting through inside (open investigation in `open-items.md`).
+- Known risks:
+  - Honourable kills aren't kills: everyone nearby gets credit, so Warpath's kill counting (kill count going up) would inflate inside. Stats need killing blows from the scoreboard (`GetBattlefieldScore`) instead.
+  - The game hides values in combat (`ns.Foes.Safe`); battlegrounds are mostly combat.
+  - Battleground maps aren't in the harness's captured map rects.
+- To check in game first: does the scoreboard API exist and update during the match (`UPDATE_BATTLEFIELD_SCORE`); is there a map ID and player position inside; can the winner be read at the end (`GetBattlefieldWinner`, `PVP_MATCH_COMPLETE`); which battleground system messages arrive (flag pickups, base assaults) and whether they're readable mid-fight; does the scoreboard show healing done; do enemy nameplates show inside. Run the share diagnostics in the same session (open investigation).
 
 ### Spirit healers on the map
 - From: Joe, 2026-11-25
@@ -115,6 +144,10 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Declined and dropped
 
+- Declined 2026-11-26: kill pins on battleground maps from scoreboard killing blows. Too much activity in battlegrounds; the map would fill with pins.
+- Declined 2026-11-26: lingering areas on battleground maps (which bases you held). Joe doesn't want to muddy the battleground map.
+- Not picked by Joe 2026-11-26 for battleground mode: enemy frames (BattleGroundEnemies, Gladius), enemy detection (Spy), incoming calls (BG Defender), honour tracking (HonorSpy).
+- Not offered, Claude's judgement 2026-11-26: battle haze across matches (objectives would just colour in), strategy notes on battleground maps (clutter), live team calls or carrier tracking (Capping and BG Defender do it better, and they need messages inside).
 - Declined 2026-11-25: roads dimming inside lingering areas (option C for the Plaguelands pile-up). Rendered on Lethality's real trail it barely changed anything; Joe picked trail giving way to roads instead.
 - Declined 2026-11-25: a warning when the old Wake addon is loaded. Only Joe ever had Wake or PvPKillShot, so 3.8.3 removes every mention of both from the addon instead.
 - Declined 2026-11-22: receiver-side multi-kill counting for guildmates still on 3.6.
