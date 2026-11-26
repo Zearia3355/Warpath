@@ -1080,7 +1080,6 @@ end
 ---------------------------------------------------------------------------
 
 local Linger = ns.Linger
-local EARTH = { 0.36, 0.27, 0.18 }   -- old trail sinks towards the map's own browns, never paler
 
 -- Where an age sits between the solid line's end and the trail's end, on a scale that
 -- moves fast early: 5 m, 15 m, 1 h, 4 h and 24 h are about evenly spaced.
@@ -1093,22 +1092,19 @@ local function TrailG(age, life)
 end
 
 -- Colour, opacity, thickness and dash fill for trail of a given age.
--- Colour runs faction -> faction deep -> dusk in one gradient; the dashes
--- go long -> short -> dots; everything fades out over the last quarter.
+-- Colour runs faction -> faction deep, then stays deep; the dashes go long
+-- -> a little shorter; everything fades out over the last quarter.
+-- 3.8.3 (Joe's pick, over his Dustwallow screenshot): old trail used to sink
+-- to an earthy dusk and shrink to dots, which on marsh art drawn in that
+-- same red-brown ink couldn't be followed. It now stays crimson, long
+-- dashes, and fades less; the casing (TRAIL_CASE) keeps it off the map ink.
 local function TrailLook(age, life)
     local g, d = TrailG(age, life), faction.deep
-    local r, gg, b
-    if g < 0.55 then
-        local t = g / 0.55
-        r, gg, b = Lerp(faction.r, d[1], t), Lerp(faction.g, d[2], t), Lerp(faction.b, d[3], t)
-    else
-        local t = (g - 0.55) / 0.45
-        r, gg, b = Lerp(d[1], Lerp(d[1], EARTH[1], 0.6), t), Lerp(d[2], Lerp(d[2], EARTH[2], 0.6), t),
-            Lerp(d[3], Lerp(d[3], EARTH[3], 0.6), t)
-    end
+    local t = math.min(1, g / 0.55)
+    local r, gg, b = Lerp(faction.r, d[1], t), Lerp(faction.g, d[2], t), Lerp(faction.b, d[3], t)
     local tail = 1 - Smooth((age - life * 0.75) / (life * 0.25))
-    local fill = 0.85 - 0.35 * Smooth((g - 0.27) / 0.12) - 0.25 * Smooth((g - 0.60) / 0.12)
-    return r, gg, b, (0.95 - 0.35 * g) * tail, 1 - 0.1 * g, fill
+    local fill = 0.85 - 0.20 * Smooth((g - 0.27) / 0.12)
+    return r, gg, b, (0.95 - 0.15 * g) * tail, 1 - 0.1 * g, fill
 end
 
 -- Each zone's areas as drawn now, the clips they put on the trail, and
@@ -1190,10 +1186,17 @@ local function InkPart(t0, t1, k)
     PutLine(D.nl, q.sub, "BLEND", q.thick, q.r, q.g, q.b, q.a * k,
         (p.ox + x1 * p.sx) * D.w, -(p.oy + y1 * p.sy) * D.h, (p.ox + x2 * p.sx) * D.w, -(p.oy + y2 * p.sy) * D.h)
 end
-local function Ink(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
+local function InkOnce(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
     ink.D, ink.p, ink.sub, ink.thick, ink.r, ink.g, ink.b, ink.a = D, p, sub, thick, r, g, b, a
     ink.x1, ink.y1, ink.x2, ink.y2, ink.count = x1, y1, x2, y2, count
     if Linger then Linger.Clip(clips, x1, y1, x2, y2, InkPart) else InkPart(0, 1, 1) end
+end
+-- Trail dashes (count) sit on a dark casing, a layer below every dash's
+-- colour, so they read over any map art (3.8.3, Joe's pick: 1.7 x the
+-- width). The casing isn't counted against DASH_BUDGET, only LINE_BUDGET.
+local function Ink(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
+    if count then InkOnce(D, p, clips, sub - 1, thick * C.TRAIL_CASE, 0.10, 0.04, 0.03, a * 0.75, x1, y1, x2, y2) end
+    InkOnce(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
 end
 
 -- The line: your last minutes, solid (LINE_SOLID: 2.5 min in 3.8). Trail recorded before 3.4
@@ -1402,6 +1405,44 @@ local function MarkAge(D, e, s, d, at, life)
     return held, age
 end
 
+-- Older trail gives way to a newer pass along the same way (3.8.3, Joe's
+-- pick D): walking out and back, or the same stretch twice, drew rails side
+-- by side. A mark is hidden where a mark at least TRAIL_YIELD_T newer runs
+-- alongside it (within TRAIL_YIELD slots, about the same direction either
+-- way); crossings stay. Marks are drawn newest first, so the newer ones are
+-- already in e.seen, a grid of pixel cells one radius across. Every newer
+-- mark still on the trail counts, faded by a road or not, so nothing can
+-- reappear as time passes: only walking there again hides anything.
+local function Yields(D, e, s, d, at, slot, t)
+    local p = e.p
+    local sw, sh = p.sx * D.w, p.sy * D.h
+    local x, y = OnStroke(s, d, at)
+    local ax, ay = OnStroke(s, d, math.max(0, at - 0.3 * slot))
+    local bx, by = OnStroke(s, d, math.min(d[#d], at + 0.3 * slot))
+    local X, Y, dx, dy = x * sw, y * sh, (bx - ax) * sw, (by - ay) * sh
+    local len = math.sqrt(dx * dx + dy * dy)
+    if len > 0 then dx, dy = dx / len, dy / len end
+    local R = C.TRAIL_YIELD * slot * sw
+    local gx, gy = math.floor(X / R), math.floor(Y / R)
+    local seen = e.seen
+    for i = -1, 1 do
+        for j = -1, 1 do
+            local c = seen[(gx + i) * 65536 + gy + j]
+            if c then
+                for _, q in ipairs(c) do
+                    if q.t >= t + C.TRAIL_YIELD_T and (q.x - X) ^ 2 + (q.y - Y) ^ 2 < R * R
+                        and math.abs(q.dx * dx + q.dy * dy) > C.TRAIL_YIELD_COS then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    local k = gx * 65536 + gy
+    seen[k] = seen[k] or {}
+    table.insert(seen[k], { x = X, y = Y, dx = dx, dy = dy, t = t })
+end
+
 local function StrokeDashes(D, e, s, life, slot, line)
     local p, clips = e.p, e.lg.dash
     local d = StrokeArc(s)
@@ -1414,6 +1455,7 @@ local function StrokeDashes(D, e, s, life, slot, line)
             local at = base + MARKS[i] * slot
             local held, age = MarkAge(D, e, s, d, at, life)
             if held == false then return end -- older than the trail: the rest is too
+            if held and Yields(D, e, s, d, at, slot, D.now - age) then held = nil end
             local r, g, b, tk, fill, a, _
             if held then
                 r, g, b, _, tk, fill = TrailLook(age, life)   -- how it looks: its own age
@@ -1457,6 +1499,7 @@ local function DrawTrail(D, scene)
         local line = p.far and w * 0.0012 or w * 0.0022
         local thin = p.far and w * 0.0011 or w * 0.0020
         local slot = C.DASH_PERIOD * thin / (p.sx * w) -- one dash slot, in map widths
+        e.seen = {} -- marks drawn so far this redraw, for Yields
         for si = #strokes, 1, -1 do -- newest first
             local s = strokes[si]
             if s.e < oldest or D.ndash >= C.DASH_BUDGET then break end
@@ -1474,7 +1517,7 @@ end
 
 -- Past areas' dashes: one every AREA_PERIOD trail slots, filling AREA_NEW of
 -- it when fresh down to AREA_OLD at the trail's end (the trail's own dashes
--- go 0.85 -> 0.25 of a full slot).
+-- go 0.85 -> 0.65 of a full slot, from 3.8.3).
 local AREA_PERIOD, AREA_NEW, AREA_OLD = 0.75, 0.8, 0.55
 
 local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap)
@@ -1528,13 +1571,18 @@ local function DrawAreas(D, scene)
                 r, g, b, a = faction.r, faction.g, faction.b, 0.95
                 DrawOutline(D, p, ar.poly, line * 1.05, r, g, b, a, 1, 0)
             else
-                r, g, b, a, tk, fill = TrailLook(math.max(ar.age, C.LINE_SOLID + 1), life)
+                local age = math.max(ar.age, C.LINE_SOLID + 1)
+                r, g, b, a, tk = TrailLook(age, life)
                 -- 3.8.3: a shorter, fixed period than the trail's, so old
                 -- outlines stay joined up instead of thinning to sparse
                 -- dots (Joe). The period never changes with age, so each
-                -- dash keeps its place and only shortens.
+                -- dash keeps its place and only shortens. Its length follows
+                -- age on its own scale (the trail's dashes stopped shrinking
+                -- to dots in 3.8.3; the outline, pick H, is unchanged).
+                local tg = TrailG(age, life)
+                fill = 1 - (0.35 * Smooth((tg - 0.27) / 0.12) + 0.25 * Smooth((tg - 0.60) / 0.12)) / 0.6
                 local per = AREA_PERIOD * slot
-                local dash = per * (AREA_OLD + (AREA_NEW - AREA_OLD) * Clamp((fill - 0.25) / 0.6))
+                local dash = per * (AREA_OLD + (AREA_NEW - AREA_OLD) * fill)
                 DrawOutline(D, p, ar.poly, line * tk, r, g, b, a, dash, per - dash)
             end
             if not p.far and a > 0.05 then AreaTag(D, p, ar, a) end

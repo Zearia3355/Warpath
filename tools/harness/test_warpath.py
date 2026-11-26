@@ -996,6 +996,135 @@ class TrailOnRoads(unittest.TestCase):
             before = after
 
 
+class OldTrail(unittest.TestCase):
+    """Old trail stays readable on busy map art (3.8.3, Joe's picks over his
+    Dustwallow screenshot): crimson long dashes on a dark casing, and an
+    older pass gives way where a newer one runs alongside it.
+
+    Before, 9-hour-old trail had sunk to an earthy red-brown and shrunk to
+    dots, the same ink as Dustwallow's marsh outlines, and an out-and-back
+    drew two rails side by side."""
+
+    H = 668
+    SLOT = 5 * 0.0020 * 1002                     # C.DASH_PERIOD x a zone map's thin line, px
+
+    def setUp(self):
+        self.wow = Wow().login()
+        self.wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448; ns.cfg.trailMin = 720")
+        self.wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.recent = true")
+
+    def walk(self, x0, y0, x1, y1, steps=140):
+        for i in range(steps + 1):
+            self.wow.H.player.x = x0 + (x1 - x0) * i / steps
+            self.wow.H.player.y = y0 + (y1 - y0) * i / steps
+            self.wow.advance(1)
+
+    def lines(self, after=0):
+        from render import COLLECT
+        if after:
+            self.wow.run(f"__H.now = __H.now + {after}")
+        self.wow.eval("ns.Redraw()")
+        out = []
+        for p in self.wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L" and float(f[5]) > 0.01:
+                out.append(dict(rgb=tuple(float(v) for v in f[2:5]), a=float(f[5]),
+                                seg=tuple(float(v) for v in f[6:10]), th=float(f[10])))
+        return out
+
+    @staticmethod
+    def red(ls):
+        # trail ink; not the tail line from the trail's end to your arrow
+        return [l for l in ls if l["rgb"][0] > l["rgb"][1] + 0.3 and l["seg"][:2] != l["seg"][2:]]
+
+    def on_row(self, ls, y):
+        py = y * self.H
+        return [l for l in self.red(ls) if abs((l["seg"][1] + l["seg"][3]) / 2 - py) < 3]
+
+    def test_old_trail_stays_crimson_long_dashes(self):
+        import math
+        self.walk(0.20, 0.50, 0.70, 0.50)
+        ls = self.on_row(self.lines(after=9 * 3600), 0.50)
+        self.assertTrue(ls, "no old trail drawn")
+        deep = (0.65, 0.03, 0.13)                       # the Horde's deep red
+        for l in ls:
+            self.assertLess(max(abs(c - d) for c, d in zip(l["rgb"], deep)), 0.02, "old trail sank towards brown")
+            self.assertGreater(l["a"], 0.7, "old trail faded too far")
+        xs = sorted((min(l["seg"][0], l["seg"][2]), max(l["seg"][0], l["seg"][2])) for l in ls)
+        marks = []
+        for a, b in xs:                                  # join the pieces of one mark
+            if marks and a - marks[-1][1] < 0.3:
+                marks[-1][1] = max(marks[-1][1], b)
+            else:
+                marks.append([a, b])
+        inner = [b - a for a, b in marks[2:-2]]
+        self.assertGreater(len(inner), 10)
+        self.assertGreater(sorted(inner)[len(inner) // 2], 0.55 * self.SLOT, "old dashes shrank to dots")
+
+    def test_every_dash_sits_on_a_dark_casing(self):
+        self.walk(0.20, 0.50, 0.70, 0.50)
+        ls = self.lines(after=3600)
+        dark = [l for l in ls if max(l["rgb"]) < 0.15]
+        dashes = self.red(ls)
+        self.assertTrue(dashes)
+        for l in dashes:
+            match = [c for c in dark if c["seg"] == l["seg"]]
+            self.assertTrue(match, "a dash without its casing")
+            self.assertAlmostEqual(match[0]["th"] / l["th"], 1.7, places=3)
+
+    def test_an_older_pass_gives_way_to_a_newer_one_alongside(self):
+        self.walk(0.20, 0.50, 0.70, 0.50)                # out
+        self.wow.advance(10 * 60)
+        self.walk(0.70, 0.512, 0.20, 0.512)              # back, 8 px to the side
+        ls = self.lines(after=10 * 60)
+        self.assertTrue(self.on_row(ls, 0.512), "the newer pass must show")
+        old = [l for l in self.on_row(ls, 0.50) if 0.25 * 1002 < l["seg"][0] < 0.65 * 1002]
+        self.assertEqual(old, [], "the older pass still runs alongside the newer one")
+
+    def test_a_pass_further_off_or_across_stays(self):
+        self.walk(0.20, 0.50, 0.70, 0.50)
+        self.wow.advance(10 * 60)
+        self.walk(0.70, 0.56, 0.20, 0.56)               # 40 px away: a different way
+        self.wow.advance(5)
+        self.walk(0.45, 0.30, 0.45, 0.70)               # straight across
+        ls = self.lines(after=10 * 60)
+        old = self.on_row(ls, 0.50)
+        self.assertTrue([l for l in old if 0.25 * 1002 < l["seg"][0] < 0.40 * 1002], "a separate way gave way")
+        near = [l for l in old if abs((l["seg"][0] + l["seg"][2]) / 2 - 0.45 * 1002) < 12]
+        self.assertTrue(near, "a crossing hid the older pass")
+
+    def test_one_pass_never_hides_itself(self):
+        # a tight zigzag lies alongside itself within two minutes: it all stays
+        for k in range(6):
+            y = 0.50 + (k % 2) * 0.012
+            self.walk(0.30 if k % 2 == 0 else 0.50, y, 0.50 if k % 2 == 0 else 0.30, y, steps=20)
+        ls = self.lines(after=30 * 60)
+        span = (0.32 * 1002, 0.48 * 1002)
+        for y in (0.50, 0.512):
+            inked = sum(abs(l["seg"][2] - l["seg"][0]) for l in self.on_row(ls, y)
+                        if span[0] < l["seg"][0] < span[1])
+            self.assertGreater(inked, 0.5 * (span[1] - span[0]), f"the pass along {y} hid itself")
+
+    def test_giving_way_only_fades_even_when_the_newer_pass_fades_on_a_road(self):
+        # The newer pass runs on a road and gives way to it after 10-15 min;
+        # the older one, just off the road, must not come back when it does.
+        self.wow.run("ns.cfg.layers.roads = true")
+        self.wow.run("""
+            local z, GW, now = ns.ZoneData(1448), ns.C.GW, ns.PlayNow()
+            z.road = {}
+            for x = 8, 45 do local a = 30 * GW + x z.road[a * 10000 + a + 1] = { l = 6, tl = now } end""")
+        road_y = 30.5 / 64
+        self.walk(0.15, road_y + 0.022, 0.65, road_y + 0.022)   # older, 15 px off the road
+        self.wow.advance(5 * 60)
+        self.walk(0.65, road_y, 0.15, road_y)                   # newer, on the road
+        steady = Steadiness()
+        before = [l["seg"] for l in self.red(self.lines(after=3 * 60))]
+        for _ in range(30):                                     # through the road fade, 40 s at a time
+            after = [l["seg"] for l in self.red(self.lines(after=40))]
+            self.assertEqual(steady.new_ink(before, after), [], "older trail came back as the newer pass faded")
+            before = after
+
+
 class Roads(unittest.TestCase):
     """A route walked on several days is one road (3.7.12).
 
