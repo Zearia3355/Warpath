@@ -41,17 +41,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - Changing defaults affects only new installs; existing players keep their settings (preserve saved data). Any reset for existing players is called out first, as 3.8.0's map reset was.
   - Do it with or after "Welcome and What's new pages in the chronicle", which moves the update box out of this window.
 
-### Roads, trail and areas pile up where they overlap
-- From: Joe, 2026-11-25 (screenshot, Eastern Plaguelands; earlier offered by Claude as "calmer long trails")
-- Status: needs a design
-- What: where roads, today's trail and lingering areas share ground, they draw on top of each other and the map becomes a mess, worse with the game's quest markers on it. Joe's screenshot had the trail off; with it on, Eastern Plaguelands would be unreadable.
-- Notes:
-  - Most of the overlap is the trail running along roads you walk every day: the same path drawn twice in two styles. Ideas: where the trail follows a road, draw only the road (or only the newest part of the trail, the bit that says where you just went); hide old trail dashes on silver and gold roads.
-  - Areas: roads crossing a filled area draw over it; dim or thin roads inside areas, or draw the area outline only.
-  - Fewer marks overall: cap trail dashes per map square, rank-based, never newest-wins, or marks will crawl (anchored, only fade).
-  - Quest markers belong to the game and can't be moved; leave room around them only if the map tells us where they are.
-  - Real data to render from: Lethality's Plaguelands trail, kept in `tools/out/trail-data-2026-11-24-plaguelands/` (863 points, 4 areas in Eastern Plaguelands). Render options over Joe's screenshot of the same map for him to pick.
-
 ### A clown icon for deaths to mobs
 - From: feedback passed on by Joe, 2026-11-24
 - Status: needs a design
@@ -126,6 +115,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Declined and dropped
 
+- Declined 2026-11-25: roads dimming inside lingering areas (option C for the Plaguelands pile-up). Rendered on Lethality's real trail it barely changed anything; Joe picked trail giving way to roads instead.
 - Declined 2026-11-25: a warning when the old Wake addon is loaded. Only Joe ever had Wake or PvPKillShot, so 3.8.3 removes every mention of both from the addon instead.
 - Declined 2026-11-22: receiver-side multi-kill counting for guildmates still on 3.6.
 - Dropped: map presets.

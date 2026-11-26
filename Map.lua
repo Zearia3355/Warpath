@@ -902,6 +902,31 @@ local function Lynchpins(chains, adj)
     end
 end
 
+-- Is map point (x, y) on a road drawn on this zone (within C.ROAD_NEAR of
+-- a cell)? From the pieces DrawGround kept in e.roadSegs.
+local function OnRoad(e, x, y)
+    local segs = e.roadSegs
+    if not segs then return false end
+    local GW, GH = C.GW, C.GH
+    local cx, cy = math.floor(x * GW), math.floor(y * GH)
+    local near2 = C.ROAD_NEAR * C.ROAD_NEAR
+    for gy = cy - 1, cy + 1 do
+        for gx = cx - 1, cx + 1 do
+            for _, q in ipairs(segs[gy * GW + gx] or {}) do
+                -- distance to the piece, in cells
+                local ax, ay, bx, by = q[1] * GW, q[2] * GH, q[3] * GW, q[4] * GH
+                local px, py = x * GW, y * GH
+                local dx, dy = bx - ax, by - ay
+                local L2 = dx * dx + dy * dy
+                local t = L2 > 0 and Clamp(((px - ax) * dx + (py - ay) * dy) / L2) or 0
+                local ex, ey = ax + dx * t - px, ay + dy * t - py
+                if ex * ex + ey * ey < near2 then return true end
+            end
+        end
+    end
+    return false
+end
+
 local function DrawGround(D, scene)
     local L, w, h, now = cfg.layers, D.w, D.h, D.now
     if not L.roads then return end
@@ -928,6 +953,8 @@ local function DrawGround(D, scene)
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
         local thin = p.far and w * 0.0011 or w * 0.0020
         local candidates = {}
+        local segs = {} -- pieces you can see, for the trail to give way to
+        e.roadSegs = segs
         local chains, fade, adj = RoadChains(z, faint, gold)
         if C.ROAD_THREAD > 0 then Lynchpins(chains, adj) end
         -- How much of a stretch of this strength shows: all of it from
@@ -944,6 +971,11 @@ local function DrawGround(D, scene)
         local function Piece(long, look, hold, ax, ay, bx, by, joinA, joinB)
             long, look = long * fade, (look or long) * fade
             local alpha = math.max(Seen(long), C.ROAD_THREAD * Seen((hold or 0) * fade))
+            if alpha > 0.3 then -- the trail gives way to roads you can see
+                local k = math.floor((ay + by) / 2 * C.GH) * C.GW + math.floor((ax + bx) / 2 * C.GW)
+                segs[k] = segs[k] or {}
+                table.insert(segs[k], { ax, ay, bx, by })
+            end
             local x1, y1, x2, y2 = ox + ax * sx, -(oy + ay * sy), ox + bx * sx, -(oy + by * sy)
             if D.nl >= roadCap or alpha <= 0 then return end
             local g = Clamp((look - gStart) / (gEnd - gStart))
@@ -1385,9 +1417,21 @@ local function StrokeDashes(D, e, s, life, slot, line)
             local at = base + MARKS[i] * slot
             local held, age = MarkAge(D, e, s, d, at, life)
             if held == false then return end -- older than the trail: the rest is too
+            local r, g, b, tk, fill, a, _
             if held then
-                local r, g, b, _, tk, fill = TrailLook(age, life)   -- how it looks: its own age
-                local _, _, _, a = TrailLook(held, life)              -- how visible: held by its areas
+                r, g, b, _, tk, fill = TrailLook(age, life)   -- how it looks: its own age
+                _, _, _, a = TrailLook(held, life)              -- how visible: held by its areas
+                -- Where it runs along a road you can see, older trail fades
+                -- out and leaves the road to say it (3.8.3, Joe's pick): the
+                -- same path drawn twice was most of the clutter. Decided by
+                -- each dash's place and age alone, so nothing crawls.
+                if e.roadSegs and age > C.TRAIL_ROAD_KEEP then
+                    local x, y = OnStroke(s, d, at)
+                    if OnRoad(e, x, y) then a = a * (1 - Smooth((age - C.TRAIL_ROAD_KEEP) / C.TRAIL_ROAD_FADE)) end
+                end
+                if a < 0.01 then held = nil end
+            end
+            if held then
                 local a0, tip
                 if i == 1 then a0, tip = ArrowSpan(s, d, base + PERIOD * slot, slot, fill) end
                 if a0 then

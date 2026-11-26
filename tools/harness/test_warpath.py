@@ -848,6 +848,72 @@ class Steadiness(unittest.TestCase):
         self.assertNotEqual(self.new_ink(first, shifted), [])
 
 
+class TrailOnRoads(unittest.TestCase):
+    """Older trail gives way to the roads it runs along (3.8.3, Joe's pick).
+
+    The same path drawn twice, as a road and as trail on top of it, was most
+    of the clutter in the Plaguelands. Trail along a road you can see is kept
+    10 minutes, then fades out over 5; trail off the roads stays."""
+
+    ROW = 30                       # the road runs along this row of road cells
+
+    def setUp(self):
+        self.wow = Wow().login()
+        self.wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        self.wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end "
+                     "ns.cfg.layers.roads = true; ns.cfg.layers.recent = true")
+        self.wow.run(f"""
+            local z, GW, now = ns.ZoneData(1448), ns.C.GW, ns.PlayNow()
+            z.road = {{}}
+            for x = 8, 45 do local a = {self.ROW} * GW + x z.road[a * 10000 + a + 1] = {{ l = 6, tl = now }} end""")
+        self.road_y = (self.ROW + 0.5) / 64
+        self.walk(self.road_y)                     # along the road
+        self.walk(0.70)                            # and across open ground
+
+    def walk(self, y):
+        for i in range(140):
+            self.wow.H.player.x = 0.12 + i * 0.002
+            self.wow.H.player.y = y
+            self.wow.advance(1)
+        self.wow.H.player.x, self.wow.H.player.y = 0.9, 0.9   # step away
+        self.wow.advance(5)
+
+    def trail(self, after):
+        """Trail ink (red, not the silver road) as (x1, y1, x2, y2), `after` seconds on."""
+        from render import COLLECT
+        self.wow.run(f"__H.now = __H.now + {after}")
+        self.wow.eval("ns.Redraw()")
+        out = []
+        for p in self.wow.run(COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] == "L" and float(f[2]) > float(f[3]) + 0.3 and float(f[5]) > 0.02:
+                out.append(tuple(float(v) for v in f[6:10]))
+        return out
+
+    def on(self, segs, y):
+        py = y * 668
+        return [q for q in segs if abs((q[1] + q[3]) / 2 - py) < 4]
+
+    def test_trail_along_a_road_gives_way(self):
+        early = self.trail(5 * 60)
+        self.assertTrue(self.on(early, self.road_y), "the last few minutes show on the road too")
+        late = self.trail(15 * 60)                 # 20 minutes after
+        self.assertEqual(self.on(late, self.road_y), [], "old trail still drawn over the road")
+        self.assertTrue(self.on(late, 0.70), "trail off the roads must stay")
+
+    def test_no_road_shown_nothing_gives_way(self):
+        self.wow.run("ns.cfg.layers.roads = false")
+        self.assertTrue(self.on(self.trail(20 * 60), self.road_y))
+
+    def test_giving_way_only_fades(self):
+        before = self.trail(11 * 60)
+        steady = Steadiness()
+        for _ in range(8):                        # through the fade, 30 s at a time
+            after = self.trail(30)
+            self.assertEqual(steady.new_ink(before, after), [], "trail ink appeared or moved while fading")
+            before = after
+
+
 class Roads(unittest.TestCase):
     """A route walked on several days is one road (3.7.12).
 

@@ -20,10 +20,13 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Inst
 
 - Continent and world maps (Joe's picks from renders over his clean screenshots): scores in blue/yellow/red (ahead, close, behind), the zone-map corner too; the world view shows one score per continent; continents a small score per zone on a dark patch; every pin drawn, and 3+ kills or deaths close together become one big sword or skull with a count, pushed apart where they'd overlap. Tests in `MapDrawing` (8 new; mutation-checked: no combining, no push, no step-down, one colour, zone scores on the world each fail). `render.py` now draws text, and frames by level. Not in test2.
 
+- Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). Not in test2.
+
 **Joe to check in game**
 - Walk onto dangerous or contested ground: the warning can be read before it fades.
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".
 - Killing with a guildmate who also gets credit (party, Plains Stomper): one chat line and one pin per kill.
+- Walking along your roads: after 10–15 minutes the trail on them fades away and the roads read clean; trail across open ground stays.
 - World and continent maps: scores readable and coloured right; big swords and skulls with counts where pins crowd, none overlapping; hovering a big pin says how many.
 - Zone map with kills or deaths: the standing sits in the top-left corner next to the round button, clear of it, readable, and stays put while zooming.
 
