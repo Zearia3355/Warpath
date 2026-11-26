@@ -56,6 +56,17 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Feature requests
 
+### Spirit healers on the map
+- From: Joe, 2026-11-25
+- Status: needs a design
+- What: show where the spirit healers are, so you know where you'll come back after releasing. Neither the Forever client nor Warpath marks them on the world map today.
+- Notes:
+  - Closest thing today: a corpse run starts recording once you're a ghost (`Record.lua`, mode `g`), so each ice-blue dashed run begins at the graveyard you released at. Corpse runs fade after `cfg.runHours` (24 h default).
+  - Natural approach: remember the place where each corpse run starts (or where you rez at a spirit healer, `PLAYER_UNGHOST` with no corpse reached) as a graveyard, per zone, kept permanently like other zone records. Learned only from your own deaths, so unvisited graveyards stay unknown; guildmates could share theirs later.
+  - Check whether the client exposes graveyard positions directly (retail has `C_DeathInfo.GetGraveyardsForMap`; check it exists and works on 1.60.1). If it does, every graveyard could show at once without dying first.
+  - Look: a small Blizzard icon (an ankh or spirit-healer art, path checked in the Forever client), quiet enough not to clutter. Maybe only while dead, or as a toggle.
+  - Saved data: new per-zone key only; nothing changed or removed.
+
 ### What you did in a lingering area, on hover
 - From: Joe, 2026-11-25
 - Status: needs a design
