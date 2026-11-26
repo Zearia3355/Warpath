@@ -16,10 +16,13 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Inst
 
 - Area time labels: WoW yellow on a soft dark patch, staying full strength until the trail's last quarter (Joe's pick, style D with yellow text, from renders over his Undercity screenshot). Tests in `Lingering` (3; mutation-checked: the old colour and fade fail two). Not in test2.
 
+- Zone standing on the zone's own map: crest and "kills : deaths" in the map's top-left corner (Joe's pick, B of four placements rendered over his Eastern Plaguelands screenshot). From the first kill or death; continent views unchanged. Tests in `MapDrawing` (3; mutation-checked: always hidden fails two, shown on continents fails one). Not in test2.
+
 **Joe to check in game**
 - Walk onto dangerous or contested ground: the warning can be read before it fades.
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".
 - Killing with a guildmate who also gets credit (party, Plains Stomper): one chat line and one pin per kill.
+- Zone map with kills or deaths: the standing sits in the top-left corner next to the round button, clear of it, readable, and stays put while zooming.
 
 ## 3.8.2: live-area trail cut to 3 s
 

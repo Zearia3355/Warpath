@@ -143,6 +143,7 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 - Pins keep constant screen size when the map is enlarged/zoomed (Leatrix Maps). Size 25–200%: Map tab or `/warpath icons <25-200>`.
 - Guild kills/deaths draw above sighting crests, slightly bigger.
 - **Clicking a pin does nothing** (3.7.9): hover shows the tooltip, clicks fall through to the map (`SetMouseClickEnabled(false)`). Waypoints remain via chronicle list click, grudge ledger Waypoint button, `/warpath waypoint death|kill`.
+- **Zone standing** (with the `marks` layer): your crest and "kills : deaths" in the winning side's colour (yours on a tie). On continent views it sits at each zone's centre once the zone has 3 or more kills plus deaths. On a zone's own map (3.8.3) it sits in the map's top-left corner beside the game's round button, on the same soft dark patch as the area labels, from the first kill or death (Joe picked the corner from four placements rendered over his Eastern Plaguelands screenshot: title bar, top-left, bottom-left, top centre). It's attached to the map frame, not the canvas, so zooming doesn't move it; hidden in replays (`MapButton.lua` `ZoneStanding`, decided in `Map.lua` `DrawMarks`).
 - Kill mark fields: victim `Name-Realm` (`m.f`), screenshot number/predicted file (`mark.shot`, `mark.file`), `tag` (first/grudge/avenged/streak), `streak`, `times`, `av`, `mk`, `ft`; level/race/guild when visible. Death marks: killer `kn`, `kc`, killer full name.
 
 ### Sightings (`sightings`)
@@ -334,3 +335,5 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-25 | 3.8.3: the public `Warpath` global (kill callbacks, session and kill-count reads) removed with them, since PvPKillShot was its only user | Claude (open to veto) |
 | 2026-11-25 | 3.8.3: area time labels in WoW yellow on a soft dark patch (style D, yellow text) | Joe |
 | 2026-11-25 | 3.8.3: backing made from the addon's own `glow.tga`, not a new texture; patch alpha 0.7; label alpha `min(1, 0.2 + 1.6a)`, so it stays full until the trail's last quarter | Claude (open to veto) |
+| 2026-11-25 | 3.8.3: zone standing on the zone's own map, top-left corner | Joe |
+| 2026-11-25 | 3.8.3: the corner standing shows from the first kill or death (continent still needs 3); font `GameFontNormal`, one size up from the continent's; same dark patch as area labels; hidden in replays | Claude (open to veto) |

@@ -1731,11 +1731,14 @@ local function DrawMarks(D, scene, from, upTo)
             end
         end
     end
-    -- Zone standing, on continent-scale views.
+    -- Zone standing: on continent-scale views at each zone's centre; on a
+    -- zone's own map, in the map's top-left corner (3.8.3, MapButton.lua).
     if L.marks then
         for _, e in ipairs(scene.zones) do
             local z = e.z
-            if e.p.far and z.kills + z.pdeaths >= 3 then
+            if e.p.mapID == scene.viewed and not e.p.far and z.kills + z.pdeaths >= 1 then
+                D.standing = z
+            elseif e.p.far and z.kills + z.pdeaths >= 3 then
                 D.nb = D.nb + 1
                 local f = GetLabel(D.nb)
                 local c = z.kills >= z.pdeaths and faction or foe
@@ -1794,6 +1797,7 @@ local function Draw(scene, limit)
         if L.recent then DrawToday(D, scene) end
     end
     DrawMarks(D, scene, from, upTo)
+    if ns.ZoneStanding then ns.ZoneStanding(D.standing) end
 
     for i = D.nl + 1, #lines do lines[i]:Hide() end
     for i = D.nd + 1, #dots do dots[i]:Hide() end

@@ -48,7 +48,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - Notes:
   - What a continent view is for: which zones you win and lose in, and where you've been fighting. Individual pins and road squiggles at that size don't add much.
   - Ideas: on continent and world views, show one readable win/loss badge per zone and drop (or heavily thin) individual pins; or group a zone's pins into one marker with a count; leave out roads and trail scraps there, keep flight legs only if they read; make the win/loss label larger and give it contrast (area time labels got WoW yellow on a dark patch in 3.8.3; the same look may suit).
-  - Pairs with "Zone standing on the zone's own map": decide the badge's look once for both.
+  - The zone's own map got its standing in 3.8.3: crest and "kills : deaths" on a soft dark patch, top-left corner. A continent badge could share that look.
   - The world view (both continents) should probably show even less than a continent.
   - Render options from Lethality's real data over these screenshots for Joe to pick; continent placement is already verified against real map rects (`tools/harness/map_rects.lua`).
 
@@ -62,12 +62,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - Fewer marks overall: cap trail dashes per map square, rank-based, never newest-wins, or marks will crawl (anchored, only fade).
   - Quest markers belong to the game and can't be moved; leave room around them only if the map tells us where they are.
   - Real data to render from: Lethality's Plaguelands trail, kept in `tools/out/trail-data-2026-11-24-plaguelands/` (863 points, 4 areas in Eastern Plaguelands). Render options over Joe's screenshot of the same map for him to pick.
-
-### Zone standing on the zone's own map
-- From: Joe, 2026-11-24
-- Status: needs a design
-- What: show the zone's win/loss (the same "kills : deaths" standing the continent map shows) on the zone map too. Joe means just the win/loss, not the fuller stats.
-- Notes: today the standing (your crest and "kills : deaths", in the winning side's colour) is drawn only on continent views, at each zone's centre, once a zone has 3 or more kills plus deaths (`Map.lua`, "Zone standing", `e.p.far`). On a zone map the centre would sit on top of the pins and trail, so it needs its own place: a corner of the map, or next to the zone's name. Render placements over a screenshot for Joe to pick.
 
 ### A clown icon for deaths to mobs
 - From: feedback passed on by Joe, 2026-11-24

@@ -577,6 +577,49 @@ class MapDrawing(unittest.TestCase):
         self.wow.run("ns.S.inInstance = true")
         self.assertEqual(self.primitives(), [])
 
+    def standing(self, kills, deaths, viewed=1448):
+        # the zone's record, then the map; returns the corner badge's text and
+        # colour, or None when it isn't shown
+        self.wow.run("if not ns.db.maps[1448] then ns.OnComm('WARPATH', '1|K|1448|0.5|0.5', 'GUILD', 'Bob Smith') end")
+        self.wow.run(f"""for id, z in pairs(ns.db.maps) do z.kills, z.pdeaths = 0, 0 end
+            ns.db.maps[1448].kills, ns.db.maps[1448].pdeaths = {kills}, {deaths}
+            __H.mapShown = {viewed}""")
+        self.wow.eval("ns.Redraw()")
+        return self.wow.eval("""(function()
+            for _, f in ipairs(WorldMapFrame.ScrollContainer.__children) do
+                if f.crest and f.back and f:IsShown() then
+                    local r, g, b = f.text:GetTextColor()
+                    local _, _, rel, x, y = f:GetPoint(1)
+                    return table.concat({ f.text:GetText(), r, g, b, rel, x, y }, "|")
+                end
+            end
+        end)()""")
+
+    def test_a_zone_map_shows_its_standing_in_the_corner(self):
+        got = self.standing(8, 1)
+        self.assertTrue(got, "no standing on the zone's own map")
+        text, r, g, b, rel, x, y = got.split("|")
+        self.assertEqual(text, "8 : 1")
+        faction = self.wow.eval("ns.faction.r .. '|' .. ns.faction.g .. '|' .. ns.faction.b").split("|")
+        self.assertEqual([round(float(v), 3) for v in (r, g, b)], [round(float(v), 3) for v in faction])
+        # fixed to the map frame's top-left, not to the canvas, so zooming can't move it
+        self.assertEqual(rel, "TOPLEFT")
+        self.assertLess(float(x), 80)
+
+    def test_a_losing_zone_shows_in_the_enemys_colour(self):
+        text, r, g, b, *_ = self.standing(1, 5).split("|")
+        foe = self.wow.eval("ns.foe.r .. '|' .. ns.foe.g .. '|' .. ns.foe.b").split("|")
+        self.assertEqual(text, "1 : 5")
+        self.assertEqual([round(float(v), 3) for v in (r, g, b)], [round(float(v), 3) for v in foe])
+
+    def test_no_standing_without_a_fight_or_off_the_zone_map(self):
+        self.assertIsNone(self.standing(0, 0))
+        self.assertIsNone(self.standing(8, 1, viewed=1414), "continent views keep their own labels")
+        self.wow.run("ns.cfg.layers.marks = false")
+        self.assertIsNone(self.standing(8, 1), "the marks layer switches it off")
+        self.wow.run("ns.cfg.layers.marks = true; ns.cfg.shown = false")
+        self.assertIsNone(self.standing(8, 1), "hiding Warpath on the map hides it")
+
     def test_walking_draws_todays_trail(self):
         for i in range(40):
             self.wow.H.player.x = 0.30 + i * 0.005

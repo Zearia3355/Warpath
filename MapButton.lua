@@ -214,7 +214,48 @@ local function SetupMapButton()
     WorldMapFrame:HookScript("OnShow", function() C_Timer.After(0.3, Introduce) end)
 end
 
+-- The zone's standing on its own map (3.8.3): your crest and "kills : deaths"
+-- in the winning side's colour, on a soft dark patch, in the map's top-left
+-- corner beside the game's round button. Fixed to the map frame, not the
+-- canvas, so it stays put while the map zooms. Map.lua decides when.
+local standing
+local function ZoneStanding(z)
+    if not z then
+        if standing then standing:Hide() end
+        return
+    end
+    if not standing then
+        local host = WorldMapFrame and (WorldMapFrame.ScrollContainer or WorldMapFrame)
+        if not host then return end
+        standing = CreateFrame("Frame", nil, host)
+        standing:SetSize(80, 22)
+        standing:SetFrameStrata("HIGH")
+        standing:SetFrameLevel(host:GetFrameLevel() + 3000)
+        standing:SetPoint("LEFT", host, "TOPLEFT", 40, -18)
+        standing.crest = standing:CreateTexture(nil, "ARTWORK")
+        standing.crest:SetSize(22, 22)
+        standing.crest:SetPoint("LEFT")
+        standing.crest:SetTexCoord(0, 0.62, 0, 0.62)
+        standing.text = standing:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+        standing.text:SetPoint("LEFT", standing.crest, "RIGHT", 2, 0)
+        standing.back = standing:CreateTexture(nil, "BACKGROUND")
+        standing.back:SetTexture(C.TEX_DOT)
+        standing.back:SetVertexColor(0.06, 0.03, 0.02)
+        standing.back:SetAlpha(0.7)
+    end
+    local c = z.kills >= z.pdeaths and ns.faction or ns.foe
+    standing.crest:SetTexture(c.crest)
+    standing.text:SetText(("%d : %d"):format(z.kills, z.pdeaths))
+    standing.text:SetTextColor(c.r, c.g, c.b)
+    local w = 24 + (standing.text:GetStringWidth() or 30)
+    standing.back:ClearAllPoints()
+    standing.back:SetPoint("CENTER", standing, "LEFT", w / 2, 0)
+    standing.back:SetSize(w + 22, 30)
+    standing:Show()
+end
+
 ns.SetupMapButton = SetupMapButton
+ns.ZoneStanding = ZoneStanding
 ns.MapButtonRefresh = Refresh
 ns.SetMapShown = SetShown
 ns.Menu = Menu
