@@ -27,14 +27,15 @@ end
 local function Tooltip(self)
     GameTooltip:SetOwner(self, "ANCHOR_LEFT")
     GameTooltip:AddLine("Warpath", 1, 0.82, 0)
+    GameTooltip:AddLine(cfg.shown and "Shown on the map"
+        or (S.inInstance and "Hidden" or "Hidden (still recording)"), 1, 1, 1)
     if S.inInstance then
-        GameTooltip:AddLine("Off in battlegrounds", 0.7, 0.7, 0.7)
-    else
-        GameTooltip:AddLine(cfg.shown and "Shown on the map" or "Hidden (still recording)", 1, 1, 1)
-        GameTooltip:AddLine(cfg.shown and "Left-click: hide" or "Left-click: show", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("Right-click: layers", 0.8, 0.8, 0.8)
-        GameTooltip:AddLine("Shift-drag: move this button", 0.6, 0.6, 0.6)
+        -- 3.8.3: other maps still draw inside; only the one you're in rests.
+        GameTooltip:AddLine("Resting on this battleground's map", 0.7, 0.7, 0.7)
     end
+    GameTooltip:AddLine(cfg.shown and "Left-click: hide" or "Left-click: show", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Right-click: layers", 0.8, 0.8, 0.8)
+    GameTooltip:AddLine("Shift-drag: move this button", 0.6, 0.6, 0.6)
     GameTooltip:Show()
 end
 
@@ -111,9 +112,8 @@ end
 
 local function Refresh()
     if not button then return end
-    local off = S.inInstance or not cfg.shown
-    button.icon:SetDesaturated(off)
-    button.icon:SetVertexColor(S.inInstance and 0.5 or 1, S.inInstance and 0.5 or 1, S.inInstance and 0.5 or 1)
+    button.icon:SetDesaturated(not cfg.shown)
+    button.icon:SetVertexColor(1, 1, 1)
 end
 
 -- The first time you open the map after the update: a short pulse and the tooltip, once.
@@ -184,7 +184,6 @@ local function SetupMapButton()
     button:SetScript("OnMouseDown", function(self) self.icon:SetPoint("CENTER", 1, 0) end)
     button:SetScript("OnMouseUp", function(self) self.icon:SetPoint("CENTER", 0, 1) end)
     button:SetScript("OnClick", function(self, which)
-        if S.inInstance then return end
         if which == "RightButton" then
             GameTooltip:Hide()
             LayerMenu(self)

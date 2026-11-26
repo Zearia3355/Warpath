@@ -199,6 +199,17 @@ class MapButton(unittest.TestCase):
         wow.run("ns.SetMapShown(true)")
         self.assertEqual(wow.chat[before:], [])
 
+    def test_the_button_and_the_book_work_inside_a_battleground(self):
+        # 3.8.3 (Joe): inside, other maps still draw, so the button toggles
+        # them; the chronicle opens by hand (it never opens by itself there).
+        wow = Wow().login()
+        wow.run("ns.S.inInstance = true; ns.cfg.shown = true; WorldMapFrame.__shown = true; ns.Redraw()")
+        self.assertIsNotNone(wow.eval("WarpathMapButton and 1"), "the map button wasn't built")
+        wow.run("WarpathMapButton:GetScript('OnClick')(WarpathMapButton, 'LeftButton')")
+        self.assertFalse(wow.eval("ns.cfg.shown"))
+        wow.run("ns.Chronicle.Open()")
+        self.assertTrue(wow.eval("WarpathChronicle:IsShown()"))
+
     def test_the_slash_command_still_replies(self):
         wow = Wow().login()
         before = len(wow.chat)
@@ -638,9 +649,25 @@ class MapDrawing(unittest.TestCase):
         self.wow.run("ns.cfg.shown = false")
         self.assertEqual(self.primitives(), [])
 
-    def test_nothing_is_drawn_inside_an_instance(self):
+    def test_the_battleground_map_stays_clean(self):
+        # Inside, the map you're standing in draws nothing, pins included.
         self.wow.run("ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')")
-        self.wow.run("ns.S.inInstance = true")
+        self.wow.run("ns.S.inInstance = true; __H.player.mapID = 1448")
+        self.assertEqual(self.primitives(), [])
+
+    def test_other_maps_still_draw_inside_a_battleground(self):
+        # 3.8.3 (Joe): resting inside means no pins or spam there, not
+        # hiding the rest of the world. Viewing Felwood from a battleground
+        # still shows Felwood.
+        self.wow.run("ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')")
+        outside = self.primitives()
+        self.assertNotEqual(outside, [])
+        self.wow.run("ns.S.inInstance = true; __H.player.mapID = 1460")
+        self.assertEqual(self.primitives(), outside)
+
+    def test_an_unreadable_position_inside_draws_nothing(self):
+        self.wow.run("ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')")
+        self.wow.run("ns.S.inInstance = true; __H.player.mapID = nil")
         self.assertEqual(self.primitives(), [])
 
     def standing(self, kills, deaths, viewed=1448):

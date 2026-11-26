@@ -246,7 +246,8 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 - Only between guildmates with sharing on, because the hello is sent and read only then (`cfg.share` is off by default). Nothing new is sent when sharing is off.
 
 ## Battlegrounds, arenas, dungeons, raids
-- Warpath records nothing, shows no banners/caption/sounds, takes no screenshots, sends nothing, hides the war table, draws nothing; holds the options window until you leave. Multiple detection signals, re-checked every 5 s (`InsideMatch`, `S.inInstance`).
+- Warpath records nothing, shows no banners/caption/sounds, takes no screenshots, sends nothing, hides the war table; holds the update window (the chronicle's Warpath tab) until you leave. Multiple detection signals, re-checked every 5 s (`InsideMatch`, `S.inInstance`).
+- What you look at by hand still works (3.8.3, Joe: resting meant no pins or spam from the match, not hiding the rest of the world). The map draws every map except the one you're standing in (`Map.lua` `InsideMap`; an unreadable position draws nothing), so the battleground's own map stays clean. The map button toggles and opens the layer menu; the chronicle and the minimap button open by hand. The chronicle still closes on the way in.
 
 ## War table (HUD)
 - `/warpath table [on|off]` (old `hud`). "4 enemies seen (5 min)", dangerous/contested ground nearby, skull button for grudges.
@@ -365,5 +366,7 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-25 | 3.8.3 continent and world maps: blue/yellow/red scores; world view one score per continent; continents a small score per zone on a dark patch; every pin drawn, crowded ones combine into a big sword or skull with a count | Joe |
 | 2026-11-26 | Combined pins at most 1.5× a pin (was 2.4×), and no count under them; the tooltip still says how many | Joe |
 | 2026-11-26 | Scores step around pins, not pins around scores (test5; Claude's argument, Joe agreed) | Joe |
+| 2026-11-26 | Inside a battleground, other maps still draw; only the map you're standing in stays clean (Joe clarified the 3.7 rule: no pins or spam from the match, not hiding everything) | Joe |
+| 2026-11-26 | With that: the map button, the minimap button and the chronicle work by hand inside too, settings included; the war table, banners, zone header and update window stay off there | Claude (open to veto) |
 | 2026-11-26 | Reversed after test5: scores dodging pins jumped about as pins came and faded. Scores stay put and draw over pins (Joe) | Joe |
 | 2026-11-25 | 3.8.3: "close" = within one fight or a quarter of the fights; zone scores from the first fight; overlapping scores step down, most-fought keeps its centre; continent score at 62% down its box; combine at 3 within 1.4 pin widths, chained; big pin 1.5×+0.12×n up to 2.4×; overlapping big pins pushed apart; mixed groups take guildmates' blue when they're the majority; the zone-map corner shows your own crest (it showed the winner's) | Claude (open to veto) |

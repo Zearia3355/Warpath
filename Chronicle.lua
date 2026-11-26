@@ -1012,7 +1012,8 @@ local Chronicle = {}
 
 -- section: "campaigns" (default), "grudges" or "warpath".
 function Chronicle.Open(preview, section)
-    if S.inInstance and not preview then Print("the chronicle waits until you leave the battleground.") return end
+    -- 3.8.3: opens by hand inside a battleground too (it only reads). It
+    -- still closes on the way in and never opens there by itself.
     if not book then Build() end
     view.preview = preview and true or false
     view.section = section or (preview and view.section) or "campaigns"

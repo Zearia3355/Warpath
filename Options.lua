@@ -43,6 +43,7 @@ local NEW_IN = {
     "Dangerous-ground warnings stay up long enough to read.",
     "A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too).",
     "The map button no longer prints a chat line when clicked.",
+    "In a battleground your map still shows your war everywhere else; only the battleground's own map stays clean. The map button, minimap button and chronicle work there too.",
     "/killshot and /pks are gone; use /warpath shot.",
   } },
 }

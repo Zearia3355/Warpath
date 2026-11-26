@@ -14,17 +14,12 @@ local Icon, obj
 
 local function Tooltip(tt)
     tt:AddLine("Warpath", 1, 0.82, 0)
-    if S.inInstance then
-        tt:AddLine("Off in battlegrounds", 0.7, 0.7, 0.7)
-        return
-    end
     tt:AddLine("Left-click: open the chronicle", 1, 1, 1)
     tt:AddLine("Right-click: settings", 1, 1, 1)
     tt:AddLine("Drag: move around the minimap", 0.6, 0.6, 0.6)
 end
 
 local function Click(_, button)
-    if S.inInstance then return end
     if button == "RightButton" then
         ns.Dispatch("setup")
     else
@@ -49,13 +44,13 @@ function Minimap.Setup()
     Minimap.Refresh()
 end
 
--- Greyed in battlegrounds, rather than gone.
+-- Greyed in battlegrounds until 3.8.3; it works there now (the chronicle and
+-- settings only read), so it keeps its normal look.
 function Minimap.Refresh()
     local b = Icon and Icon.GetMinimapButton and Icon:GetMinimapButton("Warpath")
     if b and b.icon then
-        b.icon:SetDesaturated(S.inInstance and true or false)
-        local v = S.inInstance and 0.6 or 1
-        b.icon:SetVertexColor(v, v, v)
+        b.icon:SetDesaturated(false)
+        b.icon:SetVertexColor(1, 1, 1)
     end
 end
 

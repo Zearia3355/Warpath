@@ -71,7 +71,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 ### Battleground mode (3.9.x main feature)
 - From: Joe, 2026-11-26 ("we are not done tinkering with 3.8.x, but let's begin planning")
 - Status: needs a design. First step: one in-game session to see what the client gives inside a match (below).
-- What: Warpath does something useful in battlegrounds instead of resting. Today it records, draws and sends nothing in any instance (`Events.lua` `InsideMatch`).
+- What: Warpath does something useful in battlegrounds instead of resting. Today it records and sends nothing in any instance and draws nothing on the instance's own map (`Events.lua` `InsideMatch`; other maps draw from 3.8.3).
 - Research (2026-11-26), what other addons do: objective timers (Capping, Capped), enemy frames (BattleGroundEnemies, Gladius, sArena), flag carriers (Warsong Flag Carrier, Zurk Maps), incoming calls (BG Defender), enemy detection (Spy), healer marks (Healers Have To Die), honour standing (HonorSpy), match history (REFlex, now retail-only; PVPHistoryClassic+, BG Historian, small on Classic). Nothing remembers a player's battlegrounds over time. Joe's picks from these (2026-11-26): match history, grudges, objective timers, flag carrier tracking, healer marks. Not picked: enemy frames, enemy detection, incoming calls, honour tracking.
 - Targets (Joe, 2026-11-26):
   - **Match replay** (Joe: "amazing"): after a match, play your path through it on the battleground map, built on the existing replay. Keep only the last few matches.

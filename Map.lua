@@ -2404,12 +2404,22 @@ local function Draw(scene, limit)
     return D
 end
 
+-- Inside a battleground (or any instance) the map you're standing in stays
+-- clean; every other map still shows your war (3.8.3, Joe: resting inside
+-- meant no pins or spam there, not hiding the rest of the world).
+local function InsideMap(viewed)
+    if not S.inInstance then return false end
+    local here = C_Map.GetBestMapForUnit("player")
+    if not here or Secret(here) then return true end
+    return here == viewed
+end
+
 local function Redraw()
     if ns.MapButtonRefresh then ns.MapButtonRefresh() end
     if not overlay or not WorldMapFrame:IsShown() or replay.active then return end
     S.dirty, S.lastDraw = false, GetTime()
     local viewed = WorldMapFrame:GetMapID()
-    if cfg.shown and not S.inInstance and viewed and overlay:GetWidth() > 0 then
+    if cfg.shown and viewed and not InsideMap(viewed) and overlay:GetWidth() > 0 then
         return Draw(BuildScene(viewed))
     else
         return Draw(EMPTY)
