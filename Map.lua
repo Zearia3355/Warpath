@@ -1805,8 +1805,9 @@ local function Crowd(D, Pin, reach)
     end
 end
 
--- A score on a continent or world view, stepped past any score or pin already
--- placed (pins mark where fights were, so the score is the one that moves).
+-- A score on a continent or world view, stepped past any score already placed.
+-- Pins don't move it: they come and fade, and a score that dodged them would
+-- jump about (Joe, test5). It's drawn above every pin, on its dark patch.
 local function Score(D, x, y, k, d, big)
     D.nb = D.nb + 1
     local f = GetLabel(D.nb)
@@ -1815,7 +1816,7 @@ local function Score(D, x, y, k, d, big)
     local c = Standing(k, d)
     f.text:SetTextColor(c[1], c[2], c[3])
     local tw, th = (f.text:GetStringWidth() or 30) + 8, big and 18 or 15
-    -- nearest clear spot: down a step, up a step, down two, ... (pins stay put)
+    -- nearest clear spot: down a step, up a step, down two, ...
     local y0 = y
     for i = 1, 24 do
         local clear = true
@@ -1872,9 +1873,6 @@ local function DrawMarks(D, scene, from, upTo)
         f:SetSize(size / k, size / k)
         At(f, p, x, y, w, h)
         f:Show()
-        if p.far or placed then -- scores step around it (placed: drawn by Crowd, so far)
-            D.placed[#D.placed + 1] = { (p.ox + x * p.sx) * w, (p.oy + y * p.sy) * h, size / k, size / k }
-        end
         return f
     end
     local reach = base * 1.4 / k -- about a pin and a half, in map units

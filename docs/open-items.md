@@ -4,7 +4,7 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3 batch: installed as 3.8.3-test5 (branch `areas-merge`)
+## 3.8.3 batch: installed as 3.8.3-test6 (branch `areas-merge`)
 
 Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN` for 3.8.3 is written. Not yet: changelog, release version.
 
@@ -18,7 +18,7 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test
 
 - Zone standing on the zone's own map: crest and "kills : deaths" in the map's top-left corner (Joe's pick, B of four placements rendered over his Eastern Plaguelands screenshot). From the first kill or death; continent views unchanged. Tests in `MapDrawing` (3; mutation-checked: always hidden fails two, shown on continents fails one). In test3.
 
-- Continent and world maps (Joe's picks from renders over his clean screenshots): scores in blue/yellow/red (ahead, close, behind), the zone-map corner too; the world view shows one score per continent; continents a small score per zone on a dark patch; every pin drawn, and 3+ kills or deaths close together become one bigger sword or skull, pushed apart where they'd overlap. Tests in `MapDrawing` (8 new; mutation-checked: no combining, no push, no step-down, one colour, zone scores on the world each fail). `render.py` now draws text, and frames by level. In test3. After test3, smaller (at most 1.5× a pin) and no count text, and scores step around pins (Joe, 2026-11-26); test `test_a_score_steps_around_pins_and_the_pins_stay_put` (mutation-checked: not recording pins fails it). In test5 (installed 2026-11-26 by script; `/reload` is enough; backup `-3.8.3-test5/`).
+- Continent and world maps (Joe's picks from renders over his clean screenshots): scores in blue/yellow/red (ahead, close, behind), the zone-map corner too; the world view shows one score per continent; continents a small score per zone on a dark patch; every pin drawn, and 3+ kills or deaths close together become one bigger sword or skull, pushed apart where they'd overlap. Tests in `MapDrawing` (8 new; mutation-checked: no combining, no push, no step-down, one colour, zone scores on the world each fail). `render.py` now draws text, and frames by level. In test3. After test3, smaller (at most 1.5× a pin) and no count text, (Joe, 2026-11-26). In test5 (installed 2026-11-26 by script; `/reload` is enough; backup `-3.8.3-test5/`), scores also stepped around pins; in play they jumped about, so after test5 they stay put and draw over pins: test `test_a_score_stays_put_over_pins_and_draws_above_them` (mutation-checked: dodging pins fails it). In test6 (installed 2026-11-26 by script; `/reload` is enough; backup `-3.8.3-test6/`).
 
 - Trail gives way to roads (Joe's pick, B of four renders over his Eastern Plaguelands screenshot): trail along a road you can see is kept 10 minutes, then fades out over 5. Tests in `TrailOnRoads` (3; mutation-checked: never giving way, no keep, giving way everywhere each fail; a steadiness test runs through the fade). In test3.
 
@@ -33,7 +33,7 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test
 - Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".
 - Killing with a guildmate who also gets credit (party, Plains Stomper): one chat line and one pin per kill.
 - Walking along your roads: after 10–15 minutes the trail on them fades away and the roads read clean; trail across open ground stays.
-- World and continent maps: scores readable and coloured right; combined swords and skulls only a little bigger than a pin, no numbers, none overlapping, no score sitting on a pin; hovering a big pin says how many.
+- World and continent maps: scores readable and coloured right; combined swords and skulls only a little bigger than a pin, no numbers, none overlapping; scores stay put, readable over pins; hovering a big pin says how many.
 - Zone map with kills or deaths: the standing sits in the top-left corner next to the round button, clear of it, readable, and stays put while zooming.
 
 ## 3.8.2: live-area trail cut to 3 s

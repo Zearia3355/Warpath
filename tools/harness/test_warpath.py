@@ -762,21 +762,23 @@ class MapDrawing(unittest.TestCase):
         self.set_record({1448: (1, 5), 2482: (0, 2)})
         s = {r[0]: (float(r[4]), float(r[5])) for r in self.scores_on(1414)}
         self.assertEqual(len(s), 2)
-        self.assertGreater(abs(s["1 : 5"][1] - s["0 : 2"][1]), 9, "they step apart")
-        # (which one keeps the centre isn't checked: set_record's kill pin sits there, so both step)
+        self.assertGreater(abs(s["1 : 5"][1] - s["0 : 2"][1]), 9, "the smaller one steps away")
+        self.assertGreater(s["1 : 5"][1], s["0 : 2"][1], "the most-fought zone keeps its centre (y is negative down)")
 
-    def test_a_score_steps_around_pins_and_the_pins_stay_put(self):
-        self.guild("K", 0.5, 0.5, n=4, step=0.002)         # a big sword on Felwood's centre
-        self.wow.run("ns.db.maps[1448].kills, ns.db.maps[1448].pdeaths = 0, 0")
-        before = [p for p in self.pins_on(1414) if p[0] == "many"]
+    def test_a_score_stays_put_over_pins_and_draws_above_them(self):
         self.set_record({1448: (4, 0)})
-        pins = [p for p in self.pins_on(1414) if p[0] == "many"]
-        self.assertEqual(pins, before, "the pin doesn't move for the score")
-        (sx, sy), (_, _, px, py, pw) = [(float(r[4]), float(r[5])) for r in self.scores_on(1414)][0], pins[0]
-        clear_y = abs(sy - float(py)) >= (15 + float(pw)) / 2 - 0.01
-        clear_x = abs(sx - float(px)) >= (30 + float(pw)) / 2
-        self.assertTrue(clear_x or clear_y, f"score at {sx},{sy} sits on the pin at {px},{py}")
-        self.assertLess(abs(sy - float(py)), 40, "and stays near the zone's centre")
+        alone = [(float(r[4]), float(r[5])) for r in self.scores_on(1414)]
+        self.guild("K", 0.5, 0.5, n=4, step=0.002)         # a big sword on Felwood's centre
+        self.set_record({1448: (4, 0)})
+        assert [p for p in self.pins_on(1414) if p[0] == "many"]
+        here = [(float(r[4]), float(r[5])) for r in self.scores_on(1414)]
+        self.assertEqual(here, alone, "pins coming and going never move a score (Joe: they jumped about)")
+        top = self.wow.eval("""(function() local s, p = 0, 0
+            for _, f in ipairs(WarpathOverlay.__children) do
+                if f:IsShown() and f.text and f.text:GetText() and f.text:GetText():match(" : ") then s = math.max(s, f:GetFrameLevel()) end
+                if f:IsShown() and f.kind then p = math.max(p, f:GetFrameLevel()) end
+            end return s .. "," .. p end)()""").split(",")
+        self.assertGreater(int(top[0]), int(top[1]), "the score draws above every pin")
 
     def test_the_world_view_shows_one_score_per_continent(self):
         self.wow.run("""__H.rects[1414] = { [947] = { 0.0, 0.5, 0.1, 0.9 } }
