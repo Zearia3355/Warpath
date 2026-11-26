@@ -79,6 +79,7 @@ function H.map(arg)
     local v = OnOff(arg, cfg.shown)
     if v == nil then Print("usage: /warpath map [on|off]") return end
     ns.SetMapShown(v)
+    Print("Warpath on the map " .. (cfg.shown and "shown." or "hidden (still recording)."))
 end
 
 function H.layer(arg)

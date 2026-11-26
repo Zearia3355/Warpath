@@ -4,6 +4,19 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
+## 3.8.3 batch (branch `areas-merge`, not in Joe's game yet beyond test1's areas)
+
+Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. Not yet: `NEW_IN`, changelog, version.
+
+- Ground warnings ("DANGEROUS GROUND" etc.) stay up 4–6.5 s by line length instead of under 2 s (`Overlay.Show` takes `hold`; `Overlay.ReadHold`). Kill text unchanged. Tests in `Overlay` (mutation-checked: without the hold, the reading test fails).
+- The map button's left-click shows/hides Warpath without a chat line; `/warpath map` still replies. Tests in `MapButton` (mutation-checked).
+- Several guildmates killing one enemy: one line, one pin (`Share.lua` `NoteKill`; `Record.lua` skips your own line when a guildmate said it first). Found in Lethality's data: 5 of Joe's kills on 2026-11-24 in Eastern Plaguelands had Plains Stomper's pin 0–1 s later, 0.1–0.8% of the map away. No near-identical pins from two different guildmates were in the data. Tests in `Share` (8; mutation-checked: no folding, no own-line skip, no same-reporter rule, no pin removal each fail). Receiver-side, so only players on 3.8.3 stop seeing the duplicates; patch notes say so.
+
+**Joe to check in game**
+- Walk onto dangerous or contested ground: the warning can be read before it fades.
+- Map button left-click: no chat line; the tooltip still says "Hidden (still recording)".
+- Killing with a guildmate who also gets credit (party, Plains Stomper): one chat line and one pin per kill.
+
 ## 3.8.2: live-area trail cut to 3 s
 
 Joe in game (3.8.1, Undercity): inside the area he was in, his last 45 s of line scribbled over it; "that was never the intent", stopping the scribble is the point of the areas. Now only the last 3 s show there (`SHOW` in `Linger.lua`; `LAG` 45 s still decides when steps join). Old areas keep hiding your line until a minute inside reopens them (Joe: live only). Test `test_inside_the_area_you_are_in_only_your_last_moments_show` now checks 5 s; it fails with 45 s put back.

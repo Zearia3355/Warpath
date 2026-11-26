@@ -142,6 +142,70 @@ class Settings(unittest.TestCase):
         self.assertIn("never turns fully gold", " ".join(wow.chat[before:]))
 
 
+class Overlay(unittest.TestCase):
+    """Kill text is a flash; ground warnings stay long enough to read."""
+
+    def ground_warning(self):
+        wow = Wow().login()
+        wow.advance(10)
+        # Dangerous ground where the player stands: three PvP deaths, no kills.
+        wow.run("""
+            local _, x, y = ns.PlayerPos()
+            local z = ns.db.maps[1448]
+            for i = 1, 3 do z.marks[#z.marks + 1] = { x, y, time() - i * 60, "death", pvp = true } end
+            ns.DeathField = function() return setmetatable({}, { __index = function() return 5 end }), {} end
+            ns.Ground.Forget()
+            ns.Ground.Check()""")
+        return wow
+
+    def shown_after(self, wow, seconds):
+        # The stub doesn't drive OnUpdate: step the overlay's script by hand.
+        return wow.eval(f"""(function()
+            local f = WarpathBigText
+            local step = f:GetScript("OnUpdate")
+            for _ = 1, {int(seconds * 10)} do if f:IsShown() then step(f, 0.1) end end
+            return f:IsShown() and f:GetAlpha() > 0.5
+        end)()""")
+
+    def test_a_ground_warning_stays_up_long_enough_to_read(self):
+        wow = self.ground_warning()
+        self.assertTrue(wow.eval("WarpathBigText ~= nil and WarpathBigText:IsShown()"))
+        self.assertTrue(self.shown_after(wow, 3.5))
+
+    def test_a_ground_warning_still_goes_away(self):
+        wow = self.ground_warning()
+        self.assertFalse(wow.eval("""(function()
+            local f = WarpathBigText
+            local step = f:GetScript("OnUpdate")
+            for _ = 1, 80 do if f:IsShown() then step(f, 0.1) end end
+            return f:IsShown()
+        end)()"""))
+
+    def test_kill_text_is_still_a_flash(self):
+        wow = Wow().login()
+        wow.run('ns.Overlay.Show({ title = "DOUBLE KILL", sub = "Thrall" })')
+        self.assertTrue(self.shown_after(wow, 1.0))
+        wow2 = Wow().login()
+        wow2.run('ns.Overlay.Show({ title = "DOUBLE KILL", sub = "Thrall" })')
+        self.assertFalse(self.shown_after(wow2, 2.0))
+
+
+class MapButton(unittest.TestCase):
+    def test_the_button_toggles_the_map_without_a_chat_line(self):
+        wow = Wow().login()
+        before = len(wow.chat)
+        wow.run("ns.SetMapShown(false)")
+        self.assertFalse(wow.eval("ns.cfg.shown"))
+        wow.run("ns.SetMapShown(true)")
+        self.assertEqual(wow.chat[before:], [])
+
+    def test_the_slash_command_still_replies(self):
+        wow = Wow().login()
+        before = len(wow.chat)
+        wow.run('SlashCmdList.WARPATH("map off")')
+        self.assertIn("hidden (still recording)", " ".join(wow.chat[before:]))
+
+
 class NewIn(unittest.TestCase):
     """The update window opens after every release (Joe, 2026-11-24)."""
 
@@ -254,6 +318,95 @@ class Share(unittest.TestCase):
         self.receive("1|K|1448|0.41|0.61")
         self.assertIn("1 errors", self.diag())
         self.assertEqual(lua_count(self.wow, "WarpathDB.maps[1448].gmarks"), 2)
+
+    # 3.8.3: several guildmates with credit for one enemy -> one line, one pin.
+    @staticmethod
+    def kill_msg(victim="", x=0.40, y=0.60, mapID=1448):
+        return f"1|K|{mapID}|{x:.2f}|{y:.2f}|" + "|".join(["", "1", "1", "", "", "", "", "", victim])
+
+    def kill_lines(self):
+        return [l for l in self.new_chat() if "Felwood" in l or "Ashenvale" in l]
+
+    def gpins(self, mapID=1448):
+        return lua_count(self.wow, f"WarpathDB.maps[{mapID}] and WarpathDB.maps[{mapID}].gmarks")
+
+    def test_two_guildmates_killing_one_enemy_say_it_once(self):
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith")
+        self.receive(self.kill_msg("Thrall", 0.41, 0.61), sender="Ann Lee")
+        self.receive(self.kill_msg("Thrall"), sender="Cid Roe", channel="PARTY")
+        self.assertEqual(len(self.kill_lines()), 1, self.new_chat())
+        self.assertEqual(self.gpins(), 1)
+        self.assertIn("2 repeat kills", self.diag())
+        # each guildmate's own haze layer still counts it
+        for who in ("Ann Lee", "Cid Roe"):
+            with self.subTest(who=who):
+                self.assertGreater(lua_count(self.wow, f'ns.GuildLayer(1448, "guildBattle", {lua_str(who)})'), 0)
+
+    def test_different_enemies_or_places_are_separate_kills(self):
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith")
+        self.receive(self.kill_msg("Garrosh"), sender="Ann Lee")
+        self.receive(self.kill_msg("Thrall", mapID=1440), sender="Ann Lee")
+        self.assertEqual(len(self.kill_lines()), 3, self.new_chat())
+
+    def test_one_guildmates_two_kills_stay_two(self):
+        self.receive(self.kill_msg(), sender="Bob Smith")
+        self.receive(self.kill_msg(x=0.405), sender="Bob Smith")
+        self.assertEqual(len(self.kill_lines()), 2, self.new_chat())
+
+    def test_the_same_enemy_killed_again_later_is_a_new_kill(self):
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith")
+        self.wow.advance(31)
+        self.receive(self.kill_msg("Thrall"), sender="Ann Lee")
+        self.assertEqual(len(self.kill_lines()), 2, self.new_chat())
+
+    def test_old_senders_without_a_name_group_by_place(self):
+        self.receive(self.kill_msg(), sender="Bob Smith")
+        self.receive(self.kill_msg(x=0.405), sender="Ann Lee")       # same spot
+        self.receive(self.kill_msg(x=0.60), sender="Cid Roe")        # far away
+        self.assertEqual(len(self.kill_lines()), 2, self.new_chat())
+        self.wow.advance(11)
+        self.receive(self.kill_msg(x=0.405), sender="Dee Fox")       # same spot, later
+        self.assertEqual(len(self.kill_lines()), 3, self.new_chat())
+
+    def own_kill(self, victim="Thrall"):
+        # a named PvP kill: the honorable-kill counter ticks in combat
+        self.wow.run(f"""ns.Foes.Pick = function() return {lua_str(victim + '-Realm')}, {lua_str(victim)}, "SHAMAN", "target" end""")
+        self.wow.H.combat = True
+        self.wow.fire("PLAYER_REGEN_DISABLED")
+        self.wow.H.hk = (self.wow.H.hk or 0) + 1
+        self.wow.fire("PLAYER_PVP_KILLS_CHANGED")
+        self.wow.advance(1)
+        self.wow.H.combat = False
+        self.wow.fire("PLAYER_REGEN_ENABLED")
+        self.wow.advance(3)
+
+    def test_a_guildmates_report_of_your_own_kill_is_folded(self):
+        self.own_kill()
+        self.assertEqual(self.wow.eval("WarpathDB.kills"), 1)
+        mx = self.wow.eval("(select(2, ns.PlayerPos()))")
+        my = self.wow.eval("(select(3, ns.PlayerPos()))")
+        before = len([l for l in self.new_chat() if "Bob Smith" in l])
+        self.receive(self.kill_msg("Thrall", mx, my), sender="Bob Smith")
+        self.assertEqual(len([l for l in self.new_chat() if "Bob Smith" in l]), before, self.new_chat())
+        self.assertEqual(self.gpins(), 0)
+
+    def test_your_own_line_is_skipped_when_a_guildmate_said_it_first(self):
+        self.wow.run("ns.cfg.selfChat = true")
+        mx = self.wow.eval("(select(2, ns.PlayerPos()))")
+        my = self.wow.eval("(select(3, ns.PlayerPos()))")
+        self.receive(self.kill_msg("Thrall", mx, my), sender="Bob Smith")
+        lines = len(self.kill_lines())
+        self.assertEqual(self.gpins(), 1)
+        self.own_kill()
+        self.assertEqual(self.wow.eval("WarpathDB.kills"), 1)
+        self.assertEqual(len(self.kill_lines()), lines, self.new_chat())
+        self.assertEqual(self.gpins(), 0)  # your own mark is there instead
+
+    def test_your_own_line_still_prints_for_your_own_kill(self):
+        self.wow.run("ns.cfg.selfChat = true")
+        self.own_kill()
+        self.assertEqual(self.wow.eval("WarpathDB.kills"), 1)
+        self.assertEqual(len(self.kill_lines()), 1, self.new_chat())
 
     def newer_lines(self):
         return [l for l in self.new_chat() if "is out (you have" in l]

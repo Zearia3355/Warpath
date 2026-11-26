@@ -26,24 +26,6 @@ Template:
 
 _The guild-sharing-in-battlegrounds problem is an open investigation in `open-items.md`._
 
-### Ground warnings vanish before you can read them
-- From: Joe, 2026-11-25
-- Status: wanted (cause found)
-- What: the on-screen "CONTESTED GROUND" (also "DANGEROUS GROUND", "YOUR HUNTING GROUND") warning disappears far too fast, like the kill big text. The kill text is meant to be a flash; this one is meant to be read.
-- Notes: confirmed in the code. `Ground.lua` shows it through `ns.Overlay.Show`, the same overlay as the kill big text, whose timing is fixed in `Overlay.lua`: 0.15 s punch, 1.2 s hold, 0.4 s fade, under 2 s in all. The subline is a full sentence ("12 kills, 8 deaths here. Guildmates have died here 3 times."). Fix: let `Overlay.Show` take its own hold, and give ground warnings a reading-length hold (roughly 4–6 s, or scaled to the text's length), leaving kill text as it is. Check it doesn't sit over a kill's big text (ground warnings already wait for that). Present since 3.7.0.
-
-### Several guildmates killing one enemy: duplicate lines and pins
-- From: Joe, 2026-11-24
-- Status: new
-- What: when several guildmates kill the same person, everyone gets duplicates and chat spam. Expected: one kill, said once.
-- Notes (from the code, 3.8.2):
-  - Every guildmate who credits the kill sends their own `K` message (`Record.lua` `Share("K", …)`), each naming the same victim.
-  - The receiver (`Share.lua` `Receive`) drops only an identical message from the same sender (GUILD plus PARTY/RAID copies). Different senders all pass: each prints a chat line (`Feats.GuildKillLine`), adds a pin (`z.gmarks`) at nearly the same spot, and adds to that guildmate's haze layer.
-  - Your own kill of that enemy isn't checked against incoming ones either, so you get your line plus a line per guildmate.
-  - Fix outline (receiver-side, so it works with guildmates on older versions): group kills of the same victim on the same map within ~30 s. The first report prints and pins; later ones fold into it (one line naming everyone, e.g. "A and B killed Thrall", or silent) and add no pin. Skip a guildmate's report of a victim you just killed yourself. Senders that send no victim name (before 3.7): group by map, a short distance and ~10 s.
-  - To decide: haze. Each guildmate's layer counting the kill is arguably right (it's their fight), and the combined haze already damps the rest (0.75 × strongest + 0.15 × others).
-  - Ask Joe: is the spam chat lines, pins, or both? Group or raid, or just guild?
-
 ---
 
 ## Enhancements
@@ -98,12 +80,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 - Status: needs a design
 - What: a pin for dying to a mob would show a clown instead of the grey cross.
 - Notes: today it's the raid-marker sheet's cross, desaturated (`TEX_RAID`, texcoords 0.5–0.75, 0.25–0.5; `Map.lua`, pin kind `mob`). Warpath uses only the game's own art, so this needs a Blizzard texture that reads as a clown, with its path checked in the Forever client; no candidate is known yet. Check at normal map size, where pins are small. Falls share the `mob` pin today, so decide whether they get the clown too.
-
-### No chat line when the map button shows or hides Warpath
-- From: Joe, 2026-11-24
-- Status: wanted
-- What: left-clicking the map button to show or hide Warpath on the map prints "Warpath on the map shown." / "hidden (still recording)." in chat. Not needed: you can see the result on the map.
-- Notes: the line is in `MapButton.lua` `SetShown()`. Layer toggles from the button's menu already print nothing. Keep the reply for the slash command (`/warpath map`), since every slash toggle replies with its new state (`how-it-works.md`, Commands); only the button click goes quiet. Check whether the button's tooltip should then say "still recording" when hidden, since that hint lived only in the chat line.
 
 ### Warn when the old Wake addon is loaded
 - From: Claude (offered, not asked for)

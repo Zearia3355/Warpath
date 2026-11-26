@@ -74,6 +74,59 @@ end
 -- The sender as one key: "Name-Realm", or the name exactly as the client
 -- gives it when there's no realm to add (WoW Forever: "First Last").
 -- 3.7.0 appended an empty realm ("First Last-"), so whispers back failed.
+-- One kill, said once (3.8.3). When several guildmates get credit for the
+-- same enemy, each sends a kill; the first report (or your own kill) prints
+-- and pins, later ones of the same enemy fold into it silently. Same enemy:
+-- same name on the same map within KILL_SAME s; a sender with no victim
+-- name (before 3.7) matches by place, within KILL_NEAR of the map and
+-- KILL_NONAME s. Only different reporters fold: one guildmate's two kills
+-- are two kills. Each guildmate's haze still counts it (their fight).
+local KILL_SAME, KILL_NONAME, KILL_NEAR = 30, 10, 0.015
+local recentKills = {} -- { v = victim (lower case, no realm) or nil, map, x, y, at, by }
+
+local function VictimKey(name)
+    if type(name) ~= "string" or name == "" then return nil end
+    return (name:gsub("%-.*$", "")):lower()
+end
+
+local function SameKill(v, mapID, x, y, by)
+    local now = GetTime()
+    for i = #recentKills, 1, -1 do
+        if now - recentKills[i].at > KILL_SAME then table.remove(recentKills, i) end
+    end
+    for _, e in ipairs(recentKills) do
+        if e.map == mapID and e.by ~= by then
+            if v and e.v then
+                if e.v == v then return e end
+            elseif now - e.at <= KILL_NONAME then
+                local dx, dy = e.x - x, e.y - y
+                if dx * dx + dy * dy <= KILL_NEAR * KILL_NEAR then return e end
+            end
+        end
+    end
+end
+
+-- True when someone else already reported this kill (you or a guildmate);
+-- otherwise remembers it and returns false plus its record. by: the
+-- reporter (nil: you). Your own kill arriving after a guildmate's report of
+-- it takes that report's pin off the map: your own mark is there.
+local function NoteKill(victim, mapID, x, y, by)
+    local v = VictimKey(victim)
+    by = by or ""
+    local e = SameKill(v, mapID, x, y, by)
+    if e then
+        if by == "" and e.pin then
+            local list = db.maps[mapID] and db.maps[mapID].gmarks or {}
+            for i = #list, 1, -1 do if list[i] == e.pin then table.remove(list, i) S.dirty = true break end end
+            e.pin = nil
+        end
+        return true
+    end
+    e = { v = v, map = mapID, x = x, y = y, at = GetTime(), by = by }
+    recentKills[#recentKills + 1] = e
+    return false, e
+end
+
 local function FullSender(sender)
     if sender:find("-", 1, true) or sender:find(" ", 1, true) then return sender end
     local realm = GetNormalizedRealmName and GetNormalizedRealmName()
@@ -85,7 +138,7 @@ ns.FullSender = FullSender
 -- 3.7.10 diagnostics: what reaches the client and why anything is dropped,
 -- shown by /warpath share status. Counts this session only; nothing saved.
 local diag = { all = 0, allInside = 0, ours = 0, oursInside = 0, unreadable = 0, unreadableInside = 0,
-    secretPrefix = 0, own = 0, dup = 0, bad = 0, off = 0, errors = 0, lockdownSeen = 0, channels = {} }
+    secretPrefix = 0, own = 0, dup = 0, folded = 0, bad = 0, off = 0, errors = 0, lockdownSeen = 0, channels = {} }
 local function Lockdown()
     local f = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown
     if not f then return nil end
@@ -169,6 +222,15 @@ local function Receive(prefix, text, channel, sender)
     end
 
     local full = FullSender(sender)
+    local said, kill
+    if kind == "K" then said, kill = NoteKill(f9, mapID, x, y, full) end
+    if said then
+        -- someone already said this kill: their haze only, no pin, no line
+        diag.folded = diag.folded + 1
+        ns.AddHeat(ns.GuildLayer(mapID, "guildBattle", full), Cell(x, y, C.SW, C.SH), 1)
+        S.dirty = true
+        return
+    end
     if kind == "S" then
         if #shared >= 200 then table.remove(shared, 1) end
         shared[#shared + 1] = { kind = kind, mapID = mapID, x = x, y = y, t = time(), from = from,
@@ -179,6 +241,7 @@ local function Receive(prefix, text, channel, sender)
         local z = ns.ZoneData(mapID)
         z.gmarks = z.gmarks or {}
         z.gmarks[#z.gmarks + 1] = { kind = kind, x = x, y = y, t = time(), from = from, full = full }
+        if kill then kill.pin = z.gmarks[#z.gmarks] end
         while #z.gmarks > C.GMARK_CAP do table.remove(z.gmarks, 1) end
     end
     S.dirty = true
@@ -217,8 +280,8 @@ local function DiagStatus()
     local d = diag
     Print(("diagnostics: %d Warpath messages reached your client (%d inside an instance), %d unreadable (%d inside), %d errors."):format(
         d.ours, d.oursInside, d.unreadable, d.unreadableInside, d.errors))
-    Print(("dropped: %d your own echo, %d duplicates, %d malformed%s."):format(
-        d.own, d.dup, d.bad, d.off > 0 and (", " .. d.off .. " while sharing was off") or ""))
+    Print(("dropped: %d your own echo, %d duplicates, %d repeat kills of one enemy, %d malformed%s."):format(
+        d.own, d.dup, d.folded, d.bad, d.off > 0 and (", " .. d.off .. " while sharing was off") or ""))
     local parts = {}
     for ch, n in pairs(d.channels) do parts[#parts + 1] = ch .. " " .. n end
     table.sort(parts)
@@ -231,6 +294,7 @@ end
 
 -- Shared with the other files.
 ns.DiagStatus = DiagStatus
+ns.NoteKill = NoteKill
 ns.FlushShare = FlushShare
 ns.OnComm = OnComm
 ns.Share = Share

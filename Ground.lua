@@ -167,7 +167,7 @@ function Ground.Check()
         local col = COLORS[tone]
         local sub = text:gsub("^[^:]+: ", ""):gsub("^Dangerous ground%. ", "")
         ns.Overlay.Show({ title = TITLES[tone], sub = sub, r = col[1], g = col[2], b = col[3], small = true,
-            sound = tone ~= "hunting" and tone or nil })
+            hold = ns.Overlay.ReadHold(sub), sound = tone ~= "hunting" and tone or nil })
     end
     if cfg.groundChat or (cfg.quiet and cfg.groundScreen) then
         local col = COLORS[tone]

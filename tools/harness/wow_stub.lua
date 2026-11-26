@@ -269,6 +269,10 @@ ZoneTextFrame = NewWidget("Frame", "ZoneTextFrame", UIParent)
 ZoneTextString = NewWidget("FontString", "ZoneTextString", ZoneTextFrame)
 SubZoneTextString = NewWidget("FontString", "SubZoneTextString", ZoneTextFrame)
 RaidWarningFrame = NewWidget("Frame", "RaidWarningFrame", UIParent)
+-- On-screen notices (Warpath's banners fall back to UIErrorsFrame): recorded, not chat.
+H.notices = {}
+UIErrorsFrame = NewWidget("MessageFrame", "UIErrorsFrame", UIParent)
+function UIErrorsFrame:AddMessage(msg) H.notices[#H.notices + 1] = tostring(msg) end
 
 -- The world map: a canvas Warpath draws onto, in map-relative coordinates.
 WorldMapFrame = NewWidget("Frame", "WorldMapFrame", UIParent)

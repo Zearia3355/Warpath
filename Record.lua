@@ -669,6 +669,8 @@ local function OnKill(full, short, class)
             mk = m.mk, ft = k.feat })
         Share("K", mapID, m[1], m[2], nil, kfields)
     end
+    -- a guildmate who also got credit may have said it already (3.8.3)
+    local said = m and ns.NoteKill(short, mapID, m[1], m[2])
     if k.grudge then ns.Grudge.OnKill(full, mapID, true) end
 
     -- One line per kill: the overlay for multi-kills and streak milestones,
@@ -677,7 +679,7 @@ local function OnKill(full, short, class)
     if big then ns.Overlay.Show(big) end
     local function Announce()
         -- your own kill in chat, worded as your guild sees it (3.7.6)
-        if cfg.selfChat then ns.Print(Feats.GuildKillLine(myName, k.zone, strsplit("|", kfields))) end
+        if cfg.selfChat and not said then ns.Print(Feats.GuildKillLine(myName, k.zone, strsplit("|", kfields))) end
         if big then return end
         if cfg.quiet or not cfg.overlay or n >= 2 or P.StreakPool(k.streak) then
             if cfg.quiet then

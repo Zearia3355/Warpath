@@ -151,7 +151,7 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 - Sightings count in zone stats (`z.sight`, one per enemy per 2 min).
 
 ### Map button and minimap button
-- Map button: crossed swords, top-right of the world map's scroll container; shift-drag to move (position saved account-wide). Left-click: show/hide all. Right-click: layers menu (incl. battle haze, guild haze, show all history). Greyed in battlegrounds.
+- Map button: crossed swords, top-right of the world map's scroll container; shift-drag to move (position saved account-wide). Left-click: show/hide all, silently (3.8.3; the tooltip says "Hidden (still recording)", `/warpath map` still replies in chat). Right-click: layers menu (incl. battle haze, guild haze, show all history). Greyed in battlegrounds.
 - Minimap button (LibDBIcon): left-click chronicle, right-click settings, drag around the edge, greyed in battlegrounds; MBB/Titan Panel pick it up. On by default; General tab or `/warpath minimap`.
 
 ---
@@ -181,6 +181,7 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 ### Dangerous ground (3.7.0, replaced killing fields)
 - PvP deaths on the haze grid. Walking onto ground where they add up: **Dangerous** (red, warning sound), **Contested** (amber, softer), **Your hunting ground** (gold, no sound). Guildmates' deaths add on.
 - Out of combat only, never in neutral towns, once per area per session, never on top of a kill's big text.
+- Shown in the kill big text's frame, but held long enough to read (3.8.3): 4–6.5 s at full strength, about a second per 15 letters of the line under the title (`Overlay.ReadHold`). Kill text keeps its short flash (1.2 s hold). A kill while a warning shows replaces it.
 - Settings: on-screen, in chat, warn after 1/2/3 deaths (default 2). `/warpath fields on|off` toggles both.
 - War table shows "Dangerous ground nearby"; `/warpath zone` counts spots.
 
@@ -221,6 +222,7 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 ## Guild sharing
 - Shares sightings, kills, PvP deaths (with enemy names), and battle history (sync). **Never the trail.**
 - Sightings: map-only, one a minute per spot. Kills/deaths always get through; only exact duplicates (guild + party copy) dropped.
+- One kill, said once (3.8.3, receiver-side, so it works with guildmates on older versions): when several of you get credit for one enemy, the first report (yours or a guildmate's) prints a line and pins; later reports of it fold in silently, with no line and no pin, but still count in that guildmate's own haze layer. Same enemy: same victim name on the same map within 30 s; a report without a name (before 3.7, or an unnamed kill) matches by place, within 0.015 of the map and 10 s. Only different reporters fold, so one guildmate's two kills stay two. Your own kill landing after a guildmate's report of it skips your own chat line and takes their pin off the map (your skull is there). `/warpath share status` counts folds as "repeat kills of one enemy". Session memory only, nothing saved.
 - Guildmates' kills/deaths print a chat line from any zone ("Bob scored a triple kill in Felwood!").
 - Sync: at login a GUILD hello; guildmates whisper back what changed since they last sent, trickled behind kills/deaths. `db.syncSent`. `CHAT_MSG_SYSTEM` "no player named" drops queued sync for that name.
 - Inside instances: receive yes (3.7.8), send no, record nothing. A hello received inside goes unanswered until next login.
@@ -325,3 +327,6 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-24 | 3.8.2: inside the live area only the last 3 s of line show (`SHOW`), separate from `LAG` 45 s, so areas still grow as before; old areas keep hiding your line until a minute inside reopens them (no tail there) | Joe |
 | 2026-11-24 | 3.8.3-test1: a wider forming radius in the open world, a tighter one in cities; areas next to each other merge (Joe asked for a bigger central area and whether cities need their own rules) | Joe |
 | 2026-11-24 | Forming 225 yd on zones; city = map under 2000 yd wide, 150 yd and a 400 yd cap; "touching" = outlines meet (2 × `PAD`); merge only into the area you're in | Claude (open to veto) |
+| 2026-11-25 | 3.8.3: ground warnings held 4–6.5 s by line length (1 s per 15 letters) instead of the kill flash's 1.2 s; a second ground warning waits for the first, a kill replaces it | Claude (open to veto) |
+| 2026-11-25 | 3.8.3: the map button's left-click no longer prints a chat line; `/warpath map` still does | Joe |
+| 2026-11-25 | 3.8.3: repeat kill reports fold silently (no "A and B killed X" line); windows 30 s by name, 10 s and 0.015 by place without one; folded reports still add to that guildmate's haze; your own later kill removes the guildmate's just-received pin of it | Claude (open to veto) |

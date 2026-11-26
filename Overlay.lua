@@ -50,10 +50,10 @@ local function Build()
         else
             inner:SetScale(1)
         end
-        local a = ALPHA
-        if t > PUNCH + HOLD then a = ALPHA * math.max(0, 1 - (t - PUNCH - HOLD) / FADE) end
+        local a, hold = ALPHA, self.hold
+        if t > PUNCH + hold then a = ALPHA * math.max(0, 1 - (t - PUNCH - hold) / FADE) end
         self:SetAlpha(a)
-        if t >= PUNCH + HOLD + FADE then self:Hide() end
+        if t >= PUNCH + hold + FADE then self:Hide() end
     end)
 end
 
@@ -71,10 +71,18 @@ local function SetFont(fs, size)
 end
 
 function Overlay.Busy()
-    return frame and frame:IsShown() and frame.t < PUNCH + HOLD
+    return frame and frame:IsShown() and frame.t < PUNCH + frame.hold
 end
 
--- o = { title, sub, r, g, b, small (streak ended, ground), sound key }
+-- How long text meant to be read stays up: about a second per 15 letters of
+-- the subline, at least 4 s and at most 6.5 s. Kill text keeps the short
+-- flash (HOLD).
+function Overlay.ReadHold(text)
+    return math.min(6.5, math.max(4, 1 + #(text or "") / 15))
+end
+
+-- o = { title, sub, r, g, b, small (streak ended, ground), sound key,
+--       hold (seconds at full strength; default HOLD, the kill flash) }
 function Overlay.Show(o)
     if S.inInstance then return end
     if not frame then Build() end
@@ -88,7 +96,7 @@ function Overlay.Show(o)
     inner.sub:SetTextColor(o.sr or 1, o.sg or 1, o.sb or 1)
     frame:ClearAllPoints()
     frame:SetPoint("TOP", UIParent, "TOP", 0, LaneY())
-    frame.t, frame.punch = 0, o.small and 1.1 or 1.25
+    frame.t, frame.punch, frame.hold = 0, o.small and 1.1 or 1.25, o.hold or HOLD
     inner:SetScale(frame.punch)
     frame:SetAlpha(ALPHA)
     frame:Show()

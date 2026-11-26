@@ -11,9 +11,10 @@ ns.OnBind(function() cfg = ns.cfg end)
 
 local button
 
+-- Silent: the map shows the result, and the button's tooltip (refreshed on
+-- the click) says "Hidden (still recording)". /warpath map replies itself.
 local function SetShown(on)
     cfg.shown = on and true or false
-    Print("Warpath on the map " .. (cfg.shown and "shown." or "hidden (still recording)."))
     ns.Redraw()
 end
 
