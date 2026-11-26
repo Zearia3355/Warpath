@@ -1983,7 +1983,9 @@ local function DrawMarks(D, scene, from, upTo)
     -- Scores (3.8.3). A zone's own map: in its top-left corner (MapButton.lua).
     -- A continent: each zone with a fight, small, at its centre. The world
     -- (both continents): one score per continent instead.
-    if not L.marks then return end
+    -- no viewed map: the empty scene drawn while hidden or in a battleground.
+    -- GetMapInfo(nil) raises in the client, which left the last drawing up.
+    if not L.marks or not scene.viewed then return end
     local info = C_Map.GetMapInfo(scene.viewed)
     if info and info.mapType and info.mapType <= 1 then
         for _, c in ipairs(C.CONTINENTS) do

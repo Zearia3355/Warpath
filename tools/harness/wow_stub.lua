@@ -375,6 +375,9 @@ local MAPS = {
 H.maps = MAPS
 C_Map.GetBestMapForUnit = function(u) if isPlayer(u) then return H.player.mapID end end
 C_Map.GetMapInfo = function(id)
+    -- The client raises on a missing map ID rather than returning nil
+    -- (3.8.3-test6's hidden map broke on exactly that).
+    if type(id) ~= "number" then error("bad argument #1 to 'GetMapInfo' (number expected)", 2) end
     local m = MAPS[id]
     if not m then
         -- Real saved data mentions maps we don't list; answer generically
