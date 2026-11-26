@@ -210,6 +210,17 @@ local function PinEnter(self)
     elseif self.kind == "sight" then
         GameTooltip:AddLine("Enemy sighted", foe.r, foe.g, foe.b)
         GameTooltip:AddLine((d.from and ("Reported by " .. d.from .. ", ") or "By you, ") .. Ago(d.t), 0.8, 0.8, 0.8)
+    elseif self.kind == "many" then
+        local kills = d.kind == "kill"
+        if kills then
+            GameTooltip:AddLine(("%d kills here"):format(d.n), 1, 0.82, 0)
+        else
+            GameTooltip:AddLine(("%d deaths here"):format(d.n), 1, 0.25, 0.2)
+        end
+        if d.guild > 0 then
+            GameTooltip:AddLine(("Yours %d, guildmates' %d"):format(d.n - d.guild, d.guild), 0.8, 0.8, 0.8)
+        end
+        GameTooltip:AddLine("Zoom in to see each one", 0.6, 0.6, 0.6)
     elseif self.kind == "skill" then
         GameTooltip:AddLine(d.from .. " scored a kill here", 0.6, 0.8, 1)
         GameTooltip:AddLine(Ago(d.t), 0.8, 0.8, 0.8)
@@ -224,7 +235,7 @@ end
 -- through to the map (zoom in / out). Waypoints are set from the chronicle,
 -- the grudge ledger or /warpath waypoint.
 
-local PIN_LEVEL = { sight = 1, mob = 2, kill = 3, death = 3, skill = 4, sdeath = 4, grudge = 6 }
+local PIN_LEVEL = { sight = 1, mob = 2, kill = 3, death = 3, skill = 4, sdeath = 4, many = 5, grudge = 6 }
 
 -- Pins hold a steady size on screen (3.7): sized in interface pixels and
 -- divided by how much the map is scaled and zoomed, so a bigger map
@@ -264,6 +275,9 @@ local function GetPin(i)
         f.label:SetPoint("LEFT", f, "RIGHT", 2, 0)
         f.label:SetTextColor(1, 0.35, 0.25)
         f.label:Hide()
+        f.count = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall") -- how many a big pin stands for
+        f.count:SetPoint("TOP", f, "BOTTOM", 0, 3)
+        f.count:Hide()
         f:EnableMouse(true)
         if f.SetMouseClickEnabled then f:SetMouseClickEnabled(false) end
         f:SetScript("OnEnter", PinEnter)
@@ -273,21 +287,33 @@ local function GetPin(i)
     return f
 end
 
+-- Scores ("kills : deaths") on continent and world views (3.8.3): text on a
+-- soft dark patch, like the area labels, drawn above the pins.
 local function GetLabel(i)
     local f = labels[i]
     if not f then
         f = CreateFrame("Frame", nil, overlay)
-        f:SetSize(70, 20)
-        f.crest = f:CreateTexture(nil, "OVERLAY")
-        f.crest:SetSize(22, 22)
-        f.crest:SetPoint("LEFT")
-        f.crest:SetTexCoord(0, 0.62, 0, 0.62)
+        f:SetSize(60, 16)
         f.text = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        f.text:SetPoint("LEFT", f.crest, "RIGHT", 1, 0)
+        f.text:SetPoint("CENTER")
+        f.back = f:CreateTexture(nil, "BACKGROUND")
+        f.back:SetTexture(C.TEX_DOT)
+        f.back:SetVertexColor(0.06, 0.03, 0.02)
+        f.back:SetAlpha(0.7)
+        f.back:SetPoint("CENTER")
         labels[i] = f
     end
     return f
 end
+
+-- Blue when you're clearly ahead, red when clearly behind, yellow when it's
+-- close: within one fight, or within a quarter of the fights (3.8.3).
+local STANDING = { win = { 0.35, 0.65, 1.00 }, close = { 1.00, 0.82, 0.00 }, lose = { 1.00, 0.25, 0.20 } }
+local function Standing(k, d)
+    if math.abs(k - d) <= math.max(1, 0.25 * (k + d)) then return STANDING.close end
+    return k > d and STANDING.win or STANDING.lose
+end
+ns.Standing = Standing
 
 -- Time spent in a lingering area (3.8), above its outline. Steady on screen
 -- like the pins; hover for the visits.
@@ -1644,11 +1670,129 @@ local function DrawReplay(D, scene, limit)
     return hx, hy, upTo
 end
 
+-- Crowded pins on continent and world views (3.8.3). Every pin is still
+-- drawn, but kills (yours and guildmates') within a pin's width of each other
+-- chain into one group, and so do deaths; a group of C.CROWD_MIN or more is
+-- one big sword or skull with its count under it. Groups come from the pins'
+-- places alone, so a big pin only changes when pins are added or fade out.
+-- Big pins that would overlap are pushed apart. Pin(...) draws one pin.
+local CROWD = { kill = "kill", skill = "kill", death = "death", sdeath = "death" }
+local FLAT = { ox = 0, oy = 0, sx = 1, sy = 1 }
+local function Crowd(D, Pin, reach)
+    local list = D.crowd
+    if not list or #list == 0 then return end
+    D.crowd = nil
+    -- buckets a reach wide, so each pin only checks its neighbours
+    local grid = {}
+    local function Key(cx, cy) return cx * 100003 + cy end
+    for i, q in ipairs(list) do
+        q.cx, q.cy = math.floor(q.x / reach), math.floor(q.y / reach)
+        local key = Key(q.cx, q.cy)
+        grid[key] = grid[key] or {}
+        table.insert(grid[key], i)
+    end
+    local seen, big = {}, {}
+    for i, first in ipairs(list) do
+        if not seen[i] then
+            seen[i] = true
+            local group, stack = {}, { i }
+            while #stack > 0 do
+                local q = list[table.remove(stack)]
+                group[#group + 1] = q
+                for gx = q.cx - 1, q.cx + 1 do
+                    for gy = q.cy - 1, q.cy + 1 do
+                        for _, m in ipairs(grid[Key(gx, gy)] or {}) do
+                            local o = list[m]
+                            if not seen[m] and CROWD[o.kind] == CROWD[first.kind]
+                                and (o.x - q.x) ^ 2 + (o.y - q.y) ^ 2 < reach * reach then
+                                seen[m] = true
+                                stack[#stack + 1] = m
+                            end
+                        end
+                    end
+                end
+            end
+            if #group < C.CROWD_MIN then
+                for _, q in ipairs(group) do
+                    Pin(q.kind, q.d, FLAT, q.x / D.w, q.y / D.h, q.tex, q.size, q.r, q.g, q.b, q.a, true)
+                end
+            else
+                local n, sx, sy, guild, size, a = #group, 0, 0, 0, 0, 0
+                for _, q in ipairs(group) do
+                    sx, sy = sx + q.x, sy + q.y
+                    if q.kind == "skill" or q.kind == "sdeath" then guild = guild + 1 end
+                    size, a = math.max(size, q.size), math.max(a, q.a)
+                end
+                big[#big + 1] = { kind = CROWD[first.kind], x = sx / n, y = sy / n, n = n, guild = guild,
+                    tex = first.tex, size = size * math.min(2.4, 1.5 + 0.12 * n), a = a }
+            end
+        end
+    end
+    -- push overlapping big pins apart (twice over, for chains of three)
+    table.sort(big, function(p, q) if p.x ~= q.x then return p.x < q.x end return p.y < q.y end)
+    for _ = 1, 2 do
+        for i = 1, #big do
+            for j = i + 1, #big do
+                local p, q = big[i], big[j]
+                local dx, dy = q.x - p.x, q.y - p.y
+                local dist, need = math.sqrt(dx * dx + dy * dy), (p.size + q.size) / 2 / D.k
+                if dist < need then
+                    if dist < 0.01 then dx, dy, dist = 1, 0, 1 end
+                    local push = (need - dist) / 2
+                    p.x, p.y = p.x - dx / dist * push, p.y - dy / dist * push
+                    q.x, q.y = q.x + dx / dist * push, q.y + dy / dist * push
+                end
+            end
+        end
+    end
+    for _, g in ipairs(big) do
+        local tint = g.guild * 2 > g.n and 0.55 or 1
+        local f = Pin("many", g, FLAT, g.x / D.w, g.y / D.h, g.tex, g.size, tint, tint == 1 and 1 or 0.8, 1, g.a, true)
+        if f then
+            f.count:SetText(g.n)
+            f.count:SetTextColor(1, 1, 1, g.a) -- fades with its pin
+            f.count:Show()
+        end
+    end
+end
+
+-- A score on a continent or world view, stepped down past any already placed.
+local function Score(D, x, y, k, d, big)
+    D.nb = D.nb + 1
+    local f = GetLabel(D.nb)
+    f.text:SetFontObject(big and GameFontNormal or GameFontNormalSmall)
+    f.text:SetText(("%d : %d"):format(k, d))
+    local c = Standing(k, d)
+    f.text:SetTextColor(c[1], c[2], c[3])
+    local tw, th = (f.text:GetStringWidth() or 30) + 8, big and 18 or 15
+    for _ = 1, 12 do
+        local clear = true
+        for _, b in ipairs(D.placed) do
+            if math.abs(x - b[1]) < (tw + b[3]) / 2 and math.abs(y - b[2]) < (th + b[4]) / 2 then clear = false break end
+        end
+        if clear then break end
+        y = y + th * 0.7
+    end
+    D.placed[#D.placed + 1] = { x, y, tw, th }
+    f.back:SetSize(tw + 16, th + 14)
+    f:SetFrameLevel(overlay:GetFrameLevel() + 7)
+    f:ClearAllPoints()
+    f:SetPoint("CENTER", overlay, "TOPLEFT", x, -y)
+    f:Show()
+end
+
 local function DrawMarks(D, scene, from, upTo)
     local L, w, h, now = cfg.layers, D.w, D.h, D.now
     local base = PIN_PX * (cfg.iconScale or 100) / 100   -- interface pixels
     local k = MapScale()
-    local function Pin(kind, d, p, x, y, tex, size, r, g, b, a)
+    D.k, D.crowd, D.placed = k, {}, {}
+    -- placed: drawn by Crowd, which has already grouped it
+    local function Pin(kind, d, p, x, y, tex, size, r, g, b, a, placed)
+        if not placed and p.far and CROWD[kind] then
+            D.crowd[#D.crowd + 1] = { kind = kind, d = d, x = (p.ox + x * p.sx) * w, y = (p.oy + y * p.sy) * h,
+                tex = tex, size = size, r = r, g = g, b = b, a = a or 1 }
+            return
+        end
         if D.np >= C.MARK_BUDGET then return end
         D.np = D.np + 1
         local f = GetPin(D.np)
@@ -1669,13 +1813,16 @@ local function DrawMarks(D, scene, from, upTo)
             f.label:Hide()
         end
         f.tex:SetVertexColor(r or 1, g or 1, b or 1, a or 1)
+        f.count:Hide()
         -- Stack by kind, not draw order: sightings at the bottom, kills and
         -- deaths above them, grudges on top.
         f:SetFrameLevel(overlay:GetFrameLevel() + (PIN_LEVEL[kind] or 2))
         f:SetSize(size / k, size / k)
         At(f, p, x, y, w, h)
         f:Show()
+        return f
     end
+    local reach = base * 1.4 / k -- about a pin and a half, in map units
     if L.marks then
         for _, e in ipairs(scene.zones) do
             for _, m in ipairs(e.z.marks) do
@@ -1695,7 +1842,7 @@ local function DrawMarks(D, scene, from, upTo)
             end
         end
     end
-    if D.replay then return end
+    if D.replay then return Crowd(D, Pin, reach) end
     if L.sightings then
         for _, s in ipairs(recentSight) do
             local p = Proj(scene, s.mapID)
@@ -1731,24 +1878,45 @@ local function DrawMarks(D, scene, from, upTo)
             end
         end
     end
-    -- Zone standing: on continent-scale views at each zone's centre; on a
-    -- zone's own map, in the map's top-left corner (3.8.3, MapButton.lua).
-    if L.marks then
-        for _, e in ipairs(scene.zones) do
-            local z = e.z
-            if e.p.mapID == scene.viewed and not e.p.far and z.kills + z.pdeaths >= 1 then
-                D.standing = z
-            elseif e.p.far and z.kills + z.pdeaths >= 3 then
-                D.nb = D.nb + 1
-                local f = GetLabel(D.nb)
-                local c = z.kills >= z.pdeaths and faction or foe
-                f.crest:SetTexture(c.crest)
-                f.text:SetText(("%d : %d"):format(z.kills, z.pdeaths))
-                f.text:SetTextColor(c.r, c.g, c.b)
-                At(f, e.p, 0.5, 0.5, w, h)
-                f:Show()
+    Crowd(D, Pin, reach)
+    -- Scores (3.8.3). A zone's own map: in its top-left corner (MapButton.lua).
+    -- A continent: each zone with a fight, small, at its centre. The world
+    -- (both continents): one score per continent instead.
+    if not L.marks then return end
+    local info = C_Map.GetMapInfo(scene.viewed)
+    if info and info.mapType and info.mapType <= 1 then
+        for _, c in ipairs(C.CONTINENTS) do
+            local x0, x1, y0, y1 = Projection(c, scene.viewed)
+            if x0 then
+                local kills, deaths = 0, 0
+                for _, e in ipairs(scene.zones) do
+                    if e.p.mapID == c or Projection(e.p.mapID, c) then
+                        kills, deaths = kills + e.z.kills, deaths + e.z.pdeaths
+                    end
+                end
+                -- below the middle, clear of the continent's printed name
+                if kills + deaths > 0 then Score(D, (x0 + x1) / 2 * w, (y0 + 0.62 * (y1 - y0)) * h, kills, deaths, true) end
             end
         end
+        return
+    end
+    local far = {}
+    for _, e in ipairs(scene.zones) do
+        local z = e.z
+        if e.p.mapID == scene.viewed and not e.p.far and (info and info.mapType or 3) >= 3 and z.kills + z.pdeaths >= 1 then
+            D.standing = z
+        elseif e.p.far and z.kills + z.pdeaths >= 1 then
+            far[#far + 1] = e
+        end
+    end
+    -- the most fought-over zone keeps its centre; neighbours step down past it
+    table.sort(far, function(a, b)
+        local na, nb = a.z.kills + a.z.pdeaths, b.z.kills + b.z.pdeaths
+        if na ~= nb then return na > nb end
+        return a.p.mapID < b.p.mapID
+    end)
+    for _, e in ipairs(far) do
+        Score(D, (e.p.ox + 0.5 * e.p.sx) * w, (e.p.oy + 0.5 * e.p.sy) * h, e.z.kills, e.z.pdeaths)
     end
 end
 

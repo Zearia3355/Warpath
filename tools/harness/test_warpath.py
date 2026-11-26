@@ -595,22 +595,118 @@ class MapDrawing(unittest.TestCase):
             end
         end)()""")
 
+    BLUE, YELLOW, RED = [0.35, 0.65, 1.0], [1.0, 0.82, 0.0], [1.0, 0.25, 0.2]
+
     def test_a_zone_map_shows_its_standing_in_the_corner(self):
         got = self.standing(8, 1)
         self.assertTrue(got, "no standing on the zone's own map")
         text, r, g, b, rel, x, y = got.split("|")
         self.assertEqual(text, "8 : 1")
-        faction = self.wow.eval("ns.faction.r .. '|' .. ns.faction.g .. '|' .. ns.faction.b").split("|")
-        self.assertEqual([round(float(v), 3) for v in (r, g, b)], [round(float(v), 3) for v in faction])
+        self.assertEqual([round(float(v), 3) for v in (r, g, b)], self.BLUE, "clearly ahead: blue")
         # fixed to the map frame's top-left, not to the canvas, so zooming can't move it
         self.assertEqual(rel, "TOPLEFT")
         self.assertLess(float(x), 80)
 
-    def test_a_losing_zone_shows_in_the_enemys_colour(self):
+    def test_the_corner_is_red_behind_and_yellow_when_close(self):
         text, r, g, b, *_ = self.standing(1, 5).split("|")
-        foe = self.wow.eval("ns.foe.r .. '|' .. ns.foe.g .. '|' .. ns.foe.b").split("|")
         self.assertEqual(text, "1 : 5")
-        self.assertEqual([round(float(v), 3) for v in (r, g, b)], [round(float(v), 3) for v in foe])
+        self.assertEqual([round(float(v), 3) for v in (r, g, b)], self.RED)
+        _, r, g, b, *_ = self.standing(3, 2).split("|")
+        self.assertEqual([round(float(v), 3) for v in (r, g, b)], self.YELLOW)
+
+    # --- continent and world views (3.8.3) ---------------------------------
+
+    def pins_on(self, viewed):
+        self.wow.run(f"__H.mapShown = {viewed}")
+        self.wow.eval("ns.Redraw()")
+        rows = self.wow.eval("""(function() local t = {}
+            for _, f in ipairs(WarpathOverlay.__children) do
+                if f.kind and f.tex and f:IsShown() then
+                    local _, _, _, x, y = f:GetPoint(1)
+                    t[#t + 1] = table.concat({ f.kind, f.count:IsShown() and f.count:GetText() or "",
+                        x, y, f:GetWidth() }, ",")
+                end
+            end return table.concat(t, ";") end)()""")
+        return [r.split(",") for r in rows.split(";") if r]
+
+    def scores_on(self, viewed):
+        self.wow.run(f"__H.mapShown = {viewed}")
+        self.wow.eval("ns.Redraw()")
+        rows = self.wow.eval("""(function() local t = {}
+            for _, f in ipairs(WarpathOverlay.__children) do
+                local s = f.text and f:IsShown() and f.text:GetText()
+                if s and s:match("^%d+ : %d+$") then
+                    local r, g, b = f.text:GetTextColor()
+                    local _, _, _, x, y = f:GetPoint(1)
+                    t[#t + 1] = table.concat({ s, r, g, b, x, y }, ",")
+                end
+            end return table.concat(t, ";") end)()""")
+        return [r.split(",") for r in rows.split(";") if r]
+
+    def guild(self, kind, x, y, n=1, step=0.0):
+        for i in range(n):
+            self.wow.run(f"ns.OnComm('WARPATH', '1|{kind}|1448|{x + i * step}|{y}', 'GUILD', 'Bob Smith')")
+
+    def test_crowded_kills_on_a_continent_become_one_big_sword(self):
+        self.guild("K", 0.40, 0.40, n=5, step=0.01)      # a few yards apart in Felwood
+        self.guild("K", 0.90, 0.90)                        # one far away
+        pins = self.pins_on(1414)
+        big = [p for p in pins if p[0] == "many"]
+        self.assertEqual(len(big), 1, pins)
+        self.assertEqual(big[0][1], "5", "the big pin shows how many it stands for")
+        self.assertEqual(len([p for p in pins if p[0] == "skill"]), 1, "the lone kill stays a pin")
+        normal = float([p for p in pins if p[0] == "skill"][0][4])
+        self.assertGreater(float(big[0][4]), normal * 1.4, "the big pin is bigger")
+
+    def test_two_crowded_kills_stay_separate_pins(self):
+        self.guild("K", 0.40, 0.40, n=2, step=0.01)
+        pins = self.pins_on(1414)
+        self.assertEqual(sorted(p[0] for p in pins), ["skill", "skill"])
+
+    def test_a_zone_map_never_combines(self):
+        self.guild("K", 0.40, 0.40, n=5, step=0.01)
+        pins = self.pins_on(1448)
+        self.assertEqual([p[0] for p in pins], ["skill"] * 5)
+
+    def test_a_big_sword_and_a_big_skull_do_not_overlap(self):
+        self.guild("K", 0.40, 0.40, n=4, step=0.002)   # one fight: kills and deaths on one spot
+        self.guild("D", 0.40, 0.40, n=4, step=0.002)
+        big = [p for p in self.pins_on(1414) if p[0] == "many"]
+        self.assertEqual(len(big), 2, big)
+        (_, _, x1, y1, w1), (_, _, x2, y2, w2) = big
+        gap = ((float(x1) - float(x2)) ** 2 + (float(y1) - float(y2)) ** 2) ** 0.5
+        self.assertGreaterEqual(gap + 0.01, (float(w1) + float(w2)) / 2)
+
+    def set_record(self, rec):
+        for mid, (k, d) in rec.items():
+            self.wow.run(f"""if not ns.db.maps[{mid}] then
+                ns.OnComm('WARPATH', '1|K|{mid}|0.5|0.5', 'GUILD', 'Bob Smith') end
+                ns.db.maps[{mid}].kills, ns.db.maps[{mid}].pdeaths = {k}, {d}""")
+
+    def test_a_continent_shows_a_small_score_per_zone_in_three_colours(self):
+        self.wow.run("__H.rects[1440] = { [1414] = { 0.42, 0.57, 0.33, 0.49 } }")
+        self.wow.run("__H.rects[2482] = { [1414] = { 0.49, 0.58, 0.26, 0.36 } }")
+        self.set_record({1448: (1, 5), 1440: (8, 1), 2482: (2, 2)})
+        got = {s[0]: [round(float(v), 3) for v in s[1:4]] for s in self.scores_on(1414)}
+        self.assertEqual(got, {"1 : 5": self.RED, "8 : 1": self.BLUE, "2 : 2": self.YELLOW})
+
+    def test_scores_that_would_overlap_step_apart(self):
+        self.wow.run("__H.rects[2482] = { [1414] = __H.rects[1448][1414] }")  # same centre as Felwood
+        self.set_record({1448: (1, 5), 2482: (0, 2)})
+        s = {r[0]: (float(r[4]), float(r[5])) for r in self.scores_on(1414)}
+        self.assertEqual(len(s), 2)
+        self.assertGreater(abs(s["1 : 5"][1] - s["0 : 2"][1]), 9, "the smaller one steps down")
+        self.assertGreater(s["1 : 5"][1], s["0 : 2"][1], "the most-fought zone keeps its centre (y is negative down)")
+
+    def test_the_world_view_shows_one_score_per_continent(self):
+        self.wow.run("""__H.rects[1414] = { [947] = { 0.0, 0.5, 0.1, 0.9 } }
+            __H.rects[1415] = { [947] = { 0.5, 1.0, 0.1, 0.9 } }
+            __H.rects[1448][947] = { 0.2, 0.3, 0.3, 0.4 }
+            __H.rects[1440] = { [1414] = { 0.42, 0.57, 0.33, 0.49 }, [947] = { 0.2, 0.3, 0.4, 0.5 } }""")
+        self.set_record({1448: (1, 5), 1440: (2, 13)})
+        got = self.scores_on(947)
+        self.assertEqual([g[0] for g in got], ["3 : 18"], "Kalimdor's total, no zone scores")
+        self.assertEqual([round(float(v), 3) for v in got[0][1:4]], self.RED)
 
     def test_no_standing_without_a_fight_or_off_the_zone_map(self):
         self.assertIsNone(self.standing(0, 0))

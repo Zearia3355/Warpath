@@ -41,17 +41,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - Changing defaults affects only new installs; existing players keep their settings (preserve saved data). Any reset for existing players is called out first, as 3.8.0's map reset was.
   - Do it with or after "Welcome and What's new pages in the chronicle", which moves the update box out of this window.
 
-### Continent and world maps are hard to read
-- From: Joe, 2026-11-25 (screenshots of the world, Kalimdor and Eastern Kingdoms maps)
-- Status: needs a design
-- What: zoomed out, Warpath draws every kill and death pin, roads, trail scraps and flight dashes at small size, plus each zone's win/loss label. Where they cluster (north Kalimdor, the Plaguelands) it's a pile of overlapping icons, and the win/loss numbers are too small to read among them.
-- Notes:
-  - What a continent view is for: which zones you win and lose in, and where you've been fighting. Individual pins and road squiggles at that size don't add much.
-  - Ideas: on continent and world views, show one readable win/loss badge per zone and drop (or heavily thin) individual pins; or group a zone's pins into one marker with a count; leave out roads and trail scraps there, keep flight legs only if they read; make the win/loss label larger and give it contrast (area time labels got WoW yellow on a dark patch in 3.8.3; the same look may suit).
-  - The zone's own map got its standing in 3.8.3: crest and "kills : deaths" on a soft dark patch, top-left corner. A continent badge could share that look.
-  - The world view (both continents) should probably show even less than a continent.
-  - Render options from Lethality's real data over these screenshots for Joe to pick; continent placement is already verified against real map rects (`tools/harness/map_rects.lua`).
-
 ### Roads, trail and areas pile up where they overlap
 - From: Joe, 2026-11-25 (screenshot, Eastern Plaguelands; earlier offered by Claude as "calmer long trails")
 - Status: needs a design

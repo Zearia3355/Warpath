@@ -133,7 +133,8 @@ function Widget:GetHeight() return self.__h end
 function Widget:GetSize() return self.__w, self.__h end
 function Widget:GetScale() return 1 end
 function Widget:GetEffectiveScale() return 1 end
-function Widget:GetFrameLevel() return 1 end
+function Widget:GetFrameLevel() return self.__level or 1 end
+function Widget:SetFrameLevel(l) self.__level = l end
 function Widget:GetFrameStrata() return "MEDIUM" end
 function Widget:GetAlpha() return self.__alpha end
 function Widget:SetAlpha(a) self.__alpha = a end
@@ -157,6 +158,7 @@ function Widget:GetDrawLayer() return self.__drawLayer or "ARTWORK", self.__sub 
 function Widget:SetBlendMode(mode) self.__blend = mode end
 function Widget:GetBlendMode() return self.__blend or "BLEND" end
 function Widget:ClearAllPoints() self.__points = {} end
+function Widget:SetFontObject(font) self.__font = font and font.__name end
 function Widget:GetPoint(i) local p = self.__points[i or 1] if p then return unpack(p) end end
 function Widget:IsMouseOver() return false end
 function Widget:IsEnabled() return true end
@@ -216,9 +218,10 @@ function Widget:GetRotation() return self.__rotation or 0 end
 local seq = 0
 local function child(kind)
     -- CreateTexture(name, layer, inherits, sublevel), CreateLine(name, layer, ...)
-    return function(self, name, layer, _, sub)
+    return function(self, name, layer, inherits, sub)
         local w = NewWidget(kind, name, self)
         w.__layer = true
+        if kind == "FontString" then w.__font = inherits end
         w.__drawLayer, w.__sub = layer or "ARTWORK", sub or 0
         seq = seq + 1
         w.__seq = seq   -- creation order breaks ties within a layer, as in the client
@@ -472,6 +475,7 @@ GameFontNormal = NewWidget("Font", "GameFontNormal")
 GameFontHighlight = NewWidget("Font", "GameFontHighlight")
 GameFontNormalLarge = NewWidget("Font", "GameFontNormalLarge")
 GameFontHighlightSmall = NewWidget("Font", "GameFontHighlightSmall")
+GameFontNormalSmall = NewWidget("Font", "GameFontNormalSmall")
 
 -- Harness controls -----------------------------------------------------------------------------
 function H.Fire(event, ...)

@@ -215,7 +215,7 @@ local function SetupMapButton()
 end
 
 -- The zone's standing on its own map (3.8.3): your crest and "kills : deaths"
--- in the winning side's colour, on a soft dark patch, in the map's top-left
+-- in blue, yellow or red (ns.Standing), on a soft dark patch, in the map's top-left
 -- corner beside the game's round button. Fixed to the map frame, not the
 -- canvas, so it stays put while the map zooms. Map.lua decides when.
 local standing
@@ -243,10 +243,11 @@ local function ZoneStanding(z)
         standing.back:SetVertexColor(0.06, 0.03, 0.02)
         standing.back:SetAlpha(0.7)
     end
-    local c = z.kills >= z.pdeaths and ns.faction or ns.foe
-    standing.crest:SetTexture(c.crest)
+    -- your crest; the numbers in blue, yellow or red (ahead, close, behind)
+    local c = ns.Standing(z.kills, z.pdeaths)
+    standing.crest:SetTexture(ns.faction.crest)
     standing.text:SetText(("%d : %d"):format(z.kills, z.pdeaths))
-    standing.text:SetTextColor(c.r, c.g, c.b)
+    standing.text:SetTextColor(c[1], c[2], c[3])
     local w = 24 + (standing.text:GetStringWidth() or 30)
     standing.back:ClearAllPoints()
     standing.back:SetPoint("CENTER", standing, "LEFT", w / 2, 0)

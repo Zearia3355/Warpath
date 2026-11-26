@@ -59,11 +59,16 @@ local function alphaOf(o)
     return a
 end
 
--- centre and size of a region, in image pixels (y down)
+-- centre and size of a region, in image pixels (y down). Offsets from the
+-- overlay are from its top-left, as Map.lua places everything.
 local function rect(o)
     for _, p in ipairs(o.__points) do
-        if p[1] == "CENTER" and p[2] == overlay then
-            return p[4] or 0, -(p[5] or 0), o.__w, o.__h
+        if p[2] == overlay and type(p[1]) == "string" then
+            local x, y, w, h = p[4] or 0, -(p[5] or 0), o.__w, o.__h
+            local s = (o.__scale or 1)
+            if p[1]:find("LEFT") then x = x + w * s / 2 elseif p[1]:find("RIGHT") then x = x - w * s / 2 end
+            if p[1]:find("TOP") then y = y + h * s / 2 elseif p[1]:find("BOTTOM") then y = y - h * s / 2 end
+            return x, y, w, h
         end
     end
     local par = o.__parent
@@ -92,6 +97,20 @@ local function emit(o)
         elseif o.__vertex then r, g, b, va = unpack(o.__vertex) end
         out[#out + 1] = table.concat({ "T", o.__blend or "BLEND", r, g, b, va * a,
             x, y, w, h or w, tostring(o.__texture or "") }, "\t")
+    elseif o.__kind == "FontString" then
+        -- text: where its anchor lands, and which of its own points sits there
+        local t, p = o.__text, o.__points[1]
+        if not t or t == "" or not p then return end
+        local rel, rp, ox, oy = o.__parent, p[1], p[2] or 0, p[3] or 0
+        if type(p[2]) == "table" then rel, rp, ox, oy = p[2], p[3] or p[1], p[4] or 0, p[5] or 0 end
+        local x, y, w, h = rect(rel)
+        if not x then return end
+        if rp:find("LEFT") then x = x - w / 2 elseif rp:find("RIGHT") then x = x + w / 2 end
+        if rp:find("TOP") then y = y - h / 2 elseif rp:find("BOTTOM") then y = y + h / 2 end
+        local font = tostring(o.__font or "GameFontNormal")
+        local c = o.__textColor or (font:find("Highlight") and { 1, 1, 1, 1 } or { 1, 0.82, 0, 1 })
+        out[#out + 1] = table.concat({ "S", "BLEND", c[1], c[2], c[3], (c[4] or 1) * a,
+            x + ox, y - oy, p[1], font, (tostring(t):gsub("[\t\n]", " ")) }, "\t")
     end
 end
 
@@ -109,10 +128,18 @@ end
 
 -- the overlay's own regions, then child frames (pins, labels) above them
 for _, r in ipairs(regionsOf(overlay)) do emit(r) end
-for _, f in ipairs(overlay.__children) do
-    if not f.__layer and f:IsVisible() then
-        for _, r in ipairs(regionsOf(f)) do emit(r) end
-    end
+local frames = {}
+for i, f in ipairs(overlay.__children) do
+    if not f.__layer and f:IsVisible() then frames[#frames + 1] = { f, i } end
+end
+-- higher frame levels draw on top, as in the client
+table.sort(frames, function(p, q)
+    local lp, lq = p[1].__level or 0, q[1].__level or 0
+    if lp ~= lq then return lp < lq end
+    return p[2] < q[2]
+end)
+for _, fi in ipairs(frames) do
+    for _, r in ipairs(regionsOf(fi[1])) do emit(r) end
 end
 return table.concat(out, "\n")
 """
@@ -177,6 +204,27 @@ def classify(tex):
     return "disc"
 
 
+FONT_PX = {"GameFontNormalSmall": 10, "GameFontHighlightSmall": 10, "GameFontNormal": 12,
+           "GameFontHighlight": 12, "GameFontNormalLarge": 16}
+_fonts = {}
+
+
+def text_font(name):
+    """A stand-in for the game font (Friz Quadrata isn't on disk): a bold
+    serif at the template's size, scaled with the supersampling."""
+    px = FONT_PX.get(name, 12) * SS
+    if px not in _fonts:
+        for face in ("palab.ttf", "georgiab.ttf", "arialbd.ttf"):
+            try:
+                _fonts[px] = ImageFont.truetype(face, px)
+                break
+            except OSError:
+                continue
+        else:
+            _fonts[px] = ImageFont.load_default()
+    return _fonts[px]
+
+
 def paint(prims, w, h, backdrop=None):
     W, H = w * SS, h * SS
     if backdrop is not None:            # the real map art, from an in-game screenshot
@@ -222,6 +270,22 @@ def paint(prims, w, h, backdrop=None):
         else:
             col = (int(r * 255), int(gg * 255), int(b * 255), int(a * 255))
         draw = ImageDraw.Draw(target, "RGBA")
+
+        if kind == "S":
+            x, y = float(f[6]) * SS, float(f[7]) * SS
+            point, font, text = f[8], f[9], f[10]
+            ft = text_font(font)
+            tw, th = draw.textlength(text, font=ft), ft.size
+            if "LEFT" in point: x0 = x
+            elif "RIGHT" in point: x0 = x - tw
+            else: x0 = x - tw / 2
+            if "TOP" in point: y0 = y
+            elif "BOTTOM" in point: y0 = y - th
+            else: y0 = y - th / 2
+            y0 -= th * 0.12          # the font's own top padding
+            draw.text((x0 + SS, y0 + SS), text, font=ft, fill=(0, 0, 0, col[3]))   # the game fonts' shadow
+            draw.text((x0, y0), text, font=ft, fill=col)
+            continue
 
         if kind == "L":
             x1, y1, x2, y2, th = (float(v) * SS for v in f[6:11])
