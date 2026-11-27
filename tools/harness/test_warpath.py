@@ -2176,6 +2176,29 @@ class Lingering(unittest.TestCase):
                     self.assertLessEqual(a2, a + 1e-6, "a piece of comet got brighter")
                     self.assertLessEqual(w2, w + 1e-6, "a piece of comet got wider")
 
+    def test_the_comet_shows_in_an_old_area_too(self):
+        # Joe, 3.8.3-test14, Undercity: back in an old area, before it reopens
+        # (a minute inside), the line still grew, then vanished at each
+        # redraw: the comet drew only in the area you're lingering in. Any
+        # area that hides your line gets the comet.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 6 * 60)
+        self.walk(0.40, 0.50, 0.80, 0.30)
+        self.room(0.80, 0.30, 12 * 60, 0.003, 0.003)    # away longer than 10 minutes
+        self.walk(0.80, 0.30, 0.40, 0.50)
+        self.wow.eval("ns.Redraw()")
+        x, y = self.wow.H.player.x, self.wow.H.player.y
+        x, y, ang = self.run_frames(3, x, y, 0.0)
+        self.assertFalse(self.live(), "the old area reopened: not the case under test")
+        frames = []
+        self.run_frames(6, x, y, ang, each=lambda f: frames.append(self.comet_pieces()))
+        self.assertFalse(self.live())
+        counts = [len(fr) for fr in frames]
+        self.assertGreaterEqual(min(counts), 10, f"no steady comet in the old area: pieces per frame {counts}")
+        last = sorted(frames[-1].values())
+        self.assertLess(last[0][0], 0.25, "the comet doesn't fade out behind you")
+        self.assertGreater(last[-1][0], 0.85, "the comet isn't bright just behind you")
+
     def test_the_hidden_trail_stays_hidden_when_you_leave(self):
         # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes
         # hidden while you were inside came back for a minute. With the solid

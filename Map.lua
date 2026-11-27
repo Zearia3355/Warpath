@@ -1277,18 +1277,33 @@ local function Trace(now, mapID, x, y)
     local show = Linger and Linger.SHOW or 3
     while #trace >= 2 and now - trace[2].t >= show do table.remove(trace, 1) end
 end
--- The comet: pieces of the trace inside the area you're in, each faded and
--- thinned by the age at its middle, the last one running to your arrow.
-local function DrawComet(now, p, lc, x, y)
+-- How much of your line an area lets show at a point: 1 outside every
+-- area, 0 inside the one you're in or an old one (until it reopens), in
+-- between in one you left less than a minute ago (AreaScene).
+local function ClipK(clips, x, y)
+    local k = 1
+    for _, c in ipairs(clips) do
+        local b = c.box
+        if c.k < k and x >= b[1] and x <= b[3] and y >= b[2] and y <= b[4] and Linger.InPoly(c.poly, x, y) then k = c.k end
+    end
+    return k
+end
+-- The comet: pieces of the trace inside any area that hides your line,
+-- each faded and thinned by the age at its middle, the last one running to
+-- your arrow. Where an area hides it only partly, the comet makes up the rest.
+-- 3.8.3-test14 drew it only in the area you're in, so walking into an old
+-- one still showed a line that grew, then vanished (Joe, Undercity).
+local function DrawComet(now, p, clips, x, y)
     local n = 0
-    if lc then
+    if clips and #clips > 0 then
         local show, w, h = Linger.SHOW or 3, overlay:GetWidth(), overlay:GetHeight()
         for i = 1, #trace do
             local a, b = trace[i], trace[i + 1]
             local bx, by, bt = x, y, now
             if b then bx, by, bt = b.x, b.y, b.t end
             local v = Comet((now - (a.t + bt) / 2) / show)
-            if v > 0.01 and (bx ~= a.x or by ~= a.y) and Linger.InPoly(lc.poly, (a.x + bx) / 2, (a.y + by) / 2) then
+            local hid = v > 0.01 and (bx ~= a.x or by ~= a.y) and 1 - ClipK(clips, (a.x + bx) / 2, (a.y + by) / 2) or 0
+            if v * hid > 0.01 then
                 n = n + 1
                 local l = cometLines[n]
                 if not l then
@@ -1297,7 +1312,7 @@ local function DrawComet(now, p, lc, x, y)
                     cometLines[n] = l
                 end
                 l:SetThickness(CometThick(tail.thick, v))
-                l:SetColorTexture(faction.r, faction.g, faction.b, 0.95 * v)
+                l:SetColorTexture(faction.r, faction.g, faction.b, 0.95 * v * hid)
                 l:SetStartPoint("TOPLEFT", overlay, (p.ox + a.x * p.sx) * w, -(p.oy + a.y * p.sy) * h)
                 l:SetEndPoint("TOPLEFT", overlay, (p.ox + bx * p.sx) * w, -(p.oy + by * p.sy) * h)
                 l:Show()
@@ -1318,12 +1333,14 @@ local function UpdateTail()
     end
     local now = CometNow()
     Trace(now, mapID, x, y)
-    local lc = tail.lc
-    DrawComet(now, p, lc, x, y)
-    -- inside the area you're in, the comet is the line to your arrow
-    if lc and Linger.InPoly(lc.poly, (tail.x + x) / 2, (tail.y + y) / 2) then l:Hide() return end
+    local clips = tail.clips
+    DrawComet(now, p, clips, x, y)
+    -- inside an area, the comet is the line to your arrow: this line shows
+    -- only as much as the area lets the trail show there
+    local k = clips and ClipK(clips, (tail.x + x) / 2, (tail.y + y) / 2) or 1
+    if k <= 0.01 then l:Hide() return end
     l:SetThickness(tail.thick)
-    l:SetColorTexture(faction.r, faction.g, faction.b, 0.95)
+    l:SetColorTexture(faction.r, faction.g, faction.b, 0.95 * k)
     local w, h = overlay:GetWidth(), overlay:GetHeight()
     l:SetStartPoint("TOPLEFT", overlay, (p.ox + tail.x * p.sx) * w, -(p.oy + tail.y * p.sy) * h)
     l:SetEndPoint("TOPLEFT", overlay, (p.ox + x * p.sx) * w, -(p.oy + y * p.sy) * h)
@@ -1336,7 +1353,7 @@ local function SetTail(D, scene)
     for _, e in ipairs(scene.zones) do
         if e.p.mapID == cur.map then
             tail.stroke, tail.p, tail.x, tail.y = s, e.p, s[#s - 1], s[#s]
-            tail.lc = s.ts and e.lg and e.lg.live
+            tail.clips = s.ts and e.lg and e.lg.settled
             tail.thick = e.p.far and D.w * 0.0012 or D.w * 0.0022
             return
         end
@@ -2432,7 +2449,7 @@ local function Draw(scene, limit)
     local D = { w = overlay:GetWidth(), h = overlay:GetHeight(), now = time(), replay = limit and true,
         nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0, ntag = 0, nair = 0 }
     local L = cfg.layers
-    tail.stroke, tail.p, tail.lc = nil, nil, nil
+    tail.stroke, tail.p, tail.clips = nil, nil, nil
     for i = #shimmer, 1, -1 do shimmer[i] = nil end
     for i = #twinkle, 1, -1 do twinkle[i] = nil end
 
