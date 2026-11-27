@@ -4,9 +4,9 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3: release prepared 2026-11-26 (from branch `areas-merge`; installed in game as 3.8.3-test15)
+## 3.8.3: released 2026-11-26 (tag on `8d4b3d9`; CI run 45938193545 uploaded to CurseForge, "Success!", and GitHub Releases; listed on the files page)
 
-Changelog, `NEW_IN` and version written; not yet tagged or published. The checks below that Joe hasn't confirmed ship unconfirmed unless he says otherwise.
+The checks below that Joe hadn't confirmed shipped unconfirmed; check them in game on the release.
 
 Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN`, changelog and release version are written.
 
