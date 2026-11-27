@@ -4,7 +4,7 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## Spirit healers on the map (3.8.4): installed as 3.8.4-test4 (2026-11-26, commit `26da87c`, by script; test3 `ea48dd9`, test2 `aa11ef5`, test1 `e937987`)
+## Spirit healers on the map (3.8.4): installed as 3.8.4-test5 (2026-11-26, commit `653e76b`, by script; test4 `26da87c`, test3 `ea48dd9`, test2 `aa11ef5`, test1 `e937987`)
 
 Joe asked (2026-11-26) for the backlog's "Spirit healers on the map", noting whether each is shared, Horde or Alliance, on the corpse runs layer. His picks: faction from **both** a built-in list and what his characters learn; shown **always, quiet**. Built as `Spirits.lua` (new file: a full restart, not `/reload`). Details in `how-it-works.md` (Runs layer, Spirit healers).
 
