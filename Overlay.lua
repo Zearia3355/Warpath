@@ -103,7 +103,7 @@ function Overlay.Show(o)
     -- the previous tier's sound stops first
     if sound and StopSound then pcall(StopSound, sound) sound = nil end
     local snd = o.sound and SOUNDS[o.sound]
-    if snd and cfg.sound and not cfg.quiet then
+    if snd and cfg.sound then
         local id = (SOUNDKIT and SOUNDKIT[snd[1]]) or snd[2]
         local ok, will, handle = pcall(PlaySound, id, "Master")
         if ok and will then sound = handle end

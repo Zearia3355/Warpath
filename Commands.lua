@@ -252,11 +252,14 @@ function H.share(arg)
     Redraw()
 end
 
+-- 3.8.3: quiet mode is no longer a setting of its own, just a shortcut for
+-- "Announce on screen" and "Play sounds" (Settings, Alerts).
 function H.quiet(arg)
-    local v = OnOff(arg, cfg.quiet)
+    local v = OnOff(arg, not cfg.announce and not cfg.sound)
     if v == nil then Print("usage: /warpath quiet [on|off]") return end
-    cfg.quiet = v
-    Print(cfg.quiet and "quiet: banners become chat lines, sounds off." or "banners and sounds back on.")
+    cfg.announce, cfg.sound = not v, not v
+    Print(v and "quiet: no on-screen announcements (they go to chat) and no sounds."
+        or "on-screen announcements and sounds back on.")
 end
 
 function H.sound(arg)
@@ -311,15 +314,13 @@ function H.overlay(arg)
             r = fac.r, g = fac.g, b = fac.b, sound = "triple" })
         return
     end
-    local v = OnOff(arg, cfg.overlay)
-    if v == nil then Print("usage: /warpath overlay [on|off|test]") return end
-    cfg.overlay = v
-    Print("big text for multi-kills and streaks " .. State(v) .. ".")
+    -- 3.8.3: big text has no switch of its own; it comes with announcing
+    Print("big text shows with \"Announce on screen\" (Settings, Alerts). /warpath overlay test shows a sample.")
 end
 
 function H.setup()
     local ok, err = pcall(ShowSetup, false)
-    if not ok then Print("the options window failed to open: " .. tostring(err)) end
+    if not ok then Print("the settings failed to open: " .. tostring(err)) end
 end
 
 -- 3.7.6: today's trail is a fixed 15 minutes, so only long memory is set
@@ -533,13 +534,13 @@ local LIST = {
     { nil,         "shot all|notable",              "every kill, or notable kills only",  "Kill screenshots" },
     { nil,         "shot caption text|strip|none",  "the caption in the picture",         "Kill screenshots" },
     { nil,         "shot test",                     "take a test screenshot",             "Kill screenshots" },
-    { "share",     "share [on|off]",                "share sightings, kills and deaths with your guild", "Guild sharing", false, H.share },
+    { "share",     "share [on|off]",                "guild sharing, both ways: sightings, kills and deaths", "Guild sharing", false, H.share },
     { nil,         "share test",                    "send a test ping",                   "Guild sharing" },
     { nil,         "share history [on|off]",        "share your battle haze with guildmates", "Guild sharing" },
     { nil,         "share sync",                    "ask guildmates for their battle history again", "Guild sharing" },
-    { "quiet",     "quiet [on|off]",                "banners become chat lines, no sounds", "Alerts", false, H.quiet },
+    { "quiet",     "quiet [on|off]",                "no on-screen announcements (chat instead) and no sounds", "Alerts", false, H.quiet },
     { "sound",     "sound [on|off]",                "sounds only",                        "Alerts", false, H.sound },
-    { "overlay",   "overlay [on|off|test]",         "big text for your multi-kills and streaks", "Alerts", false, H.overlay },
+    { "overlay",   "overlay test",                  "a sample of the big text for multi-kills", "Alerts", false, H.overlay },
     { "chat",      "chat [on|off]",                 "your own kills and deaths in chat", "Alerts", false, H.chat },
     { "fields",    "fields [on|off]",               "dangerous-ground warnings", "Alerts", false, H.fields },
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },

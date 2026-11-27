@@ -119,6 +119,9 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
                     share = db.share or false, quiet = db.quiet or false,
                     sound = db.sound ~= false, hudShown = db.hudShown ~= false,
                 }
+                -- 3.8.3: a brand-new install takes the default (sharing on);
+                -- an older character's settings keep theirs (off if never set)
+                if next(db.maps) == nil and db.share == nil then gdb.cfg.share = nil end
             end
             cfg = gdb.cfg
             ns.cfg = cfg
@@ -143,6 +146,14 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             if cfg.groundScreen == nil and cfg.fieldAlert == false then
                 cfg.groundScreen, cfg.groundChat = false, false
             end
+            -- 3.8.3: quiet mode and the big-text switch became "Announce on
+            -- screen". Quiet mode also stopped sounds and the zone line, so an
+            -- account that had it on keeps all three off. Settings only.
+            if cfg.announce == nil and cfg.quiet ~= nil then
+                cfg.announce = not cfg.quiet
+                if cfg.quiet then cfg.sound, cfg.zoneText = false, false end
+            end
+            cfg.quiet, cfg.overlay = nil, nil
             for k, v in pairs(C.CFG_DEFAULTS) do
                 if cfg[k] == nil then cfg[k] = v end
             end

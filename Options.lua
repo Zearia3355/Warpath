@@ -1,11 +1,11 @@
 -- Warpath: Options
--- The options window, with tabs: General, Map, Screenshots, Chronicle & zones, Grudges.
--- /warpath setup, the minimap button's right-click, or the chronicle's
--- Settings button. After each install or update the chronicle opens on its
--- Warpath tab instead (3.8.3): a welcome and what's new (NEW_IN, below).
+-- What's new in each release (NEW_IN), and the settings: from 3.8.3 a tab
+-- of the chronicle (/warpath setup, the minimap button's right-click), not a
+-- window of their own. After each install or update the chronicle opens on
+-- its Warpath tab: a welcome and what's new.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
-local Print, VERSION, UpdateHUD = ns.Print, ns.VERSION, ns.UpdateHUD
+local Print, VERSION, UpdateHUD, UISound = ns.Print, ns.VERSION, ns.UpdateHUD, ns.UISound
 
 local db, gdb, cfg, faction
 ns.OnBind(function() db, gdb, cfg, faction = ns.db, ns.gdb, ns.cfg, ns.faction end)
@@ -32,19 +32,27 @@ local NEW_IN = {
   { "3.8.2", {
     "Inside the area you're lingering in, only a short tail of trail shows behind you, not a scribble of the last 45 seconds.",
   } },
-  { "3.8.3", {
-    "What's new now lives in your chronicle, on its Warpath tab, with a welcome page and a Settings button. The book opens there after each update, instead of the settings window.",
-    "World map: one score for each continent. Continent maps: a small score for each zone. Blue when you're ahead, yellow when it's close, red when you're behind.",
-    "A zone's own map shows its score in the top-left corner.",
-    "Where pins crowd on continent and world maps, they combine into one larger sword or skull. Hover it to see how many, and how many were yours.",
-    "Older trail is easier to follow: it stays crimson in long dashes with a dark edge, stays solid through sharp turns, and where you went the same way twice only the newer pass shows. Along roads it fades after 10 minutes, so the roads read clean.",
+  { "3.8.3", title = "Scores, a clearer trail, settings in this book", {
+    "## On the map",
+    "Scores everywhere: one for each continent on the world map, one for each zone on continent maps, and a zone's own in its map's corner. Blue when you're ahead, yellow when it's close, red when you're behind.",
+    "Where pins crowd on continent and world maps, they combine into one larger sword or skull. Hover it for how many, and how many were yours.",
+    "Flight paths on Kalimdor and Eastern Kingdoms are thinner and smoother.",
+    "In a battleground your other maps still show your war; only the battleground's own map stays clean.",
+    "## Your trail",
+    "Older trail stays crimson in long dashes with a dark edge, solid through sharp turns. Where you went the same way twice, only the newer pass shows.",
+    "Along roads your trail fades after 10 minutes, so the roads read clean.",
     "Inside the area you're lingering in, the short tail behind you fades out like a comet instead of ending sharply.",
-    "Flight paths on Kalimdor and Eastern Kingdoms are thinner and smoother, with no doubled lines side by side.",
-    "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their time labels are yellow on a dark patch and stay readable longer, and older areas' outlines are drawn like the trail so they stay easy to see.",
-    "Dangerous-ground warnings stay up long enough to read.",
-    "A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too).",
-    "The map button no longer prints a chat line when clicked.",
-    "In a battleground your map still shows your war everywhere else; only the battleground's own map stays clean. The map button, minimap button and chronicle work there too.",
+    "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their labels stay readable longer.",
+    "## This book",
+    "Settings live here now, on the Settings tab, in plain words. The separate options window is gone.",
+    "What's new opens here after each update. Campaigns list their deeds by zone, and grudges their encounters by day.",
+    "## Settings that changed",
+    "\"Announce on screen\" replaces the banner, big-text and quiet switches. If you had quiet mode on, announcing, sounds and the zone line stay off.",
+    "Guildmates' kill and death lines in chat can be turned off without turning off sharing.",
+    "Recent flights get their own length on the map, beside corpse runs.",
+    "Guild sharing starts on for new players. Yours stays as you set it, with a switch on this page.",
+    "## Fixes",
+    "Dangerous-ground warnings stay up long enough to read. A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too). The map button no longer prints a chat line.",
     "/killshot and /pks are gone; use /warpath shot.",
   } },
 }
@@ -57,532 +65,505 @@ local function Unseen(seen)
     local out = {}
     for _, rel in ipairs(NEW_IN) do
         if not seen or Older(seen, rel[1]) then
-            for _, line in ipairs(rel[2]) do out[#out + 1] = { rel[1], line } end
+            for _, line in ipairs(rel[2]) do
+                if line:sub(1, 3) ~= "## " then out[#out + 1] = { rel[1], line } end -- "## ": a topic
+            end
         end
     end
     while #out > NEW_MAX do table.remove(out, 1) end
     return out
 end
 ns.NewIn = { Older = Older, Unseen = Unseen, List = NEW_IN } -- List: for the chronicle
-local TABS = { "General", "Map", "Screenshots", "Chronicle & zones", "Grudges" }
 local HOURS = { { 1, "1h" }, { 6, "6h" }, { 24, "24h" }, { 48, "48h" } }
 local TRAIL = {}
 for i, m in ipairs(C.TRAIL_MIN_CHOICES) do TRAIL[i] = { m, m < 60 and (m .. "m") or ((m / 60) .. "h") } end
 
-local function MakeCheck(parent, label, hint)
-    local cb = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    cb:SetSize(24, 24)
-    cb.label = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    cb.label:SetPoint("LEFT", cb, "RIGHT", 4, 1)
-    cb.label:SetText(label)
-    if hint then
-        cb.hint = parent:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-        cb.hint:SetPoint("TOPLEFT", cb.label, "BOTTOMLEFT", 0, -2)
-        cb.hint:SetWidth(470)
-        cb.hint:SetJustifyH("LEFT")
-        cb.hint:SetText(hint)
+---------------------------------------------------------------------------
+-- Settings (3.8.3): a tab of the chronicle, replacing the options window.
+-- Left page: the sections. Right page: the open section's controls, built
+-- from SPEC below. Every change applies at once; "Restore defaults" resets
+-- the open section only (after a confirm).
+---------------------------------------------------------------------------
+
+local SECTIONS = {
+    { "alerts",  "Alerts",         "What happens when you kill, die, or walk into danger" },
+    { "map",     "Map",            "What the world map shows, and for how long" },
+    { "guild",   "Guild",          "Your war shared with guildmates, and theirs with you" },
+    { "shots",   "Screenshots",    "Kill screenshots and their captions" },
+    { "zones",   "Zones & panels", "Zone stats, the war table, the minimap button, this book" },
+    { "grudges", "Grudges",        "Grudge alerts, and making grudges" },
+}
+local OLD_TABS = { "alerts", "map", "shots", "zones", "grudges" } -- the options window's tab numbers
+
+local function Path(t, path)
+    for k in path:gmatch("[^.]+") do
+        if type(t) ~= "table" then return nil end
+        t = t[k]
     end
-    return cb
+    return t
 end
 
-local function MakeRadios(parent, label, options, labelWidth)
-    local group = { buttons = {}, value = nil }
-    group.label = parent:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    group.label:SetText(label)
-    local prev
-    for i, opt in ipairs(options) do
-        local rb = CreateFrame("CheckButton", nil, parent, "UIRadioButtonTemplate")
-        rb.value = opt[1]
-        rb.text2 = parent:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        rb.text2:SetPoint("LEFT", rb, "RIGHT", 3, 0)
-        rb.text2:SetText(opt[2])
-        if prev then
-            rb:SetPoint("LEFT", prev.text2, "RIGHT", 14, 0)
-        else
-            rb:SetPoint("LEFT", group.label, "LEFT", labelWidth or 130, 0)
-        end
-        rb:SetScript("OnClick", function() group:Set(rb.value) end)
-        group.buttons[i] = rb
-        prev = rb
+local function Put(t, path, v)
+    local keys = {}
+    for k in path:gmatch("[^.]+") do keys[#keys + 1] = k end
+    for i = 1, #keys - 1 do
+        t[keys[i]] = t[keys[i]] or {}
+        t = t[keys[i]]
     end
-    function group:Set(v)
-        self.value = v
-        for _, b in ipairs(self.buttons) do b:SetChecked(b.value == v) end
-        if self.onChange then self.onChange(v) end
-    end
-    function group:SetEnabled(on)
-        for _, b in ipairs(self.buttons) do
-            if on then b:Enable() else b:Disable() end
-            b.text2:SetTextColor(on and 1 or 0.5, on and 1 or 0.5, on and 1 or 0.5)
-        end
-        self.label:SetTextColor(on and 1 or 0.5, on and 0.82 or 0.5, on and 0 or 0.5)
-    end
-    return group
+    t[keys[#keys]] = v
 end
 
-local function SetupLoad(s, c)
-    s.banners:SetChecked(not c.quiet)
-    s.sound:SetChecked(c.sound)
-    s.overlay:SetChecked(c.overlay)
-    s.selfChat:SetChecked(c.selfChat)
-    s.overlaySize:Set(c.overlaySize)
-    s.groundScreen:SetChecked(c.groundScreen)
-    s.groundChat:SetChecked(c.groundChat)
-    s.groundAfter:Set(c.groundAfter)
-    s.hud:SetChecked(c.hudShown)
-    s.minimap:SetChecked(not (c.minimap and c.minimap.hide))
-    s.share:SetChecked(c.share)
-    s.shareHistory:SetChecked(c.shareHistory)
-    s.shown:SetChecked(c.shown)
-    s.showAll:SetChecked(c == cfg and S.showAll or false)
-    for key, cb in pairs(s.layers) do cb:SetChecked(c.layers[key]) end
-    s.guildHaze:SetChecked(c.guildHaze)
-    s.iconScale.Set(c.iconScale or 100)
-    s.shimmer:SetChecked(c.shimmer)
-    s.trailMin:Set(c.trailMin)
-    s.runHours:Set(c.runHours)
-    s.shotOn:SetChecked(c.shot.on)
-    s.which:Set(c.shot.mode)
-    s.caption:Set(c.shot.card)
-    s.zoneChat:SetChecked(c.zoneChat)
-    s.zoneText:SetChecked(c.zoneText)
-    s.chronLogin:SetChecked(c.chronLogin)
-    s.chronOpen:SetChecked(c.chronOpen)
-    local g = c.grudge
-    s.gAlert:SetChecked(g.alert)
-    s.gAgain:Set(g.again)
-    s.gMap:SetChecked(g.map)
-    s.gPlates:SetChecked(g.plates)
-    s.gAfter:Set(g.after)
-    s.gAuto:Set(g.auto)
+local function Defaults()
+    local d = { layers = {}, shot = {}, grudge = {} }
+    for _, name in ipairs(C.LAYERS) do d.layers[name] = true end
+    for k, v in pairs(C.SHOT_DEFAULTS) do d.shot[k] = v end
+    for k, v in pairs(C.CFG_DEFAULTS) do d[k] = v end
+    for k, v in pairs(C.GRUDGE_DEFAULTS) do d.grudge[k] = v end
+    return d
 end
 
-local function On(cb) return cb:GetChecked() and true or false end
-
-local function SetupSave(s)
-    cfg.quiet = not s.banners:GetChecked()
-    cfg.sound = On(s.sound)
-    cfg.overlay = On(s.overlay)
-    cfg.selfChat = On(s.selfChat)
-    cfg.overlaySize = s.overlaySize.value or "medium"
-    cfg.groundScreen, cfg.groundChat = On(s.groundScreen), On(s.groundChat)
-    cfg.groundAfter = s.groundAfter.value or 2
+local function GroundChanged()
     cfg.fieldAlert = cfg.groundScreen or cfg.groundChat
     if ns.Ground then ns.Ground.Forget() end
-    cfg.hudShown = On(s.hud)
-    ns.Minimap.SetShown(On(s.minimap))
-    cfg.share = On(s.share)
-    cfg.shareHistory = On(s.shareHistory)
-    cfg.shown = On(s.shown)
-    if S.showAll ~= On(s.showAll) then S.showAll = On(s.showAll) S.dirty = true end
-    for key, cb in pairs(s.layers) do cfg.layers[key] = On(cb) end
-    cfg.guildHaze = On(s.guildHaze)
-    cfg.iconScale = s.iconScale.value or 100
-    cfg.shimmer = On(s.shimmer)
-    cfg.trailMin = s.trailMin.value or cfg.trailMin or 60
-    cfg.runHours = s.runHours.value or 24
-    cfg.shot.on = On(s.shotOn)
-    cfg.shot.mode = s.which.value or "all"
-    cfg.shot.card = s.caption.value or "text"
-    cfg.zoneChat = On(s.zoneChat)
-    cfg.zoneText = On(s.zoneText)
-    cfg.chronLogin = On(s.chronLogin)
-    cfg.chronOpen = On(s.chronOpen)
-    local g = cfg.grudge
-    g.alert, g.map, g.plates = On(s.gAlert), On(s.gMap), On(s.gPlates)
-    g.again, g.auto, g.after = s.gAgain.value or 1, s.gAuto.value or "off", s.gAfter.value or 3
-    ns.Grudge.RefreshMarks()
+end
+
+local function ShareChanged()
+    if cfg.share then return end
+    for i = #ns.shared, 1, -1 do ns.shared[i] = nil end
+    for i = #ns.outQ, 1, -1 do ns.outQ[i] = nil end
+end
+
+local function On(path) return function() return Path(cfg, path) and true or false end end
+
+-- Kinds: topic, note, check, pair (two checks on a row), radios, layers,
+-- icons. when: the row is greyed out unless it's true. after: runs on a change.
+local LAYER_HINT = { battle = "where fighting happened", roads = "the ways you travel most",
+    sightings = "the last few minutes" }
+local SPEC = {
+    alerts = {
+        { "topic", "Your kills and deaths" },
+        { "check", "announce", "Announce on screen", "A line at the top of the screen for each kill, and big text for multi-kills and streaks. Off: they go to chat instead." },
+        { "radios", "overlaySize", "Big text", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } }, indent = 24, when = On("announce") },
+        { "check", "selfChat", "Also in chat", "One line for each kill or death, worded as your guild sees it." },
+        { "topic", "Sound" },
+        { "check", "sound", "Play sounds", "For kills, dangerous ground and grudge sightings, and this book's pages." },
+        { "topic", "Dangerous ground" },
+        { "note", "A warning when you walk where you've died before: dangerous, contested, or your hunting ground." },
+        { "pair", { "groundScreen", "Warn on screen" }, { "groundChat", "Warn in chat" }, after = GroundChanged },
+        { "radios", "groundAfter", "After", { { 1, "1 death" }, { 2, "2 deaths" }, { 3, "3 deaths" } }, indent = 24,
+            after = GroundChanged, when = function() return cfg.groundScreen or cfg.groundChat end },
+    },
+    map = {
+        { "check", "shown", "Show Warpath on the world map", "Same as the crossed swords on the map. Warpath keeps recording either way." },
+        { "topic", "Layers" },
+        { "layers" },
+        { "icons" },
+        { "topic", "Keep on the map for" },
+        { "radios", "trailMin", "Today's trail", TRAIL, lw = 86, gap = 7 },
+        { "radios", "runHours", "Corpse runs", HOURS, lw = 86 },
+        { "radios", "flightHours", "Recent flights", HOURS, lw = 86 },
+    },
+    guild = {
+        { "check", "share", "Guild sharing", "Works both ways: guildmates' kills, deaths and enemy sightings on your map, and yours on theirs. Only between guildmates who have it on. Never your trail.", after = ShareChanged },
+        { "check", "shareHistory", "Share my battle history", "Your battle haze, sent at login, so guildmates' maps show where you've fought.", indent = 24, when = On("share") },
+        { "check", "guildChat", "Guildmates' kills and deaths in chat", "One line each. Their pins stay on the map either way.", indent = 24, when = On("share") },
+    },
+    shots = {
+        { "check", "shot.on", "Screenshot my kills", "Saved to the game's Screenshots folder." },
+        { "radios", "shot.mode", "Which kills", { { "all", "Every kill" }, { "notable", "Notable only" } }, lw = 70, indent = 24, when = On("shot.on") },
+        { "note", "Notable: a first kill of a player, grudges, avenged deaths, streaks of 3, 5 and every 10, and anyone you've killed 5 or more times.", indent = 24 },
+        { "radios", "shot.card", "Caption", { { "text", "Floating text" }, { "strip", "Caption strip" }, { "none", "None" } }, lw = 70, indent = 24, when = On("shot.on") },
+        { "note", "/warpath shot test takes a test picture." },
+    },
+    zones = {
+        { "topic", "Entering a zone" },
+        { "check", "zoneChat", "A line in chat with my history there", "Kills, deaths, miles, sightings, best streak and rank." },
+        { "check", "zoneText", "A line under the zone's name" },
+        { "topic", "On screen" },
+        { "check", "hudShown", "War table", "A small panel: enemies seen lately, dangerous ground nearby, and the skull for making a grudge." },
+        { "check", "minimap", "Minimap button", "Click opens this book; right-click opens Settings." },
+        { "topic", "This book" },
+        { "check", "chronLogin", "Last campaign's headline in chat at login" },
+        { "check", "chronOpen", "Open this book at login" },
+        { "note", "Both only when a new campaign starts (after two hours or more away) and the last one had fighting." },
+    },
+    grudges = {
+        { "topic", "When I see a grudge" },
+        { "check", "grudge.alert", "Announce it, with a sound" },
+        { "radios", "grudge.again", "Again after", { { 1, "1 min" }, { 5, "5 min" }, { 15, "15 min" } }, indent = 24, when = On("grudge.alert") },
+        { "check", "grudge.map", "Show where on the map", "Their crest and name, for 15 minutes." },
+        { "check", "grudge.plates", "Skull on their nameplate and target frame" },
+        { "topic", "Making grudges" },
+        { "note", "When the same player keeps killing me:", ink = true },
+        { "radios", "grudge.auto", nil, { { "off", "Do nothing" }, { "offer", "Offer a grudge" }, { "add", "Add one" } } },
+        { "radios", "grudge.after", "after", { { 2, "2 deaths" }, { 3, "3 deaths" }, { 5, "5 deaths" } }, lw = 40,
+            when = function() return cfg.grudge.auto ~= "off" end },
+        { "note", "Killing a grudge settles it. A name leaves your ledger only when you forgive it, on the Grudges tab." },
+    },
+}
+
+-- The minimap button keeps its own saved shape.
+local SPECIAL = {
+    minimap = { get = function() return ns.Minimap.Shown() end, set = function(v) ns.Minimap.SetShown(v) end, def = true },
+}
+
+local function Getter(path)
+    if SPECIAL[path] then return SPECIAL[path].get end
+    return function() return Path(cfg, path) end
+end
+local function Setter(path)
+    if SPECIAL[path] then return SPECIAL[path].set end
+    return function(v) Put(cfg, path, v) end
+end
+local function Default(path)
+    if SPECIAL[path] then return SPECIAL[path].def end
+    return Path(Defaults(), path)
+end
+
+local K -- the chronicle's kit: Font, Topic, Diamond, Ornament, colours, INNER
+local P = { section = "alerts", panels = {}, items = {} }
+
+local function Apply()
+    if ns.Grudge then ns.Grudge.RefreshMarks() end
     if S.hud then S.hud:SetShown(cfg.hudShown and not S.inInstance) end
     UpdateHUD()
     S.dirty = true
     ns.Redraw()
 end
 
-local function DefaultsView()
-    local view = { layers = {}, shot = {} }
-    for _, name in ipairs(C.LAYERS) do view.layers[name] = true end
-    for k, v in pairs(C.SHOT_DEFAULTS) do view.shot[k] = v end
-    for k, v in pairs(C.CFG_DEFAULTS) do view[k] = v end
-    view.minimap = { hide = false }
-    view.grudge = {}
-    for k, v in pairs(C.GRUDGE_DEFAULTS) do view.grudge[k] = v end
-    return view
+local function Grey(fs, on, color)
+    color = on and (color or K.INK) or K.GREY
+    fs:SetTextColor(color[1], color[2], color[3])
 end
 
--- A panel's controls are placed top to bottom; y counts down from its top.
-local function Layout(panel)
-    local L = { y = 0 }
-    function L.Heading(text)
-        local h = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        h:SetPoint("TOPLEFT", 0, -L.y)
-        h:SetText(text)
-        L.y = L.y + 20
-    end
-    function L.Place(widget, x, dy)
-        widget:SetPoint("TOPLEFT", x or 0, -L.y)
-        L.y = L.y + (dy or 26)
-    end
-    function L.Radios(group, dy)
-        group.label:SetPoint("TOPLEFT", 28, -(L.y + 4))
-        L.y = L.y + (dy or 22)
-    end
-    return L
+-- Text height once wrapped to `width`: the client measures 0 before a
+-- string is drawn and the stub never wraps, so whichever is taller.
+local function Tall(fs, width, line)
+    local n = math.max(1, math.ceil((fs:GetStringWidth() or 0) / width))
+    return math.max(fs:GetStringHeight() or 0, n * line)
 end
 
--- Tabs are drawn by hand (gold text and underline when selected) rather
--- than from a Blizzard tab template: the template names differ between
--- client versions, and a missing one left plain red buttons.
-local function SelectTab(s, id)
-    s.tab = id
-    for i, panel in ipairs(s.panels) do panel:SetShown(i == id) end
-    for i, t in ipairs(s.tabs) do
-        local on = i == id
-        t.text:SetTextColor(on and 1 or 0.72, on and 0.82 or 0.72, on and 0 or 0.72)
-        t.line:SetShown(on)
-        t.bg:SetColorTexture(1, 0.82, 0, on and 0.10 or 0.03)
+local function MakeCheck(panel, x, y, label, hint)
+    local cb = CreateFrame("CheckButton", nil, panel, "UICheckButtonTemplate")
+    cb:SetSize(22, 22)
+    cb:SetPoint("TOPLEFT", x, -y)
+    cb.label = K.Font(panel, QuestFont, GameFontHighlight, K.INK)
+    cb.label:SetPoint("LEFT", cb, "RIGHT", 2, 1)
+    cb.label:SetText(label)
+    local h = 24
+    if hint then
+        local w = K.INNER - (x - 32) - 24
+        cb.hint = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+        cb.hint:SetPoint("TOPLEFT", x + 24, -(y + 21))
+        cb.hint:SetWidth(w)
+        cb.hint:SetSpacing(1)
+        cb.hint:SetText(hint)
+        h = 24 + Tall(cb.hint, w, 13) + 4
     end
+    return cb, h
 end
 
-local function MakeTabs(s)
-    s.tabBar = CreateFrame("Frame", nil, s)
-    s.tabBar:SetHeight(26)
-    local rule = s.tabBar:CreateTexture(nil, "ARTWORK")
-    rule:SetColorTexture(0.62, 0.50, 0.28, 0.6)
-    rule:SetHeight(1)
-    rule:SetPoint("BOTTOMLEFT")
-    rule:SetPoint("BOTTOMRIGHT")
-    s.tabs = {}
-    local x = 0
-    for i, name in ipairs(TABS) do
-        local t = CreateFrame("Button", nil, s.tabBar)
-        t.text = t:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        t.text:SetPoint("CENTER", 0, 1)
-        t.text:SetText(name)
-        local w = math.max(70, math.floor((t.text:GetStringWidth() or 60) + 28))
-        t:SetSize(w, 26)
-        t:SetPoint("BOTTOMLEFT", x, 1)
-        x = x + w + 4
-        t.bg = t:CreateTexture(nil, "BACKGROUND")
-        t.bg:SetAllPoints()
-        t.line = t:CreateTexture(nil, "ARTWORK")
-        t.line:SetColorTexture(1, 0.82, 0, 1)
-        t.line:SetHeight(2)
-        t.line:SetPoint("BOTTOMLEFT", 0, -1)
-        t.line:SetPoint("BOTTOMRIGHT", 0, -1)
-        local hl = t:CreateTexture(nil, "HIGHLIGHT")
-        hl:SetAllPoints()
-        hl:SetColorTexture(1, 0.82, 0, 0.08)
-        t:SetScript("OnClick", function()
-            if s.tab ~= i then ns.UISound("IG_CHARACTER_INFO_TAB", 841) end
-            SelectTab(s, i)
+local function MakeRadios(panel, x, y, label, opts, lw, gap)
+    local g = { buttons = {} }
+    local start = x
+    if label then
+        g.label = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+        g.label:SetPoint("TOPLEFT", x, -(y + 4))
+        g.label:SetText(label)
+        start = x + (lw or 80)
+    end
+    local prev
+    for i, opt in ipairs(opts) do
+        local rb = CreateFrame("CheckButton", nil, panel, "UIRadioButtonTemplate")
+        rb:SetSize(16, 16)
+        rb.value = opt[1]
+        rb.text2 = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.INK)
+        rb.text2:SetPoint("LEFT", rb, "RIGHT", 2, 0)
+        rb.text2:SetText(opt[2])
+        if prev then rb:SetPoint("LEFT", prev.text2, "RIGHT", gap or 10, 0) else rb:SetPoint("TOPLEFT", start, -(y + 2)) end
+        g.buttons[i] = rb
+        prev = rb
+    end
+    return g, 24
+end
+
+-- One control, bound to a saved path.
+local function Bind(item, widget, path, after)
+    local get, set = Getter(path), Setter(path)
+    item.refresh = item.refresh or {}
+    item.paths = item.paths or {}
+    table.insert(item.paths, path)
+    if widget.buttons then
+        for _, rb in ipairs(widget.buttons) do
+            rb:SetScript("OnClick", function()
+                set(rb.value)
+                if after then after() end
+                Apply()
+                P.Refresh()
+            end)
+        end
+        table.insert(item.refresh, function(on)
+            local v = get()
+            for _, rb in ipairs(widget.buttons) do
+                rb:SetChecked(rb.value == v)
+                if on then rb:Enable() else rb:Disable() end
+                Grey(rb.text2, on)
+            end
+            if widget.label then Grey(widget.label, on, K.FADED) end
         end)
-        s.tabs[i] = t
+        return
     end
-end
-
-local function BuildGeneral(s, panel)
-    local L = Layout(panel)
-    L.Heading("ALERTS")
-    s.banners = MakeCheck(panel, "Raid-warning banners and sounds")
-    s.sound = MakeCheck(panel, "Sounds")
-    s.banners:SetPoint("TOPLEFT", 0, -L.y)
-    s.sound:SetPoint("TOPLEFT", 250, -L.y)
-    L.y = L.y + 26
-    s.overlay = MakeCheck(panel, "Big text on screen")
-    s.selfChat = MakeCheck(panel, "My kills and deaths in chat")
-    s.overlay:SetPoint("TOPLEFT", 0, -L.y)
-    s.selfChat:SetPoint("TOPLEFT", 250, -L.y)
-    L.y = L.y + 24
-    s.overlaySize = MakeRadios(panel, "Big text size", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } })
-    L.Radios(s.overlaySize, 26)
-    s.groundScreen = MakeCheck(panel, "Ground warnings on screen")
-    s.groundChat = MakeCheck(panel, "Ground warnings in chat")
-    s.groundScreen:SetPoint("TOPLEFT", 0, -L.y)
-    s.groundChat:SetPoint("TOPLEFT", 250, -L.y)
-    L.y = L.y + 24
-    s.groundAfter = MakeRadios(panel, "Warn after", { { 1, "1 death" }, { 2, "2 deaths" }, { 3, "3 deaths" } })
-    L.Radios(s.groundAfter, 28)
-    L.Heading("WAR TABLE AND MINIMAP")
-    s.hud = MakeCheck(panel, "War table panel")
-    s.minimap = MakeCheck(panel, "Minimap button")
-    s.hud:SetPoint("TOPLEFT", 0, -L.y)
-    s.minimap:SetPoint("TOPLEFT", 250, -L.y)
-    L.y = L.y + 32
-    L.Heading("GUILD AND PARTY")
-    s.share = MakeCheck(panel, "Share enemy sightings, my kills and my PvP deaths",
-        "Map positions, plus the names on kill lines. Never your trail. Each player turns it on.")
-    L.Place(s.share, 0, 42)
-    s.shareHistory = MakeCheck(panel, "Share my battle history with guildmates",
-        "Your battle haze, so their maps show where you've fought. Needs sharing on.")
-    L.Place(s.shareHistory, 0, 42)
+    widget:SetScript("OnClick", function(self)
+        local v = self:GetChecked() and true or false
+        set(v)
+        UISound(v and "IG_MAINMENU_OPTION_CHECKBOX_ON" or "IG_MAINMENU_OPTION_CHECKBOX_OFF", 856)
+        if after then after() end
+        Apply()
+        P.Refresh()
+    end)
+    table.insert(item.refresh, function(on)
+        widget:SetChecked(get() and true or false)
+        if on then widget:Enable() else widget:Disable() end
+        Grey(widget.label, on)
+        if widget.hint then Grey(widget.hint, on, K.FADED) end
+    end)
 end
 
 -- "Map icon size": a slider (25%-200%, steps of 5), or -/+ buttons where
 -- the client has no slider template. Changes show at once on an open map.
-local function IconSize(panel, x, y)
-    local ctl = { value = 100 }
-    local label = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    label:SetPoint("TOPLEFT", x + 4, -y)
-    local function Apply(v, fromUser)
+local function IconSize(panel, item, x, y)
+    local label = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+    label:SetPoint("TOPLEFT", x, -(y + 4))
+    label:SetText("Map icon size")
+    local value = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.INK)
+    local function Show(v, fromUser)
         v = math.max(25, math.min(200, math.floor(v / 5 + 0.5) * 5))
-        ctl.value = v
-        label:SetText(("Map icon size: %d%%"):format(v))
+        value:SetText(("%d%%"):format(v))
         if fromUser then
             cfg.iconScale = v
             if ns.RescalePins then ns.RescalePins() end
         end
-        return v
     end
     local ok, sl = pcall(CreateFrame, "Slider", "WarpathIconSize", panel, "OptionsSliderTemplate")
     -- a client without the template still makes a bare, invisible slider: check for its thumb
     if ok and sl and not (sl.GetThumbTexture and sl:GetThumbTexture()) then sl:Hide() sl = nil end
+    local set
     if ok and sl then
-        sl:SetPoint("TOPLEFT", x + 6, -(y + 16))
-        sl:SetWidth(200)
+        sl:SetPoint("TOPLEFT", x + 92, -(y + 2))
+        sl:SetWidth(170)
         sl:SetMinMaxValues(25, 200)
         sl:SetValueStep(5)
         if sl.SetObeyStepOnDrag then sl:SetObeyStepOnDrag(true) end
         for _, part in ipairs({ "Low", "High", "Text" }) do
             local fs = _G["WarpathIconSize" .. part] or sl[part]
-            if fs then fs:SetText(part == "Low" and "25%" or part == "High" and "200%" or "") end
+            if fs then fs:SetText("") end
         end
-        sl:SetScript("OnValueChanged", function(_, v, user)
-            if ctl.loading then Apply(v) return end
-            Apply(v, true)
-        end)
-        function ctl.Set(v) ctl.loading = true sl:SetValue(v) Apply(v) ctl.loading = false end
+        value:SetPoint("LEFT", sl, "RIGHT", 8, 0)
+        local loading
+        sl:SetScript("OnValueChanged", function(_, v) Show(v, not loading) end)
+        function set(v) loading = true sl:SetValue(v) Show(v) loading = false end
     else
         local minus = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         minus:SetSize(26, 20)
-        minus:SetPoint("TOPLEFT", x + 150, -(y - 3))
+        minus:SetPoint("TOPLEFT", x + 92, -y)
         minus:SetText("-")
         local plus = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
         plus:SetSize(26, 20)
         plus:SetPoint("LEFT", minus, "RIGHT", 4, 0)
         plus:SetText("+")
-        minus:SetScript("OnClick", function() Apply(ctl.value - 10, true) end)
-        plus:SetScript("OnClick", function() Apply(ctl.value + 10, true) end)
-        function ctl.Set(v) Apply(v) end
+        value:SetPoint("LEFT", plus, "RIGHT", 8, 0)
+        minus:SetScript("OnClick", function() Show((cfg.iconScale or 100) - 10, true) end)
+        plus:SetScript("OnClick", function() Show((cfg.iconScale or 100) + 10, true) end)
+        function set(v) Show(v) end
     end
-    return ctl
+    item.refresh = { function() set(cfg.iconScale or 100) end }
+    item.paths = { "iconScale" }
+    return 32
 end
 
-local function BuildMap(s, panel)
-    local L = Layout(panel)
-    s.shown = MakeCheck(panel, "Show Warpath on the world map",
-        "Same as the crossed-swords button in the map's top-right corner. Recording never stops.")
-    s.showAll = MakeCheck(panel, "Show all pin history")
-    s.showAll:SetPoint("TOPLEFT", 300, -L.y)
-    L.Place(s.shown, 0, 46)
-    L.Heading("LAYERS")
-    s.layers = {}
-    for i, key in ipairs(C.LAYERS) do
-        local cb = MakeCheck(panel, C.LAYER_LABELS[key])
-        cb:SetPoint("TOPLEFT", (i - 1) % 2 == 0 and 0 or 250, -(L.y + math.floor((i - 1) / 2) * 26))
-        s.layers[key] = cb
+local function Layers(panel, item, x, y)
+    local h = 0
+    for _, key in ipairs(C.LAYERS) do
+        local cb = MakeCheck(panel, x, y + h, C.LAYER_LABELS[key])
+        if LAYER_HINT[key] then
+            local hint = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+            hint:SetPoint("LEFT", cb.label, "RIGHT", 6, 0)
+            hint:SetText(LAYER_HINT[key])
+        end
+        Bind(item, cb, "layers." .. key)
+        h = h + 22
     end
-    local n = #C.LAYERS + 1
-    s.guildHaze = MakeCheck(panel, "Guildmates' battle haze")
-    s.guildHaze:SetPoint("TOPLEFT", (n - 1) % 2 == 0 and 0 or 250, -(L.y + math.floor((n - 1) / 2) * 26))
-    L.y = L.y + math.ceil(n / 2) * 26 + 8
-    s.shimmer = MakeCheck(panel, "Shimmer on well-worn gold roads")
-    s.shimmer:SetPoint("TOPLEFT", 0, -L.y)
-    s.iconScale = IconSize(panel, 250, L.y)
-    L.y = L.y + 40
-    L.Heading("HOW LONG THINGS STAY ON THE MAP")
-    s.trailMin = MakeRadios(panel, "Today's trail", TRAIL)
-    L.Radios(s.trailMin)
-    s.runHours = MakeRadios(panel, "Corpse runs", HOURS)
-    L.Radios(s.runHours)
+    Bind(item, MakeCheck(panel, x, y + h, "Guildmates' battle haze"), "guildHaze")
+    return h + 28
 end
 
-local function BuildShots(s, panel)
-    local L = Layout(panel)
-    L.Heading("KILL SCREENSHOTS")
-    s.shotOn = MakeCheck(panel, "Take a screenshot when I get an honorable kill")
-    L.Place(s.shotOn)
-    s.which = MakeRadios(panel, "Which kills", { { "all", "Every kill" }, { "notable", "Notable only" } })
-    L.Radios(s.which)
-    s.caption = MakeRadios(panel, "Caption", { { "text", "Floating text" }, { "strip", "Caption strip" }, { "none", "None" } })
-    L.Radios(s.caption, 30)
-    local note = panel:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    note:SetPoint("TOPLEFT", 0, -L.y)
-    note:SetWidth(480)
-    note:SetJustifyH("LEFT")
-    note:SetText("Notable: first kill of a player, grudges, avenged deaths, streaks of 3, 5 and every 10, "
-        .. "and anyone you've killed 5+ times. /warpath shot test takes a test picture.")
-end
-
-local function BuildChronicle(s, panel)
-    local L = Layout(panel)
-    L.Heading("ENTERING A ZONE")
-    s.zoneChat = MakeCheck(panel, "Zone stats in chat", "Kills, deaths, miles, sightings, avenged, best streak, rank.")
-    L.Place(s.zoneChat, 0, 42)
-    s.zoneText = MakeCheck(panel, "Zone stats under the zone name", "A short line beneath the big zone name.")
-    L.Place(s.zoneText, 0, 48)
-    L.Heading("CHRONICLE")
-    s.chronLogin = MakeCheck(panel, "Show the last campaign's headline in chat when I log in")
-    L.Place(s.chronLogin)
-    s.chronOpen = MakeCheck(panel, "Open the chronicle window when I log in",
-        "Both only after a new campaign starts (2+ hours away) and the last one had fighting.")
-    L.Place(s.chronOpen, 0, 50)
-    local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    open:SetSize(150, 24)
-    open:SetPoint("TOPLEFT", 0, -L.y)
-    open:SetText("Open the chronicle")
-    open:SetScript("OnClick", function() ns.Chronicle.Open() end)
-end
-
-local function BuildGrudges(s, panel)
-    local L = Layout(panel)
-    L.Heading("WHEN I SEE A GRUDGE")
-    s.gAlert = MakeCheck(panel, "Banner and sound")
-    L.Place(s.gAlert, 0, 26)
-    s.gAgain = MakeRadios(panel, "Remind me again after", { { 1, "1 min" }, { 5, "5 min" }, { 15, "15 min" } }, 150)
-    L.Radios(s.gAgain, 26)
-    s.gMap = MakeCheck(panel, "Show where on the map (their crest and name, for 15 minutes)")
-    L.Place(s.gMap)
-    s.gPlates = MakeCheck(panel, "Mark them with a skull on nameplates and the target frame")
-    L.Place(s.gPlates, 0, 34)
-    L.Heading("MAKING GRUDGES")
-    s.gAuto = MakeRadios(panel, "When a player kills me",
-        { { "off", "Do nothing" }, { "offer", "Offer one in chat" }, { "add", "Add one automatically" } }, 150)
-    L.Radios(s.gAuto, 24)
-    s.gAfter = MakeRadios(panel, "...after they kill me", { { 2, "2 times" }, { 3, "3 times" }, { 5, "5 times" } }, 150)
-    L.Radios(s.gAfter, 30)
-    s.gAuto.onChange = function(v) s.gAfter:SetEnabled(v ~= "off") end
-    L.Heading("SETTLING AND FORGIVING")
-    local note = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    note:SetPoint("TOPLEFT", 0, -L.y)
-    note:SetWidth(500)
-    note:SetJustifyH("LEFT")
-    note:SetText("Killing a grudge counts it as settled. A grudge only leaves your ledger when you forgive it, "
-        .. "in the chronicle or with /warpath grudge forgive.")
-    L.y = L.y + 34
-    local open = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
-    open:SetSize(170, 24)
-    open:SetPoint("TOPLEFT", 0, -L.y)
-    open:SetText("Open the ledger")
-    open:SetScript("OnClick", function() ns.Chronicle.Open(false, "grudges") end)
-end
-
-local function BuildSetup()
-    local s = CreateFrame("Frame", "WarpathSetup", UIParent, "BackdropTemplate")
-    s:SetSize(560, 430)
-    s:SetPoint("TOP", 0, -90)
-    s:SetFrameStrata("DIALOG")
-    s:SetToplevel(true)
-    s:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background-Dark",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true, tileSize = 32, edgeSize = 32,
-        insets = { left = 11, right = 12, top = 12, bottom = 11 },
-    })
-    -- a solid layer under the dialog texture, so the world doesn't show through
-    local shade = s:CreateTexture(nil, "BACKGROUND", nil, -7)
-    shade:SetColorTexture(0, 0, 0, 0.8)
-    shade:SetPoint("TOPLEFT", 11, -12)
-    shade:SetPoint("BOTTOMRIGHT", -12, 11)
-    s:EnableMouse(true)
-    s:SetMovable(true)
-    s:SetClampedToScreen(true)
-    s:RegisterForDrag("LeftButton")
-    s:SetScript("OnDragStart", s.StartMoving)
-    s:SetScript("OnDragStop", s.StopMovingOrSizing)
-    -- Only "To war" or the close button count as seen. Escape, or the UI
-    -- closing every window, shows it again next login.
-    s.MarkSeen = function()
-        gdb.seenVersion = VERSION
-        gdb.installed = gdb.installed or VERSION
+local function Row(panel, spec, y)
+    local kind, item = spec[1], { spec = spec }
+    local x = 32 + (spec.indent or 0)
+    local h
+    if kind == "topic" then
+        K.Topic(panel, spec[2], x, y)
+        h = 24
+    elseif kind == "note" then
+        local fs = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, spec.ink and K.INK or K.FADED)
+        local w = K.INNER - (x - 32)
+        fs:SetPoint("TOPLEFT", x, -y)
+        fs:SetWidth(w)
+        fs:SetSpacing(1)
+        fs:SetText(spec[2])
+        h = Tall(fs, w, 13) + 8
+    elseif kind == "check" then
+        local cb
+        cb, h = MakeCheck(panel, x, y, spec[3], spec[4])
+        Bind(item, cb, spec[2], spec.after)
+    elseif kind == "pair" then
+        Bind(item, (MakeCheck(panel, x, y, spec[2][2])), spec[2][1], spec.after)
+        Bind(item, (MakeCheck(panel, x + K.INNER / 2, y, spec[3][2])), spec[3][1], spec.after)
+        h = 24
+    elseif kind == "radios" then
+        local g
+        g, h = MakeRadios(panel, x, y, spec[3], spec[4], spec.lw, spec.gap)
+        Bind(item, g, spec[2], spec.after)
+    elseif kind == "layers" then
+        h = Layers(panel, item, x, y)
+    else
+        h = IconSize(panel, item, x, y)
     end
-    tinsert(UISpecialFrames, "WarpathSetup")
+    return item, h
+end
 
-    local crest = s:CreateTexture(nil, "ARTWORK")
-    crest:SetTexture(faction.crest)
-    crest:SetTexCoord(0, 0.62, 0, 0.62)
-    crest:SetSize(44, 44)
-    crest:SetPoint("TOPLEFT", 22, -20)
-    s.title = s:CreateFontString(nil, "ARTWORK", "GameFontNormalHuge")
-    s.title:SetPoint("TOPLEFT", crest, "TOPRIGHT", 10, -2)
-    s.sub = s:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    s.sub:SetPoint("TOPLEFT", s.title, "BOTTOMLEFT", 0, -4)
-
-    local close = CreateFrame("Button", nil, s, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", -6, -6)
-    close:SetScript("OnClick", function() s.MarkSeen() s:Hide() end)
-
-    s.welcome = s:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
-    s.welcome:SetPoint("TOPLEFT", 22, -78)
-    s.welcome:SetWidth(516)
-    s.welcome:SetJustifyH("LEFT")
-    s.welcome:SetText("Warpath draws your open-world PvP history on the world map. Pick how you want it; everything can be changed later.")
-
-    s.body = CreateFrame("Frame", nil, s)
-    s.panels = {}
-    for i = 1, #TABS do
-        local panel = CreateFrame("Frame", nil, s.body)
-        panel:SetAllPoints()
-        s.panels[i] = panel
+local function BuildSection(R, key)
+    local panel = CreateFrame("Frame", nil, R)
+    panel:SetAllPoints()
+    local items, y = {}, 70
+    for _, spec in ipairs(SPEC[key]) do
+        local item, h = Row(panel, spec, y)
+        items[#items + 1] = item
+        y = y + h
     end
-    BuildGeneral(s, s.panels[1])
-    BuildMap(s, s.panels[2])
-    BuildShots(s, s.panels[3])
-    BuildChronicle(s, s.panels[4])
-    BuildGrudges(s, s.panels[5])
-    MakeTabs(s)
+    panel.bottom = y
+    P.panels[key], P.items[key] = panel, items
+end
 
-    local foot = s:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    foot:SetPoint("BOTTOMLEFT", 24, 28)
-    foot:SetWidth(270)
-    foot:SetJustifyH("LEFT")
-    foot:SetText("Type /warpath help for commands.")
+function P.Refresh()
+    for _, item in ipairs(P.items[P.section] or {}) do
+        local when = item.spec.when
+        local on = not when or (when() and true or false)
+        for _, fn in ipairs(item.refresh or {}) do fn(on) end
+    end
+end
 
-    local go = CreateFrame("Button", nil, s, "UIPanelButtonTemplate")
-    go:SetSize(110, 26)
-    go:SetPoint("BOTTOMRIGHT", -22, 20)
-    go:SetText("To war")
-    go:SetScript("OnClick", function()
-        SetupSave(s)
-        s.MarkSeen()
-        Print("settings saved. /warpath setup to change them.")
-        s:Hide()
+local function Restore()
+    for _, item in ipairs(P.items[P.section] or {}) do
+        for _, path in ipairs(item.paths or {}) do
+            local d = Default(path)
+            if d ~= nil then Setter(path)(d) end
+        end
+        if item.spec.after then item.spec.after() end
+    end
+    if ns.RescalePins then ns.RescalePins() end
+    Apply()
+    P.Refresh()
+end
+P.Restore = Restore
+
+local function SectionName(key)
+    for _, s in ipairs(SECTIONS) do if s[1] == key then return s[2] end end
+end
+
+local function ContentsRow(L, i, sec)
+    local row = CreateFrame("Button", nil, L)
+    row:SetSize(K.INNER + 8, 44)
+    row:SetPoint("TOPLEFT", 28, -100 - (i - 1) * 50)
+    row:SetHighlightTexture("Interface\\Buttons\\UI-Common-MouseHilight", "ADD")
+    row.sel = row:CreateTexture(nil, "BACKGROUND")
+    row.sel:SetColorTexture(K.RUBRIC[1], K.RUBRIC[2], K.RUBRIC[3], 0.12)
+    row.sel:SetAllPoints()
+    row.mark = K.Diamond(row, 7)
+    row.mark:SetPoint("RIGHT", row, "LEFT", -3, 8)
+    row.name = K.Font(row, QuestTitleFont, GameFontNormal, K.INK, 15)
+    row.name:SetPoint("TOPLEFT", 4, -4)
+    row.name:SetText(sec[2])
+    row.desc = K.Font(row, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+    row.desc:SetPoint("TOPLEFT", 4, -24)
+    row.desc:SetWidth(K.INNER)
+    row.desc:SetWordWrap(false)
+    row.desc:SetText(sec[3])
+    row.key = sec[1]
+    row:SetScript("OnClick", function(self)
+        if P.section ~= self.key then
+            P.section = self.key
+            UISound("IG_ABILITY_PAGE_TURN", 836)
+            P.Render()
+        end
     end)
-    local def = CreateFrame("Button", nil, s, "UIPanelButtonTemplate")
-    def:SetSize(100, 26)
-    def:SetPoint("RIGHT", go, "LEFT", -8, 0)
-    def:SetText("Defaults")
-    def:SetScript("OnClick", function() SetupLoad(s, DefaultsView()) end)
-    return s
+    return row
 end
 
--- Title, then a welcome line (first install), then the tabs, then the tab
--- body, then the buttons.
-local BODY_H = 330
-local function Arrange(s, showWelcome)
-    local tabTop = 78
-    if showWelcome then tabTop = tabTop + 40 end
-    s.tabBar:ClearAllPoints()
-    s.tabBar:SetPoint("TOPLEFT", 22, -tabTop)
-    s.tabBar:SetPoint("TOPRIGHT", -22, -tabTop)
-    local bodyTop = tabTop + 26 + 14
-    s:SetHeight(bodyTop + BODY_H + 56)
-    s.body:ClearAllPoints()
-    s.body:SetPoint("TOPLEFT", 22, -bodyTop)
-    s.body:SetPoint("BOTTOMRIGHT", -22, 56)
+-- Called by the chronicle when it builds its pages. L, R: the settings'
+-- frames on the left and right pages; kit: its drawing helpers.
+local function Build(L, R, kit)
+    K = kit
+    local title = K.Font(L, QuestTitleFont, GameFontNormalLarge, K.INK)
+    title:SetPoint("TOP", 0, -32)
+    title:SetJustifyH("CENTER")
+    title:SetText("Settings")
+    K.Ornament(L, -60)
+    local sub = K.Font(L, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+    sub:SetPoint("TOP", 0, -70)
+    sub:SetJustifyH("CENTER")
+    sub:SetText("Shared by all your characters. Changes apply at once.")
+    P.rows = {}
+    for i, sec in ipairs(SECTIONS) do P.rows[i] = ContentsRow(L, i, sec) end
+    local foot = K.Font(L, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+    foot:SetPoint("BOTTOM", 0, 40)
+    foot:SetJustifyH("CENTER")
+    foot:SetText("/warpath help lists every command.")
+
+    P.head = K.Font(R, QuestTitleFont, GameFontNormal, K.RUBRIC, 15)
+    P.head:SetPoint("TOP", 0, -30)
+    K.Ornament(R, -54)
+    for _, sec in ipairs(SECTIONS) do BuildSection(R, sec[1]) end
+    local restore = CreateFrame("Button", nil, R, "UIPanelButtonTemplate")
+    restore:SetSize(130, 22)
+    restore:SetPoint("BOTTOMRIGHT", -28, 12)
+    restore:SetText("Restore defaults")
+    restore:SetScript("OnClick", function()
+        if StaticPopupDialogs and not StaticPopupDialogs.WARPATH_RESTORE then
+            StaticPopupDialogs.WARPATH_RESTORE = {
+                text = "Put the %s settings back to their defaults?",
+                button1 = OKAY or "Okay", button2 = CANCEL or "Cancel",
+                OnAccept = function() P.Restore() end,
+                timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
+            }
+        end
+        StaticPopup_Show("WARPATH_RESTORE", SectionName(P.section))
+    end)
 end
 
-function ShowSetup(_, tab)
-    if not setup then setup = BuildSetup() end
-    local s = setup
-    s.title:SetText(gdb.installed and "Warpath options" or "Welcome to Warpath")
-    s.sub:SetText(gdb.installed and ("Version " .. VERSION .. ". Settings are shared by all your characters.")
-        or "These are the defaults. Change anything you like.")
-    s.welcome:SetShown(not gdb.installed)
-    Arrange(s, not gdb.installed)
-    SetupLoad(s, cfg)
-    SelectTab(s, tab or s.tab or 1)
-    s:Show()
+function P.Render()
+    for key, panel in pairs(P.panels) do panel:SetShown(key == P.section) end
+    for _, row in ipairs(P.rows or {}) do
+        local c = row.key == P.section and K.RUBRIC or K.INK
+        row.sel:SetShown(row.key == P.section)
+        row.mark:SetShown(row.key == P.section)
+        row.name:SetTextColor(c[1], c[2], c[3])
+    end
+    if P.head then P.head:SetText(SectionName(P.section) or "") end
+    P.Refresh()
 end
+
+-- The settings, open on a section ("alerts", "map", ..., or an old tab number).
+function ShowSetup(_, section)
+    if type(section) == "number" then section = OLD_TABS[section] end
+    if section and SPEC[section] then P.section = section end
+    ns.Chronicle.Open(false, "settings")
+end
+
+ns.Settings = { Build = Build, Render = function() P.Render() end, Refresh = function() P.Refresh() end,
+    Restore = function() P.Restore() end, Sections = SECTIONS,
+    Open = function(key) if SPEC[key] then P.section = key end end,
+    Bottom = function(key) return P.panels[key] and P.panels[key].bottom end }
 
 -- Once per account per release (every release since 3.8.1; before, only
 -- feature releases), never in combat or a battleground: the chronicle on
@@ -606,12 +587,9 @@ end
 
 end
 
--- Entering a battleground: put the window away until you leave.
-function ns.HideSetup()
-    if setup and setup:IsShown() then setup:Hide() S.setupWaiting = true end
-end
-
-function ns.SetupShown() return setup and setup:IsShown() end
+-- The options window is gone (3.8.3): the settings are a page of the book.
+function ns.HideSetup() end
+function ns.SetupShown() return ns.Chronicle.Shown() == "settings" end
 
 ns.MaybeShowSetup = MaybeShowSetup
 ns.ShowSetup = ShowSetup

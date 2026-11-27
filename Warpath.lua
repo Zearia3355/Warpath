@@ -176,13 +176,15 @@ local C = {
     LAYERS = { "battle", "roads", "recent", "runs", "marks", "sightings", "shared" },
     LAYER_NAMES = { battle = "battle", roads = "roads", recent = "trail", runs = "runs",
         marks = "marks", sightings = "sightings", shared = "guild" },
-    LAYER_LABELS = { battle = "Battle haze", roads = "Silver and gold roads",
-        recent = "Today's trail", runs = "Corpse runs and flights", marks = "Kills and deaths",
-        sightings = "Recent enemy sightings", shared = "Guild sharing" },
-    CFG_DEFAULTS = { sound = true, hudShown = true, quiet = false, share = false, shown = true,
+    LAYER_LABELS = { battle = "Battle haze", roads = "Roads",
+        recent = "Today's trail", runs = "Corpse runs and flights", marks = "Kill and death pins",
+        sightings = "Enemy sightings", shared = "Guildmates' kills and deaths" },
+    -- 3.8.3: "announce" replaces quiet mode and the big-text switch;
+    -- sharing is on for new installs (Joe), existing accounts keep theirs.
+    CFG_DEFAULTS = { sound = true, hudShown = true, announce = true, share = true, guildChat = true, shown = true,
         zoneChat = true, zoneText = true, chronLogin = true, chronOpen = false, shimmer = true,
         runHours = 24, flightHours = 24, fieldAlert = true,
-        iconScale = 100, overlay = true, overlaySize = "medium",
+        iconScale = 100, overlaySize = "medium",
         groundScreen = true, groundChat = true, groundAfter = 2,
         guildHaze = true, shareHistory = true, selfChat = true, trailMin = 720 }, -- 3.8: trail 12 h (was 1 h)
     GRUDGE_DEFAULTS = { alert = true, again = 1, map = true, plates = true, auto = "off", after = 3 },
@@ -221,7 +223,7 @@ local function MapName(id)
 end
 
 local function Sound(name, fallback)
-    if not cfg.sound or cfg.quiet or S.inInstance then return end
+    if not cfg.sound or S.inInstance then return end
     local id = (SOUNDKIT and SOUNDKIT[name]) or fallback
     if id then pcall(PlaySound, id, "Master") end
 end
@@ -234,10 +236,10 @@ local function UISound(name, fallback)
     if id then pcall(PlaySound, id) end
 end
 
--- A banner, or a chat line in quiet mode.
+-- A banner, or a chat line with "Announce on screen" off.
 local function Notice(text, r, g, b)
     if S.inInstance then return end
-    if cfg.quiet then
+    if not cfg.announce then
         Print(text)
     elseif RaidNotice_AddMessage and RaidWarningFrame then
         RaidNotice_AddMessage(RaidWarningFrame, text, { r = r, g = g, b = b })

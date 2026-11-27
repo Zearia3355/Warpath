@@ -163,13 +163,13 @@ function Ground.Check()
     local tone = Tone(k, d)
     local g = guild[c] and math.floor(guild[c] / C.GROUND_GUILD + 0.5) or 0
     local text = Ground.Text(tone, k, d, g)
-    if cfg.groundScreen and not cfg.quiet then
+    if cfg.groundScreen and cfg.announce then
         local col = COLORS[tone]
         local sub = text:gsub("^[^:]+: ", ""):gsub("^Dangerous ground%. ", "")
         ns.Overlay.Show({ title = TITLES[tone], sub = sub, r = col[1], g = col[2], b = col[3], small = true,
             hold = ns.Overlay.ReadHold(sub), sound = tone ~= "hunting" and tone or nil })
     end
-    if cfg.groundChat or (cfg.quiet and cfg.groundScreen) then
+    if cfg.groundChat or (not cfg.announce and cfg.groundScreen) then
         local col = COLORS[tone]
         Print(("|cff%02x%02x%02x%s|r"):format(col[1] * 255, col[2] * 255, col[3] * 255, text))
     end

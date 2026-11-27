@@ -1,7 +1,8 @@
 -- Warpath: Chronicle
 -- The chronicle as a book: an open two-page spread on a leather cover, with
 -- sections on tabs along its top edge: Campaigns and Grudges left of the
--- title plate, Warpath (a welcome and what's new, 3.8.3) right of it.
+-- title plate, Settings and Warpath (a welcome and what's new, 3.8.3)
+-- right of it.
 -- Built only from the game's own textures and fonts.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
@@ -16,10 +17,10 @@ local PAD = 18                       -- leather around the pages
 local PW = (W - 2 * PAD) / 2         -- one page
 local PH = H - 2 * PAD
 local INK, FADED, RUBRIC = { 0.18, 0.11, 0.04 }, { 0.30, 0.22, 0.12 }, { 0.48, 0.12, 0.06 }
+local GREY = { 0.52, 0.45, 0.34 }    -- a setting that can't be changed right now
 local LEATHER = { 0.27, 0.14, 0.06 }
 local GILT = { 0.84, 0.66, 0.32 }
 local DEED_ROWS, INDEX_ROWS, LOG_ROWS = 13, 9, 11
-local NONE = "|cff4d3a20\226\128\148|r"
 local TEX = {
     border  = "Interface\\DialogFrame\\UI-DialogBox-Border",
     header  = "Interface\\DialogFrame\\UI-DialogBox-Header",
@@ -100,6 +101,30 @@ local function Ornament(parent, y)
     r:SetPoint("TOP", parent, "TOP", 46, y)
     local d = Diamond(parent, 7)
     d:SetPoint("CENTER", parent, "TOP", 0, y)
+end
+
+-- A topic heading (3.8.3): small faded capitals, then a thin rule running
+-- on to `right` (parent's x; default the page's text edge).
+local function Topic(parent, text, x, y, right)
+    local t = { fs = Font(parent, QuestFontNormalSmall, GameFontNormalSmall, FADED, 11),
+        rule = Solid(parent, "ARTWORK", FADED[1], FADED[2], FADED[3], 0.4) }
+    t.rule:SetHeight(1)
+    function t:Set(s, tx, ty, tr)
+        s = s:upper()
+        self.fs:ClearAllPoints()
+        self.fs:SetPoint("TOPLEFT", tx, -ty)
+        self.fs:SetText(s)
+        local w = self.fs:GetStringWidth() or 0
+        if w < 1 then w = #s * 7 end
+        local from = tx + w + 8
+        self.rule:ClearAllPoints()
+        self.rule:SetPoint("TOPLEFT", from, -(ty + 6))
+        self.rule:SetWidth(math.max(1, (tr or (PW - 32)) - from))
+        self:SetShown(true)
+    end
+    function t:SetShown(on) self.fs:SetShown(on) self.rule:SetShown(on) end
+    if text then t:Set(text, x, y, right) end
+    return t
 end
 
 -- A big red initial on a gilt-edged square.
@@ -266,7 +291,7 @@ local function BuildBook()
     close:SetPoint("TOPRIGHT", 2, 2)
 
     f.tabs = { SectionTab(f, "Campaigns", "campaigns", 36), SectionTab(f, "Grudges", "grudges", 158),
-        SectionTab(f, "Warpath", "warpath", W - 36 - 116) }
+        SectionTab(f, "Settings", "settings", W - 158 - 116), SectionTab(f, "Warpath", "warpath", W - 36 - 116) }
     return f
 end
 
@@ -325,14 +350,23 @@ local function BuildCampaignPages(f)
         c.stats[i] = v
     end
 
+    -- highlights under a topic; only the ones with something to say (3.8.3)
+    c.highTopic = Font(L, QuestFontNormalSmall, GameFontNormalSmall, FADED, 11)
+    c.highTopic:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -12)
+    c.highTopic:SetText("HIGHLIGHTS")
+    local rule = Solid(L, "ARTWORK", FADED[1], FADED[2], FADED[3], 0.4)
+    rule:SetHeight(1)
+    rule:SetPoint("LEFT", c.highTopic, "RIGHT", 8, 0)
+    rule:SetWidth(inner - 84)
+    c.highRule = rule
     c.high = {}
     for i = 1, 7 do
         local lab = Font(L, QuestFontNormalSmall, GameFontNormalSmall, RUBRIC)
-        lab:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -12 - (i - 1) * 21)
+        lab:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 0, -34 - (i - 1) * 21)
         lab:SetWidth(128)
         lab:SetWordWrap(false)
         local val = Font(L, QuestFont, GameFontHighlight, INK)
-        val:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 130, -10 - (i - 1) * 21)
+        val:SetPoint("TOPLEFT", box, "BOTTOMLEFT", 130, -32 - (i - 1) * 21)
         val:SetWidth(inner - 130)
         val:SetWordWrap(false)
         c.high[i] = { label = lab, value = val }
@@ -361,10 +395,15 @@ local function BuildCampaignPages(f)
         row.icon = row:CreateTexture(nil, "ARTWORK")
         row.icon:SetSize(14, 14)
         row.icon:SetPoint("LEFT", 44, 0)
+        -- 3.8.3: the deed's tag on the right; a zone's name heads its deeds
+        row.tag = Font(row, QuestFontNormalSmall, GameFontNormalSmall, RUBRIC)
+        row.tag:SetPoint("RIGHT", -4, 0)
+        row.tag:SetJustifyH("RIGHT")
         row.text = Font(row, QuestFont, GameFontHighlight, INK)
         row.text:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
         row.text:SetWidth(inner - 62)
         row.text:SetWordWrap(false)
+        row.topic = Topic(row, nil)
         row:SetScript("OnClick", function(self)
             local e = self.entry
             if e and e.z and e.x and not view.preview then
@@ -426,12 +465,27 @@ local function Entries(camp)
     return list
 end
 
+-- 3.8.3: deeds grouped under the zone they happened in (a new heading each
+-- time the zone changes, so the night still reads in order).
+local function DeedRows(camp)
+    local rows, last = {}, false
+    for _, item in ipairs(Entries(camp)) do
+        local z = item.e.z
+        if z ~= last then
+            rows[#rows + 1] = { topic = z and MapName(z) or "Somewhere unknown" }
+            last = z
+        end
+        rows[#rows + 1] = item
+    end
+    return rows
+end
+
+-- The deed's text and its tag (the tag on the right, in red).
 local function DeedText(item)
     local e = item.e
-    local where = e.z and (" in " .. MapName(e.z)) or ""
     if item.kill then
         local tag = e.tag and TAG_TEXT[e.tag]
-        if e.tag == "streak" and e.st then tag = "a streak of " .. e.st end
+        if e.tag == "streak" and e.st then tag = "streak of " .. e.st end
         -- 3.7: the multi-kill and the feat it earned
         local extra = {}
         if e.mk and e.mk >= 2 then extra[#extra + 1] = Campaign.Burst(e.mk):lower() end
@@ -441,10 +495,9 @@ local function DeedText(item)
         end
         if #extra > 0 then tag = (tag and (tag .. ", ") or "") .. table.concat(extra, ", ") end
         local lv = e.lv and ("|cff6a5030 " .. (e.lv == -1 and "??" or e.lv) .. "|r") or ""
-        return "Slew " .. Colored(e.n or "an enemy", e.c) .. lv .. where .. "." ..
-            (tag and (" |cff7a1f0f" .. tag:sub(1, 1):upper() .. tag:sub(2) .. ".|r") or "")
+        return Colored(e.n or "an enemy", e.c) .. lv, tag or ""
     end
-    return "Fell" .. (e.n and (" to " .. Colored(e.n, e.c)) or "") .. where .. "."
+    return "Fell" .. (e.n and (" to " .. Colored(e.n, e.c)) or ""), ""
 end
 
 local function RenderCampaign()
@@ -465,22 +518,41 @@ local function RenderCampaign()
 
     local values = { s.kills, s.deaths, s.best, ("%.1f"):format(s.miles), Campaign.Duration(s.played) }
     for i, v in ipairs(c.stats) do v:SetText(values[i]) end
+    local slot = 0
     for i, h in ipairs(Campaign.Highlights(s)) do
-        local row = c.high[i]
-        row.label:SetText(h[1])
         local text = h[2]
-        if i == 1 and s.nemesis then text = text:gsub("^" .. s.nemesis:gsub("%p", "%%%0"), Colored(s.nemesis, s.nemesisClass)) end
-        if i == 2 and s.victim then text = text:gsub("^" .. s.victim:gsub("%p", "%%%0"), Colored(s.victim, s.victimClass)) end
-        row.value:SetText(text or NONE)
+        if text then
+            slot = slot + 1
+            local row = c.high[slot]
+            row.label:SetText(h[1])
+            if i == 1 and s.nemesis then text = text:gsub("^" .. s.nemesis:gsub("%p", "%%%0"), Colored(s.nemesis, s.nemesisClass)) end
+            if i == 2 and s.victim then text = text:gsub("^" .. s.victim:gsub("%p", "%%%0"), Colored(s.victim, s.victimClass)) end
+            row.value:SetText(text)
+        end
     end
+    for i = slot + 1, #c.high do c.high[i].label:SetText("") c.high[i].value:SetText("") end
+    c.highTopic:SetShown(slot > 0)
+    c.highRule:SetShown(slot > 0)
 
-    local list = Entries(camp)
+    local list = DeedRows(camp)
     FauxScrollFrame_Update(c.scroll, #list, DEED_ROWS, 21)
     local offset = FauxScrollFrame_GetOffset(c.scroll)
     local shown = 0
     for i, row in ipairs(c.rows) do
         local item = list[i + offset]
-        if item then
+        local deed = item and not item.topic and true or false
+        row.time:SetShown(deed)
+        row.icon:SetShown(deed)
+        row.text:SetShown(deed)
+        row.tag:SetShown(deed)
+        row.topic:SetShown(item and item.topic and true or false)
+        row:EnableMouse(deed and true or false)
+        if item and item.topic then
+            row.entry = nil
+            row.topic:Set(item.topic, 2, 5, PW - 60)
+            row:Show()
+            shown = i
+        elseif item then
             local e = item.e
             row.entry, row.kill = e, item.kill
             row.time:SetText(e.t and date("%H:%M", e.t) or "")
@@ -493,7 +565,10 @@ local function RenderCampaign()
                 row.icon:SetTexCoord(0, 1, 0, 1)
                 row.icon:SetVertexColor(0.75, 0.15, 0.1)
             end
-            row.text:SetText(DeedText(item))
+            local text, tag = DeedText(item)
+            row.text:SetText(text)
+            row.tag:SetText(tag)
+            row.text:SetWidth(PW - 64 - 62 - (tag ~= "" and ((row.tag:GetStringWidth() or #tag * 6) + 10) or 0))
             row:Show()
             shown = i
         else
@@ -577,11 +652,6 @@ local function BuildGrudgePages(f)
         row.tally = Font(row, QuestFont, GameFontHighlight, INK)
         row.tally:SetPoint("TOPRIGHT", -4, -3)
         row.tally:SetJustifyH("RIGHT")
-        row.dots = Font(row, QuestFont, GameFontHighlight, FADED)
-        row.dots:SetPoint("LEFT", row.name, "RIGHT", 4, 0)
-        row.dots:SetPoint("RIGHT", row.tally, "LEFT", -4, 0)
-        row.dots:SetWordWrap(false)
-        row.dots:SetText((" ."):rep(60))
         row.sub = Font(row, QuestFontNormalSmall, GameFontNormalSmall, FADED)
         row.sub:SetPoint("TOPLEFT", 4, -21)
         row.sub:SetWidth(inner)
@@ -684,16 +754,18 @@ local function BuildGrudgePages(f)
     local enc = Font(E, QuestTitleFont, GameFontNormal, RUBRIC, 14)
     enc:SetPoint("TOPLEFT", 32, -266)
     enc:SetText("Encounters")
+    -- 3.8.3: newest first under a heading for each day, the time beside each
     g.log = {}
     for i = 1, LOG_ROWS do
         local t = Font(E, QuestFontNormalSmall, GameFontNormalSmall, FADED)
-        t:SetPoint("TOPLEFT", 32, -288 - (i - 1) * 19)
-        t:SetWidth(80)
+        t:SetPoint("TOPLEFT", 32, -290 - (i - 1) * 19)
+        t:SetWidth(44)
         local text = Font(E, QuestFont, GameFontHighlight, INK)
-        text:SetPoint("TOPLEFT", 116, -286 - (i - 1) * 19)
-        text:SetWidth(inner - 84)
+        text:SetPoint("TOPLEFT", 80, -288 - (i - 1) * 19)
+        text:SetWidth(inner - 48)
         text:SetWordWrap(false)
-        g.log[i] = { t = t, text = text }
+        g.log[i] = { t = t, text = text, topic = Topic(E, nil) }
+        g.log[i].topic:SetShown(false)
     end
 
     local way = CreateFrame("Button", nil, E, "UIPanelButtonTemplate")
@@ -744,7 +816,9 @@ local function RenderGrudges()
             local r = item.r
             row.index = i + offset
             row.name:SetText(Colored(Grudge.Short(item.full), r.class))
-            row.tally:SetText(("|cff2e5a1c%d|r |cff8a6c44\194\183|r |cff7a1f0f%d|r"):format(r.kills or 0, r.deaths or 0))
+            -- 3.8.3: no dot leaders; a grudge with no blood either way says so
+            row.tally:SetText(((r.kills or 0) + (r.deaths or 0) == 0) and "|cff6a5030no blood yet|r"
+                or ("|cff2e5a1c%d|r |cff8a6c44\194\183|r |cff7a1f0f%d|r"):format(r.kills or 0, r.deaths or 0))
             local tags = {}
             if r.auto then tags[#tags + 1] = "added automatically" end
             row.sub:SetText(LastSeen(r) .. (#tags > 0 and ("  \194\183  " .. table.concat(tags, ", ")) or ""))
@@ -781,11 +855,27 @@ local function RenderGrudges()
     g.note.full = item.full
     g.note:SetText(r.note or "")
     g.note.hint:SetShown((r.note or "") == "")
-    local log = r.log or {}
+    local log, rows, day = r.log or {}, {}, nil
+    for k = #log, 1, -1 do
+        local e = log[k]
+        local d = date("%Y%m%d", e.t)
+        if d ~= day then
+            day = d
+            rows[#rows + 1] = { day = d == date("%Y%m%d") and "Today" or (date("%B %d", e.t):gsub(" 0(%d)", " %1")) }
+        end
+        rows[#rows + 1] = e
+        if #rows >= LOG_ROWS then break end
+    end
+    if rows[#rows] and rows[#rows].day then rows[#rows] = nil end -- never a day with nothing under it
     for i, line in ipairs(g.log) do
-        local e = log[#log - i + 1]
-        if e then
-            line.t:SetText(date("%b %d, %H:%M", e.t))
+        local e = rows[i]
+        line.topic:SetShown(e and e.day and true or false)
+        if e and e.day then
+            line.t:SetText("")
+            line.text:SetText("")
+            line.topic:Set(e.day, 32, 290 + (i - 1) * 19)
+        elseif e then
+            line.t:SetText(date("%H:%M", e.t))
             local fn = LOG_TEXT[e.k]
             line.text:SetText(fn and fn(e.z and (" in " .. MapName(e.z)) or "") or "")
         else
@@ -805,12 +895,32 @@ end
 
 local NEWS_TOP, NEWS_FLOOR = 66, PH - 44   -- the right page's notes run between these
 
+-- The sharing switch on the welcome page (3.8.3), the same as Settings, Guild.
+local function ShareCheck(L)
+    local cb = CreateFrame("CheckButton", nil, L, "UICheckButtonTemplate")
+    cb:SetSize(22, 22)
+    cb:SetPoint("BOTTOMLEFT", 32, 98)
+    cb.label = Font(L, QuestFont, GameFontHighlight, INK)
+    cb.label:SetPoint("LEFT", cb, "RIGHT", 2, 1)
+    cb.label:SetText("Guild sharing")
+    cb.hint = Font(L, QuestFontNormalSmall, GameFontNormalSmall, FADED)
+    cb.hint:SetPoint("TOPLEFT", cb, "BOTTOMLEFT", 24, 1)
+    cb.hint:SetWidth(PW - 64 - 24)
+    cb.hint:SetSpacing(1)
+    cb.hint:SetText("Guildmates' kills, deaths and enemy sightings on your map, and yours on theirs. Only between guildmates who have it on. Never your trail.")
+    cb:SetScript("OnClick", function(self)
+        if view.preview then self:SetChecked(cfg.share) return end
+        ns.Dispatch("share " .. (self:GetChecked() and "on" or "off"))
+    end)
+    return cb
+end
+
 local function BuildNewsPages(f)
     local L = CreateFrame("Frame", nil, f.left)
     L:SetAllPoints()
     local R = CreateFrame("Frame", nil, f.right)
     R:SetAllPoints()
-    f.news = { L = L, R = R, heads = {}, lines = {} }
+    f.news = { L = L, R = R, heads = {}, lines = {}, topics = {} }
     local n = f.news
     local inner = PW - 64
 
@@ -827,11 +937,16 @@ local function BuildNewsPages(f)
     n.prose:SetWidth(inner)
     n.prose:SetJustifyV("TOP")
     n.prose:SetSpacing(3)
+    n.share = ShareCheck(L)
     local settings = CreateFrame("Button", nil, L, "UIPanelButtonTemplate")
     settings:SetSize(130, 24)
     settings:SetPoint("BOTTOM", 0, 40)
     settings:SetText("Settings")
-    settings:SetScript("OnClick", function() if not view.preview then ns.Dispatch("setup") end end)
+    settings:SetScript("OnClick", function()
+        view.section = "settings"
+        UISound("IG_ABILITY_PAGE_TURN", 836)
+        Render()
+    end)
 
     local head = Font(R, QuestTitleFont, GameFontNormal, RUBRIC, 15)
     head:SetPoint("TOP", 0, -30)
@@ -841,8 +956,8 @@ local function BuildNewsPages(f)
     n.earlier:SetPoint("BOTTOMLEFT", 24, 8)
     n.earlier:SetScript("OnClick", function()
         if view.newsNext then
-            table.insert(view.newsStack, view.newsStart)
-            view.newsStart = view.newsNext
+            table.insert(view.newsStack, { view.newsStart, view.newsLine })
+            view.newsStart, view.newsLine = view.newsNext[1], view.newsNext[2]
             UISound("IG_ABILITY_PAGE_TURN", 836)
             Render()
         end
@@ -851,7 +966,8 @@ local function BuildNewsPages(f)
     n.later:SetPoint("BOTTOMRIGHT", -24, 8)
     n.later:SetScript("OnClick", function()
         if #view.newsStack > 0 then
-            view.newsStart = table.remove(view.newsStack)
+            local p = table.remove(view.newsStack)
+            view.newsStart, view.newsLine = p[1], p[2]
             UISound("IG_ABILITY_PAGE_TURN", 836)
             Render()
         end
@@ -859,28 +975,53 @@ local function BuildNewsPages(f)
 end
 
 local function Welcome()
-    local share = cfg.share
-        and "Guild sharing is on: guildmates running Warpath see your kills and deaths on their maps, and you see theirs."
-        or "Guild sharing is off. Turn it on in Settings to see guildmates' kills and deaths on your map, and to share yours."
     return table.concat({
         "Warpath draws your war on the world map: the roads you travel, today's trail, where you fought, killed and fell, and the enemies you've seen.",
         "This book keeps a campaign for each time you ride out, and your ledger of grudges. Open it from the minimap button or with /warpath chronicle.",
-        "On the world map, the crossed swords in the top-right corner hide Warpath or choose what it shows.",
-        share,
-        "Type /warpath help for every command.",
+        "On the world map, the crossed swords in the top-right corner hide Warpath or choose what it shows. Everything else is under Settings.",
     }, "\n\n")
 end
 
--- Pooled pieces of the notes page: release headings, and lines with a bullet.
+-- Pooled pieces of the notes page: release headings (the version in red,
+-- its title faded, a "new" mark on the right, a rule under), topics, and
+-- lines with a diamond.
 local function NewsHead(n, i)
     local h = n.heads[i]
     if not h then
-        h = Font(n.R, QuestTitleFont, GameFontNormal, RUBRIC, 13)
+        h = { ver = Font(n.R, QuestTitleFont, GameFontNormal, RUBRIC, 15),
+            title = Font(n.R, QuestFontNormalSmall, GameFontNormalSmall, FADED),
+            badge = Solid(n.R, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 1),
+            new = Font(n.R, QuestFontNormalSmall, GameFontNormalSmall, { 0.94, 0.80, 0.51 }, 10),
+            rule = Solid(n.R, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 0.5) }
+        h.title:SetPoint("BOTTOMLEFT", h.ver, "BOTTOMRIGHT", 8, 1)
+        h.title:SetWordWrap(false)
+        h.new:SetText("NEW")
+        h.new:SetPoint("TOPRIGHT", n.R, "TOPRIGHT", -38, 0)
+        h.badge:SetPoint("TOPLEFT", h.new, "TOPLEFT", -5, 3)
+        h.badge:SetPoint("BOTTOMRIGHT", h.new, "BOTTOMRIGHT", 5, -3)
+        h.rule:SetHeight(1)
         n.heads[i] = h
     end
-    h:Show()
     return h
 end
+
+local function PlaceHead(n, h, y, ver, title, new)
+    h.ver:ClearAllPoints()
+    h.ver:SetPoint("TOPLEFT", 32, -y)
+    h.ver:SetText(ver)
+    h.title:SetText(title or "")
+    h.title:SetWidth(PW - 64 - ((h.ver:GetStringWidth() or #ver * 8) + 8) - (new and 44 or 0))
+    h.new:ClearAllPoints()
+    h.new:SetPoint("TOPRIGHT", n.R, "TOPLEFT", PW - 37, -(y + 3))
+    h.new:SetShown(new)
+    h.badge:SetShown(new)
+    h.rule:ClearAllPoints()
+    h.rule:SetPoint("TOPLEFT", 32, -(y + 22))
+    h.rule:SetWidth(PW - 64)
+    for _, part in ipairs({ h.ver, h.title, h.rule }) do part:Show() end
+end
+
+local function HideHead(h) for _, part in pairs(h) do part:Hide() end end
 
 local function NewsLine(n, i)
     local l = n.lines[i]
@@ -897,6 +1038,21 @@ local function NewsLine(n, i)
     return l
 end
 
+local function NewsTopic(n, i)
+    n.topics[i] = n.topics[i] or Topic(n.R, nil)
+    return n.topics[i]
+end
+
+-- A line's height once wrapped (measured, or guessed before it's drawn).
+local function LineHeight(l, text)
+    local lh = l:GetStringHeight() or 0
+    local guess = math.ceil(((l:GetStringWidth() or #text * 6)) / (PW - 78)) * 15
+    return math.max(lh, guess)
+end
+
+-- 3.8.3: grouped by topic ("## " lines) under each release's heading. A
+-- page starts at a release (newsStart) and an item within it (newsLine); a
+-- release too long for what's left of the page carries on to the next.
 local function RenderNews()
     local f, n = book, book.news
     local list = ns.NewIn and ns.NewIn.List or {}
@@ -905,48 +1061,78 @@ local function RenderNews()
     n.version:SetText("Version " .. tostring(ns.VERSION))
     n.headline:SetText(gdb.installed and "Warpath" or "Welcome to Warpath")
     n.prose:SetText(Welcome())
+    n.share:SetChecked(cfg.share and true or false)
     local Older = ns.NewIn and ns.NewIn.Older
     view.newsStart = math.min(view.newsStart or #list, #list)
+    view.newsLine = view.newsLine or 1
     view.newsNext = nil
-    local y, nh, nl = NEWS_TOP, 0, 0
-    local i = view.newsStart
-    while i >= 1 do
+    local y, nh, nl, nt, placed = NEWS_TOP, 0, 0, 0, 0
+    local i, j = view.newsStart, view.newsLine
+    while i >= 1 and not view.newsNext do
         local rel = list[i]
-        local h0, l0, y0 = nh, nl, y
-        nh = nh + 1
-        local h = NewsHead(n, nh)
-        local new = view.newSince and Older and Older(view.newSince, rel[1])
-        h:SetText(rel[1] .. (new and "   \194\183   new since you last played" or ""))
-        h:ClearAllPoints()
-        h:SetPoint("TOPLEFT", 32, -y)
-        y = y + 20
-        for _, text in ipairs(rel[2]) do
-            nl = nl + 1
-            local l = NewsLine(n, nl)
-            l:SetText(text)
-            l:ClearAllPoints()
-            l:SetPoint("TOPLEFT", 46, -y)
-            l.dot:ClearAllPoints()
-            l.dot:SetPoint("CENTER", n.R, "TOPLEFT", 38, -(y + 7))
-            local lh = l:GetStringHeight() or 0
-            if lh < 10 then lh = math.ceil(#text * 6 / (PW - 78)) * 15 end -- not measured yet
-            y = y + lh + 6
-        end
-        y = y + 10
-        if y > NEWS_FLOOR and i ~= view.newsStart then
-            -- doesn't fit under the newer ones: it starts the next page
-            for k = h0 + 1, nh do n.heads[k]:Hide() end
-            for k = l0 + 1, nl do n.lines[k]:Hide() n.lines[k].dot:Hide() end
-            nh, nl, y = h0, l0, y0
-            view.newsNext = i
+        local items = rel[2]
+        if y + 30 + 30 > NEWS_FLOOR and placed > 0 then
+            view.newsNext = { i, j } -- no room for a heading and a line
             break
         end
-        i = i - 1
+        nh = nh + 1
+        local new = view.newSince and Older and Older(view.newSince, rel[1]) and true or false
+        PlaceHead(n, NewsHead(n, nh), y, rel[1] .. (j > 1 and " (continued)" or ""), rel.title, new)
+        y = y + 32
+        while j <= #items do
+            local text = items[j]
+            local topic = text:sub(1, 3) == "## " and text:sub(4)
+            if topic then
+                if y + 20 + 30 > NEWS_FLOOR and placed > 0 then view.newsNext = { i, j } break end
+                nt = nt + 1
+                NewsTopic(n, nt):Set(topic, 32, y)
+                y = y + 20
+            else
+                nl = nl + 1
+                local l = NewsLine(n, nl)
+                l:SetText(text)
+                local lh = LineHeight(l, text)
+                if y + lh > NEWS_FLOOR and placed > 0 then
+                    l:Hide() l.dot:Hide()
+                    nl = nl - 1
+                    view.newsNext = { i, j }
+                    break
+                end
+                l:ClearAllPoints()
+                l:SetPoint("TOPLEFT", 46, -y)
+                l.dot:ClearAllPoints()
+                l.dot:SetPoint("CENTER", n.R, "TOPLEFT", 38, -(y + 7))
+                y = y + lh + 5
+                placed = placed + 1
+            end
+            j = j + 1
+            if items[j] and items[j]:sub(1, 3) == "## " then y = y + 4 end
+        end
+        y = y + 12
+        i, j = i - 1, 1
     end
-    for k = nh + 1, #n.heads do n.heads[k]:Hide() end
+    for k = nh + 1, #n.heads do HideHead(n.heads[k]) end
     for k = nl + 1, #n.lines do n.lines[k]:Hide() n.lines[k].dot:Hide() end
+    for k = nt + 1, #n.topics do n.topics[k]:SetShown(false) end
     if view.newsNext then n.earlier:Enable() else n.earlier:Disable() end
     if #view.newsStack > 0 then n.later:Enable() else n.later:Disable() end
+end
+
+---------------------------------------------------------------------------
+-- Settings (3.8.3): built by Options.lua on the book's pages
+---------------------------------------------------------------------------
+
+local function BuildSettingsPages(f)
+    local L = CreateFrame("Frame", nil, f.left)
+    L:SetAllPoints()
+    local R = CreateFrame("Frame", nil, f.right)
+    R:SetAllPoints()
+    f.set = { L = L, R = R }
+    if ns.Settings then
+        ns.Settings.Build(L, R, { Font = Font, Topic = function(p, text, x, y) return Topic(p, text, x, y) end,
+            Diamond = Diamond, Ornament = Ornament, INK = INK, FADED = FADED, RUBRIC = RUBRIC, GREY = GREY,
+            INNER = PW - 64 })
+    end
 end
 
 ---------------------------------------------------------------------------
@@ -956,20 +1142,24 @@ end
 function Render()
     if not book then return end
     book.title:SetText("Chronicle of " .. (myName or "you"))
-    local camp, gr, news = view.section == "campaigns", view.section == "grudges", view.section == "warpath"
-    book.camp.L:SetShown(camp)
-    book.camp.R:SetShown(camp)
-    book.gr.L:SetShown(gr)
-    book.gr.R:SetShown(gr)
-    book.news.L:SetShown(news)
-    book.news.R:SetShown(news)
+    local sec = view.section
+    for key, pages in pairs({ campaigns = book.camp, grudges = book.gr, warpath = book.news, settings = book.set }) do
+        pages.L:SetShown(sec == key)
+        pages.R:SetShown(sec == key)
+    end
     for _, t in ipairs(book.tabs) do
-        local on = t.key == view.section
+        local on = t.key == sec
         t:SetHeight(on and 32 or 26)
         t.bg:SetColorTexture(on and 0.16 or 0.08, on and 0.09 or 0.06, on and 0.04 or 0.04, 1)
         t.text:SetTextColor(on and 1 or 0.62, on and 0.82 or 0.58, on and 0 or 0.50)
     end
-    if camp then RenderCampaign() elseif gr then RenderGrudges() else RenderNews() end
+    if sec == "campaigns" then RenderCampaign()
+    elseif sec == "grudges" then RenderGrudges()
+    elseif sec == "settings" then
+        book.left.number:SetText("")
+        book.right.number:SetText("")
+        if ns.Settings then ns.Settings.Render() end
+    else RenderNews() end
 end
 
 local function Popups()
@@ -1005,12 +1195,13 @@ local function Build()
     BuildCampaignPages(book)
     BuildGrudgePages(book)
     BuildNewsPages(book)
+    BuildSettingsPages(book)
     Popups()
 end
 
 local Chronicle = {}
 
--- section: "campaigns" (default), "grudges" or "warpath".
+-- section: "campaigns" (default), "grudges", "settings" or "warpath".
 function Chronicle.Open(preview, section)
     -- 3.8.3: opens by hand inside a battleground too (it only reads). It
     -- still closes on the way in and never opens there by itself.
@@ -1022,7 +1213,7 @@ function Chronicle.Open(preview, section)
     if #view.list == 0 then view.list = { db.campaign } end
     book.camp.scroll:SetVerticalScroll(0)
     book.gr.scroll:SetVerticalScroll(0)
-    view.newsStart, view.newsStack, view.newsNext, view.newSince = nil, {}, nil, nil
+    view.newsStart, view.newsLine, view.newsStack, view.newsNext, view.newSince = nil, nil, {}, nil, nil
     Render()
     if not book:IsShown() then UISound("IG_QUEST_LOG_OPEN", 844) end
     book:Show()

@@ -253,14 +253,16 @@ local function Receive(prefix, text, channel, sender)
         if kind == "D" then ns.AddHeat(ns.GuildLayer(mapID, "guildDeaths", full), c, 1) end
         if ns.Ground then ns.Ground.Forget(mapID) end
     end
-    -- Kills and deaths get one chat line wherever they happen; sightings are
-    -- map-only. A 3.7 sender's line carries the tier and feat.
+    -- Kills and deaths get one chat line wherever they happen, unless that's
+    -- turned off (3.8.3); sightings are map-only. A 3.7 sender's line carries
+    -- the tier and feat.
     local zone = MapName(mapID)
+    local say = cfg.guildChat ~= false
     if kind == "K" then
-        Print(ns.Feats.GuildKillLine(from, zone, f1, f2, f3, f4, f5, f6, f7, f8, f9))
+        if say then Print(ns.Feats.GuildKillLine(from, zone, f1, f2, f3, f4, f5, f6, f7, f8, f9)) end
     elseif kind == "D" then
         if f1 and f1 ~= "" then ns.Feats.GuildDeath(f1, from) end
-        Print(ns.Feats.GuildDeathLine(from, zone, f1, f2, f3, f4 or ""))
+        if say then Print(ns.Feats.GuildDeathLine(from, zone, f1, f2, f3, f4 or "")) end
     end
     if kind ~= "S" then
         shareStats.lastEvent = ("%s %s in %s, %s"):format(from, kind == "K" and "kill" or "death", zone, date("%H:%M"))

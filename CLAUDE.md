@@ -118,7 +118,7 @@ Globals written: `WarpathGlobal` and `WarpathDB` (saved), `SLASH_WARPATH1/2`, an
 Constraints:
 - The original single file hit Lua's limits (192/200 top-level locals; `Draw()` at 47/60 upvalues). Keep files and functions small.
 - **Adding a file, or changing the `.toc`, needs a full game restart**, not `/reload`. The version shown in-game comes from the `.toc` and stays stale until restart; patch notes say so.
-- The Options window's General tab is near `BODY_H` (330): add settings beside existing ones, not as new rows. Radio rows fit about six short choices.
+- Settings are the chronicle's Settings tab (3.8.3), built from `SPEC` in `Options.lua`. Each section must fit its right page (the `SettingsTab` test checks it); radio rows fit about six short choices.
 
 ## WoW Forever client quirks
 

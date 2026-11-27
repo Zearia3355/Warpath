@@ -673,16 +673,17 @@ local function OnKill(full, short, class)
     local said = m and ns.NoteKill(short, mapID, m[1], m[2])
     if k.grudge then ns.Grudge.OnKill(full, mapID, true) end
 
-    -- One line per kill: the overlay for multi-kills and streak milestones,
-    -- else the banner; in quiet mode one chat line. Sounds after the picture.
-    local big = cfg.overlay and not cfg.quiet and Feats.OverlayFor(n, k, feats)
+    -- One line per kill: the big text for multi-kills and streak milestones,
+    -- else the banner; with "Announce on screen" off, one chat line. Sounds
+    -- after the picture.
+    local big = cfg.announce and Feats.OverlayFor(n, k, feats)
     if big then ns.Overlay.Show(big) end
     local function Announce()
         -- your own kill in chat, worded as your guild sees it (3.7.6)
         if cfg.selfChat and not said then ns.Print(Feats.GuildKillLine(myName, k.zone, strsplit("|", kfields))) end
         if big then return end
-        if cfg.quiet or not cfg.overlay or n >= 2 or P.StreakPool(k.streak) then
-            if cfg.quiet then
+        if not cfg.announce or n >= 2 or P.StreakPool(k.streak) then
+            if not cfg.announce then
                 if not cfg.selfChat then ns.Print(Feats.OwnLine(n, k, feats)) end
             else
                 ns.Notice(Feats.OwnLine(n, k, feats), faction.r, faction.g, faction.b)
@@ -807,7 +808,7 @@ local function OnDeath()
         db.deaths = db.deaths + 1
         if streak >= 3 then
             local by = killer and killer.short
-            if cfg.quiet or not cfg.overlay then
+            if not cfg.announce then
                 -- the death line below says it when your own lines are on
                 if not cfg.selfChat then
                     Print(("Streak ended at %s%d|r%s."):format(C.GOLD, streak, by and (" by " .. by) or ""))

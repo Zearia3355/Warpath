@@ -177,7 +177,7 @@ function Zone.Enter(test)
     if cfg.zoneChat or test then
         Print(MapName(mapID) .. ": " .. Zone.ChatText(st) .. ".")
     end
-    if (cfg.zoneText or test) and not cfg.quiet then ShowHeader(Zone.HeaderText(st), test) end
+    if cfg.zoneText or test then ShowHeader(Zone.HeaderText(st), test) end
 end
 
 -- /warpath zone: the same stats plus the extras.

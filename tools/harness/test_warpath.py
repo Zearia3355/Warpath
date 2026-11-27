@@ -255,8 +255,9 @@ class NewIn(unittest.TestCase):
                          "the options window no longer opens by itself")
         text = self.page(wow)
         self.assertIn("What's New", text)
-        self.assertIn("3.8.3   \u00b7   new since you last played", text)
-        self.assertNotIn("3.8.2   \u00b7   new", text, "3.8.2 was already seen")
+        # 3.8.3: a "NEW" mark beside each release newer than the last seen
+        self.assertEqual(text.split("\n").count("NEW"), 1, "only 3.8.3 is new since 3.8.2")
+        self.assertIn("ON THE MAP", text, "3.8.3's notes are grouped under topics")
         self.assertIn("Settings", wow.eval("""(function() for _, f in ipairs(WarpathChronicle.__children) do
             for _, c in ipairs(f.__children) do for _, b in ipairs(c.__children) do
             if b.__template == "UIPanelButtonTemplate" and b:IsVisible() then return b:GetText() end end end end end)()"""))
@@ -271,8 +272,24 @@ class NewIn(unittest.TestCase):
         self.assertTrue(self.shown(wow))
         text = self.page(wow)
         self.assertIn("Welcome to Warpath", text)
-        self.assertNotIn("new since you last played", text, "nothing is 'new' on a first install")
-        self.assertIn("Guild sharing is off", text)
+        self.assertNotIn("NEW", text.split("\n"), "nothing is 'new' on a first install")
+        # 3.8.3: sharing starts on for a new install, with its switch on this page
+        self.assertIn("Guild sharing", text)
+        self.assertTrue(wow.eval("ns.cfg.share"))
+        self.assertTrue(wow.eval("""(function() local function walk(f)
+            for _, c in ipairs(f.__children or {}) do
+                if c.__template == "UICheckButtonTemplate" and c:IsVisible() and c:GetChecked() then return true end
+                if walk(c) then return true end end end return walk(WarpathChronicle) end)()"""))
+
+    def test_the_welcome_switch_turns_sharing_off(self):
+        wow = self.booted("3.8.2")
+        wow.run("ns.cfg.share = true")
+        wow.run("""(function() local function walk(f)
+            for _, c in ipairs(f.__children or {}) do
+                if c.__template == "UICheckButtonTemplate" and c:IsVisible() then
+                    c:SetChecked(false) c:GetScript("OnClick")(c) return true end
+                if walk(c) then return true end end end walk(WarpathChronicle) end)()""")
+        self.assertFalse(wow.eval("ns.cfg.share"))
 
     def test_older_releases_are_a_page_turn_away(self):
         wow = self.booted("3.8.2")
@@ -293,6 +310,31 @@ class NewIn(unittest.TestCase):
         self.assertIn("2.0.1", self.page(wow), "the oldest release is on the last page")
         wow.run("WarpathChronicle.news.later:GetScript('OnClick')(WarpathChronicle.news.later)")
         self.assertNotIn("2.0.1\n", self.page(wow) + "\n")
+
+    def test_a_long_release_carries_on_to_the_next_page(self):
+        # 3.8.3-test8 drew a release whole, however long, so it ran off the book.
+        wow = self.booted("3.8.2")
+        wow.run("""local t = {} for k = 1, 30 do t[k] = "Long note " .. k
+            .. ", written out to take two lines of the page or so, for this test." end
+            table.insert(ns.NewIn.List, { "99.0.0", t })""")
+        wow.run("ns.Chronicle.News('3.8.2')")
+        floor = wow.eval("WarpathChronicle:GetHeight()") - 36 - 44
+        lowest = wow.eval("""(function() local low = 0
+            for _, l in ipairs(WarpathChronicle.news.lines) do if l:IsShown() then
+                local p = { l:GetPoint(1) } low = math.max(low, -p[#p]) end end
+            return low end)()""")
+        self.assertLess(lowest, floor, "a note starts below the page's floor")
+        first = self.page(wow)
+        self.assertIn("Long note 1,", first)
+        self.assertNotIn("Long note 30,", first)
+        earlier = "WarpathChronicle.news.earlier"
+        self.assertTrue(wow.eval(f"{earlier}:IsEnabled()"))
+        wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
+        second = self.page(wow)
+        self.assertIn("99.0.0 (continued)", second)
+        self.assertNotIn("Long note 1,", second)
+        wow.run("WarpathChronicle.news.later:GetScript('OnClick')(WarpathChronicle.news.later)")
+        self.assertIn("Long note 1,", self.page(wow))
 
     def test_versions_order_with_test_builds_first(self):
         wow = Wow()
@@ -334,6 +376,127 @@ class NewIn(unittest.TestCase):
         self.assertLessEqual(wow.eval('#ns.NewIn.Unseen(nil)'), 8)
 
 
+class AlertSettings(unittest.TestCase):
+    """3.8.3: quiet mode and the big-text switch became "Announce on screen";
+    guild sharing starts on for new installs only."""
+
+    def booted(self, cfg, db=None):
+        wow = Wow()
+        wow.run(f'WarpathGlobal = {{ installed = "3.8.2", seenVersion = "3.8.2", cfg = {cfg} }}')
+        if db:
+            wow.run(f"WarpathDB = {db}")
+        return wow.login()
+
+    def test_quiet_mode_keeps_everything_it_turned_off(self):
+        wow = self.booted("{ quiet = true, sound = true, zoneText = true, overlay = true }")
+        self.assertFalse(wow.eval("ns.cfg.announce"))
+        self.assertFalse(wow.eval("ns.cfg.sound"))
+        self.assertFalse(wow.eval("ns.cfg.zoneText"))
+        self.assertIsNone(wow.eval("ns.cfg.quiet"))
+        self.assertIsNone(wow.eval("ns.cfg.overlay"))
+
+    def test_without_quiet_mode_nothing_changes(self):
+        wow = self.booted("{ quiet = false, sound = true, zoneText = true, overlay = false }")
+        self.assertTrue(wow.eval("ns.cfg.announce"))
+        self.assertTrue(wow.eval("ns.cfg.sound"))
+        self.assertTrue(wow.eval("ns.cfg.zoneText"))
+
+    def test_quiet_command_is_a_shortcut(self):
+        wow = Wow().login()
+        wow.run('SlashCmdList.WARPATH("quiet on")')
+        self.assertFalse(wow.eval("ns.cfg.announce"))
+        self.assertFalse(wow.eval("ns.cfg.sound"))
+        wow.run('SlashCmdList.WARPATH("quiet")')
+        self.assertTrue(wow.eval("ns.cfg.announce"))
+        self.assertTrue(wow.eval("ns.cfg.sound"))
+
+    def test_existing_accounts_keep_their_sharing_choice(self):
+        self.assertFalse(self.booted("{ share = false }").eval("ns.cfg.share"))
+        self.assertTrue(self.booted("{ share = true }").eval("ns.cfg.share"))
+
+    def test_a_new_install_shares(self):
+        self.assertTrue(Wow().login().eval("ns.cfg.share"))
+
+    def test_a_pre_3_3_character_keeps_sharing_off(self):
+        # account settings seeded from an old character that never turned it on
+        wow = Wow()
+        wow.run("WarpathDB = { maps = { [1448] = { marks = {} } } }")
+        self.assertFalse(wow.login().eval("ns.cfg.share"))
+
+
+class SettingsTab(unittest.TestCase):
+    """3.8.3: the settings are a tab of the chronicle."""
+
+    FIND = """local function Find(label)
+        local function walk(f)
+            for _, c in ipairs(f.__children or {}) do
+                if c.__kind == "FontString" and c:GetText() == label and c:IsVisible() then
+                    local _, rel = c:GetPoint(1) return rel end
+                local r = walk(c) if r then return r end
+            end
+        end
+        return walk(WarpathChronicle)
+    end"""
+
+    def opened(self, section=None):
+        wow = Wow().login()
+        wow.run('SlashCmdList.WARPATH("setup")')
+        if section:
+            wow.run(f'ns.ShowSetup(nil, {lua_str(section)})')
+        return wow
+
+    def click(self, wow, label):
+        wow.run(self.FIND + f"""
+            local cb = Find({lua_str(label)})
+            assert(cb and cb.GetChecked, "no checkbox labelled " .. {lua_str(label)})
+            cb:SetChecked(not cb:GetChecked())
+            cb:GetScript("OnClick")(cb)""")
+
+    def test_setup_opens_the_book_on_settings(self):
+        wow = self.opened()
+        self.assertEqual(wow.eval("ns.Chronicle.Shown()"), "settings")
+        self.assertIsNone(wow.eval("WarpathSetup"), "the old options window is gone")
+
+    def test_every_section_fits_its_page(self):
+        wow = self.opened()
+        floor = wow.eval("WarpathChronicle:GetHeight() - 36 - 44")
+        for key in wow.eval("(function() local t = {} for _, s in ipairs(ns.Settings.Sections) do t[#t + 1] = s[1] end return table.concat(t, ',') end)()").split(","):
+            with self.subTest(section=key):
+                self.assertLessEqual(wow.eval(f"ns.Settings.Bottom({lua_str(key)})"), floor)
+
+    def test_a_checkbox_writes_its_setting(self):
+        wow = self.opened("alerts")
+        self.assertTrue(wow.eval("ns.cfg.announce"))
+        self.click(wow, "Announce on screen")
+        self.assertFalse(wow.eval("ns.cfg.announce"))
+        wow = self.opened("map")
+        self.click(wow, "Roads")
+        self.assertFalse(wow.eval("ns.cfg.layers.roads"))
+
+    def test_rows_grey_out_when_they_do_nothing(self):
+        wow = self.opened("guild")
+        wow.run("ns.cfg.share = true ns.Settings.Refresh()")
+        enabled = self.FIND + """ local cb = Find("Guildmates' kills and deaths in chat") return cb:IsEnabled() """
+        self.assertTrue(wow.eval(f"(function() {enabled} end)()"))
+        self.click(wow, "Guild sharing")
+        self.assertFalse(wow.eval("ns.cfg.share"))
+        self.assertFalse(wow.eval(f"(function() {enabled} end)()"))
+
+    def test_restore_defaults_resets_only_the_open_section(self):
+        wow = self.opened("map")
+        wow.run("ns.cfg.runHours = 6 ns.cfg.flightHours = 48 ns.cfg.layers.roads = false ns.cfg.sound = false")
+        wow.run("ns.Settings.Restore()")
+        self.assertEqual(wow.eval("ns.cfg.runHours"), 24)
+        self.assertEqual(wow.eval("ns.cfg.flightHours"), 24)
+        self.assertTrue(wow.eval("ns.cfg.layers.roads"))
+        self.assertFalse(wow.eval("ns.cfg.sound"), "sound is an Alerts setting")
+
+    def test_the_minimap_right_click_opens_settings(self):
+        wow = Wow().login()
+        wow.run('ns.Dispatch("setup")')
+        self.assertEqual(wow.eval("ns.Chronicle.Shown()"), "settings")
+
+
 class Share(unittest.TestCase):
     """The guild channel, including what 3.7.10's diagnostics count."""
 
@@ -358,6 +521,14 @@ class Share(unittest.TestCase):
         self.receive("1|K|1448|0.40|0.60")
         self.assertTrue(any("Bob Smith" in l and "Felwood" in l for l in self.new_chat()), self.new_chat())
         self.assertEqual(lua_count(self.wow, "WarpathDB.maps[1448].gmarks"), 1)
+
+    def test_guildmates_lines_can_be_turned_off(self):
+        # 3.8.3: no chat line, but the pin is still saved
+        self.wow.run("ns.cfg.guildChat = false")
+        self.receive("1|K|1448|0.40|0.60")
+        self.receive("1|D|1448|0.45|0.65|Aldric-Realm|0|1|")
+        self.assertFalse(any("Bob Smith" in l for l in self.new_chat()), self.new_chat())
+        self.assertEqual(lua_count(self.wow, "WarpathDB.maps[1448].gmarks"), 2)
 
     def test_guildmates_death_prints(self):
         self.receive("1|D|1448|0.40|0.60|Aldric-Realm|0|1|")
@@ -478,6 +649,14 @@ class Share(unittest.TestCase):
         self.assertEqual(self.wow.eval("WarpathDB.kills"), 1)
         self.assertEqual(len(self.kill_lines()), lines, self.new_chat())
         self.assertEqual(self.gpins(), 0)  # your own mark is there instead
+
+    def test_announce_off_says_your_kill_in_chat_instead(self):
+        # 3.8.3: "Announce on screen" off (once quiet mode): no banner, a chat line
+        self.wow.run("ns.cfg.announce = false ns.cfg.selfChat = false")
+        before = self.wow.eval("#__H.notices")
+        self.own_kill()
+        self.assertEqual(self.wow.eval("#__H.notices"), before, "no banner")
+        self.assertTrue(any("Thrall" in l for l in self.new_chat()), self.new_chat())
 
     def test_your_own_line_still_prints_for_your_own_kill(self):
         self.wow.run("ns.cfg.selfChat = true")

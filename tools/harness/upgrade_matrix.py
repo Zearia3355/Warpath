@@ -78,7 +78,8 @@ m.kills, m.deaths = db.kills or 0, db.deaths or 0
 m.grudges = 0
 for _ in pairs(gdb.kos or {}) do m.grudges = m.grudges + 1 end
 local cfg = gdb.cfg or db
-m.quiet = (cfg.quiet == true) and 1 or 0
+-- quiet mode; from 3.8.3 it lives on as "Announce on screen" off, with sounds off
+m.quiet = (cfg.quiet == true or (cfg.announce == false and cfg.sound == false)) and 1 or 0
 m.v = db.v or 0
 __m = m
 """

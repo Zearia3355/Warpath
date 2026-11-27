@@ -30,6 +30,16 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ## Enhancements
 
+### Filter chronicle campaigns by activity
+- From: Joe, 2026-11-26 ("I'm imagining by default we don't show campaigns with little or no activity, but you COULD adjust the filter to show everything too")
+- Status: wanted, needs a design
+- What: the Campaigns tab hides quiet campaigns by default, with a filter in the book to show everything. Joe thought this was already backlogged; no earlier record of it was found.
+- Notes:
+  - Today a campaign with no kills, deaths or sightings is never saved (`Campaign.lua`, line 25), so "no activity" is already gone. The new rule is about "little" activity: a Patrol (0 fights, sightings only) or a Clash (1–2 kills plus deaths) are the obvious thresholds, matching the headline words.
+  - Hiding over deleting: the filter only changes what the book pages through; all 30 saved campaigns stay. Earlier/Later step over hidden ones; the page number should say so (e.g. "3 of 12, 18 quiet hidden").
+  - Control: a small toggle on the book's left page or by the tab (Blizzard checkbox or dropdown), remembered per account. The most recent campaign might always show, even if quiet, so the book never opens on nothing.
+  - Open questions for Joe: the threshold (Patrol only, or Clash too), and whether "Last 30 per character" should count only the shown ones so quiet patrols don't push real battles out of the 30.
+
 ### Record flight legs as whole routes (3.9)
 - From: Joe, 2026-11-26 (Kalimdor's continent flights around Thunder Bluff and the Crossroads: "I just don't get what the heck is happening in this region visually")
 - Status: wanted, needs a design; changes saved data, so Joe agrees the upgrade before it's built
@@ -44,8 +54,9 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
 
 ### Rework the settings panel, and first-install defaults
 - From: Joe, 2026-11-25
-- Status: needs a design
+- Status: built in the working copy for 3.8.3 (2026-11-26), not installed yet; see `docs/open-items.md`
 - What: redo the options window: its layout, which settings it offers, and the panel as a whole. At the same time, re-evaluate the defaults a new install starts with.
+- Direction (Joe, 2026-11-26): "make the chronicle the main way to interact with everything - including settings now". Settings become a **Settings tab in the chronicle** (right of the title plate, beside Warpath), replacing the separate window. Claude's proposal, not yet agreed: left page a contents list of the five sections (General, Map, Screenshots, Chronicle & zones, Grudges) in the 3.8.3 "C" style; right page that section's controls under small-caps headings; `/warpath setup`, the minimap right-click and the Warpath tab's Settings button all open it. Controls need ink-coloured labels to read on parchment. Mocked 2026-11-26 (General and Map sections). Joe then asked for a review of every setting's wording, need, gaps and controls: `docs/settings-review.md`. He agreed to all of it except one length for runs and flights (he wants them separate). Built as six sections (Alerts, Map, Guild, Screenshots, Zones & panels, Grudges).
 - Notes:
   - Today: a tabbed window (`Options.lua`, Warpath's own tabs because the client's tab template is missing). The General tab is full (near `BODY_H` 330, radio rows fit about six short choices), which is why new settings have had to squeeze in beside old ones.
   - Start from an inventory: every setting, its default, where it lives (tab, map button menu, slash command), and whether anyone changes it. Some settings exist in two or three places.
