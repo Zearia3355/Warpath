@@ -261,8 +261,15 @@ function CreateFrame(kind, name, parent, template)
     H.frames[#H.frames + 1] = w
     if template and template:find("Slider") then w.__min, w.__max = 0, 1 end
     if template and template:find("CheckButton") then w.Text = NewWidget("FontString", nil, w) end
+    -- the client's close button hides its parent through HideUIPanel
+    if template == "UIPanelCloseButton" then
+        w:SetScript("OnClick", function(self) HideUIPanel(self:GetParent()) end)
+    end
     return w
 end
+
+-- the secure panel manager won't act in combat (silently, as in the client)
+HideUIPanel = function(f) if not InCombatLockdown() then f:Hide() end end
 
 hooksecurefunc = function(a, b, c)
     local tbl, name, fn = a, b, c

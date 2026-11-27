@@ -289,6 +289,9 @@ local function BuildBook()
     f.title:SetPoint("TOP", plate, "TOP", 0, -14)
     local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
     close:SetPoint("TOPRIGHT", 2, 2)
+    -- the template's click goes through HideUIPanel, which the secure panel
+    -- manager ignores in combat; the book is a plain frame, so hide it directly
+    close:SetScript("OnClick", function() f:Hide() end)
 
     f.tabs = { SectionTab(f, "Campaigns", "campaigns", 36), SectionTab(f, "Grudges", "grudges", 158),
         SectionTab(f, "Settings", "settings", W - 158 - 116), SectionTab(f, "Warpath", "warpath", W - 36 - 116) }

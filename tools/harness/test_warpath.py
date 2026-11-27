@@ -251,6 +251,15 @@ class MapButton(unittest.TestCase):
         wow.run("ns.Chronicle.Open()")
         self.assertTrue(wow.eval("WarpathChronicle:IsShown()"))
 
+    def test_the_books_x_closes_it_in_combat(self):
+        # 3.8.3 (Joe): the X did nothing in combat; the template's click goes
+        # through HideUIPanel, which the secure panel manager ignores then.
+        wow = Wow().login()
+        wow.run("ns.Chronicle.Open(); InCombatLockdown = function() return true end")
+        wow.run("""for _, c in ipairs(WarpathChronicle.__children) do
+            if c.__template == 'UIPanelCloseButton' then c:GetScript('OnClick')(c, 'LeftButton') end end""")
+        self.assertFalse(wow.eval("WarpathChronicle:IsShown()"), "the X didn't close the book in combat")
+
     def test_the_slash_command_still_replies(self):
         wow = Wow().login()
         before = len(wow.chat)
