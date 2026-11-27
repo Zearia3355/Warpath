@@ -16,7 +16,7 @@
 --     (this server's own) still shows.
 -- The client has no graveyard faction of its own. Positions are world yards,
 -- placed on a zone map with C_Map.GetMapPosFromWorldPos, so one record works
--- on every map it falls on. Zone maps only: on a continent 76 tombstones
+-- on every map it falls on. Zone maps only: on a continent 76 icons
 -- would be clutter.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
@@ -28,7 +28,10 @@ local Spirits = {}
 ns.Spirits = Spirits
 
 local MATCH_YD = 60     -- a learned spot this close to a listed graveyard is that graveyard
-local ICON_PX = 15      -- tombstone height at 100% icon size, interface pixels
+local ICON_PX = 15      -- icon size at 100% icon size, interface pixels
+-- The raid frame's resurrect icon (Joe's pick B, 2026-11-26): the map's own
+-- graveyard tombstone (test1) duplicated the game's grave icon, which matters.
+local ICON = "RaidFrame-Icon-Rez"
 local QUIET = 0.6       -- alpha while you're alive; full while dead
 
 -- [continent] = { { worldX, worldY, faction, name }, ... }
@@ -318,7 +321,7 @@ end
 
 local function Size(f, k, scale)
     local h = ICON_PX * scale / k
-    f:SetSize(h * 0.75, h) -- the tombstone art is 12 x 16
+    f:SetSize(h, h) -- the art is square (44 x 44)
     f.badge:SetSize(h * 0.75, h * 0.75)
 end
 
@@ -337,7 +340,7 @@ function Spirits.Draw(overlay, viewed, k)
             n = n + 1
             local f = GetIcon(overlay, n)
             f.k = e.k
-            f.tex:SetAtlas("poi-graveyard-neutral")
+            f.tex:SetAtlas(ICON)
             local side = Spirits.Side(e.k)
             if side == "H" then f.badge:SetAtlas("poi-horde") f.badge:Show()
             elseif side == "A" then f.badge:SetAtlas("poi-alliance") f.badge:Show()
