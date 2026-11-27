@@ -264,7 +264,10 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             Foes.dead = true
             OnDeath()
         end
+        if S.ready then pcall(ns.Spirits.OnDead) end
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
+        -- released: you're at the spirit healer (a moment to settle first)
+        if event == "PLAYER_ALIVE" and S.ready then C_Timer.After(1, function() pcall(ns.Spirits.OnRelease) end) end
         if not UnitIsDeadOrGhost("player") then
             Foes.dead = false
             ns.Feats.OnAlive()

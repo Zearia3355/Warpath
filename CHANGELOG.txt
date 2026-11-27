@@ -1,6 +1,28 @@
 Warpath changelog
 
 =====================================================================
+3.8.4
+=====================================================================
+
+On the map
+- Spirit healers show on zone and city maps, with the corpse runs
+  layer, so you can see where you'll come back after releasing. They
+  stay faint while you're alive and brighten while you're dead.
+- A graveyard only one faction can use carries a small Horde or
+  Alliance badge; shared ones have none. Hover one for its name and
+  who can use it.
+- Warpath starts with the classic graveyards and learns every one
+  your characters release to, on any character on your account. A
+  graveyard both your Horde and Alliance characters have used counts
+  as shared.
+- /warpath debug spirits says how close the nearest known spirit
+  healer is.
+
+- Your saved data: everything is kept. One new account-wide list of
+  the graveyards your characters have released to.
+- Needs a full game restart (a new file), not just /reload.
+
+=====================================================================
 3.8.3
 =====================================================================
 

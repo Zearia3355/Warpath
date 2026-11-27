@@ -324,9 +324,9 @@ UnitRace = function(u) if isPlayer(u) then return H.player.race, H.player.race e
 UnitLevel = function(u) if isPlayer(u) then return H.player.level end return 0 end
 UnitExists = function(u) return isPlayer(u) or (H.units and H.units[u] ~= nil) or false end
 UnitIsPlayer = function(u) return isPlayer(u) end
-UnitIsDeadOrGhost = function() return false end
+UnitIsDeadOrGhost = function(u) return isPlayer(u) and (H.dead or H.ghost) or false end
 UnitIsDead = function() return false end
-UnitIsGhost = function() return false end
+UnitIsGhost = function(u) return isPlayer(u) and H.ghost or false end
 UnitIsEnemy = function() return false end
 UnitIsFriend = function() return true end
 UnitCanAttack = function() return false end
@@ -412,6 +412,20 @@ end
 -- out 95% other zones.) So: only real rects, captured from the client into
 -- H.rects; for any pair we don't know, say "no overlap", which leaves that
 -- zone out of the render instead of putting it in the wrong place.
+-- The inverse, onto a chosen map (Spirits.lua places world spots this way).
+-- Off unless a test sets H.worldMaps: every stub map sits at the same world
+-- place, so the built-in graveyards would land on every map and in every
+-- other test's drawing.
+C_Map.GetMapPosFromWorldPos = function(cont, pos, id)
+    if not H.worldMaps then return nil end
+    local w = (H.mapYards and H.mapYards[id]) or 4000
+    return id, vec(pos.x / w, pos.y / (w * 2 / 3))
+end
+-- Death (Spirits.lua): where you'll release to, H.release = { x, y } on the map asked about.
+C_DeathInfo = {
+    GetDeathReleasePosition = function(id) if H.release then return vec(H.release[1], H.release[2]) end end,
+    GetGraveyardsForMap = function() return {} end,
+}
 C_Map.GetMapRectOnMap = function(child, parent)
     if child == parent then return 0, 1, 0, 1 end
     local r = H.rects and H.rects[child] and H.rects[child][parent]

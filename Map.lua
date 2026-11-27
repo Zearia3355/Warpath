@@ -257,6 +257,7 @@ local function RescalePins()
         end
     end
     for i = 1, activeTags do if tags[i] then TagAnchor(tags[i]) end end
+    ns.Spirits.Rescale(k * ((cfg.iconScale or 100) / 100))
 end
 
 local function GetPin(i)
@@ -2466,6 +2467,8 @@ local function Draw(scene, limit)
         if L.recent then DrawToday(D, scene) end
     end
     DrawMarks(D, scene, from, upTo)
+    -- spirit healers, on the corpse runs layer (3.9); zone maps only
+    ns.Spirits.Draw(overlay, (not limit and L.runs) and scene.viewed or nil, MapScale())
     if ns.ZoneStanding then ns.ZoneStanding(D.standing) end
 
     for i = D.nl + 1, #lines do lines[i]:Hide() end

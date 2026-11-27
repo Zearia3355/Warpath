@@ -483,6 +483,7 @@ end
 function H.debug(arg)
     if (arg or ""):lower():match("^%s*haze") then DebugHaze() return end
     if (arg or ""):lower():match("^%s*kill") then DebugKills() return end
+    if (arg or ""):lower():match("^%s*spirit") then ns.Spirits.Debug(Print) return end
     Print(("in a battleground or instance: %s"):format(S.inInstance and "yes, Warpath is resting" or "no"))
     Print(("in a neutral town: %s (zone PvP type %s, subzone \"%s\")"):format(
         ns.InNeutralTown() and "yes, sightings aren't recorded" or "no",
@@ -549,7 +550,7 @@ local LIST = {
     { "roads",     "roads <days>",                  "how soon roads turn gold (default 2.5; lower is sooner)", "Settings", false, H.roads },
     { "clear",     "clear zone",                    "forget this zone",                   "Data", false, H.clear },
     { nil,         "clear all",                     "forget everything (asks you to confirm)", "Data" },
-    { "debug",     "debug [haze|kills]",            "what Warpath can and can't see (haze: this zone's haze; kills: the kill-credit log)", "Troubleshooting", false, H.debug },
+    { "debug",     "debug [haze|kills|spirits]",    "what Warpath can and can't see (haze: this zone's haze; kills: the kill-credit log; spirits: spirit healers)", "Troubleshooting", false, H.debug },
     { nil,         "share status",                  "guild messages sent, refused, received", "Troubleshooting" },
 }
 local GROUPS = { "Stats", "Map", "Grudges", "Kill screenshots", "Guild sharing", "Alerts", "Settings", "Data", "Troubleshooting" }

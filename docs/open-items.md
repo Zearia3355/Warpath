@@ -4,6 +4,19 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
+## Spirit healers on the map (3.8.4): labelled 3.8.4-test1 in the working copy (2026-11-26, branch `areas-merge`), not installed
+
+Joe asked (2026-11-26) for the backlog's "Spirit healers on the map", noting whether each is shared, Horde or Alliance, on the corpse runs layer. His picks: faction from **both** a built-in list and what his characters learn; shown **always, quiet**. Built as `Spirits.lua` (new file: a full restart, not `/reload`). Details in `how-it-works.md` (Runs layer, Spirit healers).
+
+Version: **3.8.4** (Joe, 2026-11-26: 3.9 is already decided as battleground mode, so this stays in 3.8.x). `NEW_IN` and `CHANGELOG.txt` entries are written.
+
+To check in game (none of this can be seen outside the client):
+- The tombstones sit on the graveyards: stand at a spirit healer and run `/warpath debug spirits`; "nearest listed" should be a few yards. If it's hundreds, the world X/Y order is swapped in `Spirits.lua` (`Vec(k.x, k.y)`).
+- The art: `poi-graveyard-neutral` and the `poi-horde` / `poi-alliance` badges exist in the Forever atlas list (Ketho's BlizzardInterfaceResources, `forever` branch), but the look is unseen. Size, badge placement and the quiet alpha (0.6) are Claude's calls.
+- Learning: die in the open world, then `/warpath debug spirits` shows the release spot's distance from the nearest listed graveyard, and a learned count.
+- Whether `C_DeathInfo.GetGraveyardsForMap` returns anything outside battlegrounds (not used yet; it gives no faction).
+- Whether the vanilla list matches WoW Forever: graveyards this server added show once a character releases there; ones the list has that the server doesn't can't be detected and would need removing by hand.
+
 ## 3.8.3: released 2026-11-26 (tag on `8d4b3d9`; CI run 45938193545 uploaded to CurseForge, "Success!", and GitHub Releases; listed on the files page)
 
 The checks below that Joe hadn't confirmed shipped unconfirmed; check them in game on the release.

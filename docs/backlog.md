@@ -92,7 +92,7 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - **Flag carrier tracking** (Warsong Gulch): who carries each flag, from the "picked up by" system messages, which needs no addon messages. Health only while the carrier is your target, mouseover or nameplate. Sharing the carrier's health with teammates (Warsong Flag Carrier's trick) needs messages inside: wait for the open investigation.
   - **Healer marks**: mark enemy healers on nameplates, like the grudge skull. Detecting them is the open question: the scoreboard's healing column and class (no combat reads) if this client has it; the combat log likely hides it in combat.
   - **Enemies you meet again** ("decent idea"): count enemy names from the scoreboard across matches ("faced Thrall in 14 matches, your side won 9"), group by guild to spot premades. Ties in with grudges.
-  - **Time spent dead**: share of the match dead, and the graveyard you came back at most. Pairs with "Spirit healers on the map".
+  - **Time spent dead**: share of the match dead, and the graveyard you came back at most. Pairs with spirit healers on the map (built 2026-11-26, see `open-items.md`).
   - **Victory screenshot**: the scoreboard open at the match's end, through the kill-shot pipeline.
   - **War table for battlegrounds**: this match's killing blows and deaths, your current life, grudges on the other team.
   - **Guild group record**: wins together when two or more guildmates share a match; an opt-in line to guild chat. Depends on messages getting through inside (open investigation in `open-items.md`).
@@ -101,17 +101,6 @@ _The guild-sharing-in-battlegrounds problem is an open investigation in `open-it
   - The game hides values in combat (`ns.Foes.Safe`); battlegrounds are mostly combat.
   - Battleground maps aren't in the harness's captured map rects.
 - To check in game first: does the scoreboard API exist and update during the match (`UPDATE_BATTLEFIELD_SCORE`); is there a map ID and player position inside; can the winner be read at the end (`GetBattlefieldWinner`, `PVP_MATCH_COMPLETE`); which battleground system messages arrive (flag pickups, base assaults) and whether they're readable mid-fight; does the scoreboard show healing done; do enemy nameplates show inside. Run the share diagnostics in the same session (open investigation).
-
-### Spirit healers on the map
-- From: Joe, 2026-11-25
-- Status: needs a design
-- What: show where the spirit healers are, so you know where you'll come back after releasing. Neither the Forever client nor Warpath marks them on the world map today.
-- Notes:
-  - Closest thing today: a corpse run starts recording once you're a ghost (`Record.lua`, mode `g`), so each ice-blue dashed run begins at the graveyard you released at. Corpse runs fade after `cfg.runHours` (24 h default).
-  - Natural approach: remember the place where each corpse run starts (or where you rez at a spirit healer, `PLAYER_UNGHOST` with no corpse reached) as a graveyard, per zone, kept permanently like other zone records. Learned only from your own deaths, so unvisited graveyards stay unknown; guildmates could share theirs later.
-  - Check whether the client exposes graveyard positions directly (retail has `C_DeathInfo.GetGraveyardsForMap`; check it exists and works on 1.60.1). If it does, every graveyard could show at once without dying first.
-  - Look: a small Blizzard icon (an ankh or spirit-healer art, path checked in the Forever client), quiet enough not to clutter. Maybe only while dead, or as a toggle.
-  - Saved data: new per-zone key only; nothing changed or removed.
 
 ### What you did in a lingering area, on hover
 - From: Joe, 2026-11-25

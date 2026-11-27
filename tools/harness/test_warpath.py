@@ -306,7 +306,9 @@ class NewIn(unittest.TestCase):
         text = self.page(wow)
         self.assertIn("What's New", text)
         # 3.8.3: a "NEW" mark beside each release newer than the last seen
-        self.assertEqual(text.split("\n").count("NEW"), 1, "only 3.8.3 is new since 3.8.2")
+        newer = int(wow.eval('(function() local n = 0 for _, r in ipairs(ns.NewIn.List) do '
+                             'if ns.NewIn.Older("3.8.2", r[1]) then n = n + 1 end end return n end)()'))
+        self.assertEqual(text.split("\n").count("NEW"), newer, "every release after 3.8.2 is marked, nothing older")
         self.assertIn("ON THE MAP", text, "3.8.3's notes are grouped under topics")
 
     def test_closing_the_book_marks_the_release_seen(self):
@@ -2716,6 +2718,93 @@ class RealData(unittest.TestCase):
                 self.assertFalse([l for l in wow.chat if "upgrade hit an error" in l or "rebuild hit an error" in l])
                 after = [hashlib.md5(p.read_bytes()).hexdigest() for p in files]
                 self.assertEqual(before, after)
+
+
+class SpiritHealers(unittest.TestCase):
+    """Spirit healers on the map (3.9), on the corpse runs layer.
+
+    A built-in list of vanilla graveyards with the faction each serves,
+    corrected by what the account's characters see: dying learns where you'll
+    release to, by faction. In the stub every map sits on continent 0 at
+    4000 yd wide, so Eastern Kingdoms' Tirisfal graveyards (all Horde only in
+    the list) fall on the Felwood map: Deathknell at about 0.47, 0.61."""
+
+    DEATHKNELL = (1883 / 4000, 1629 / (4000 * 2 / 3))
+
+    def setUp(self):
+        self.wow = Wow().login()
+        self.wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448; __H.worldMaps = true")
+
+    def drawn(self):
+        self.wow.eval("ns.Redraw()")
+        n = int(self.wow.eval("#ns.Spirits.drawn"))
+        out = []
+        for i in range(1, n + 1):
+            d = f"ns.Spirits.drawn[{i}]"
+            out.append((float(self.wow.eval(d + ".x")), float(self.wow.eval(d + ".y")),
+                        self.wow.eval(d + ".side"), float(self.wow.eval(d + ".alpha")),
+                        self.wow.eval(d + ".k.name")))
+        return out
+
+    def at(self, x, y, tol=0.002):
+        return [d for d in self.drawn() if abs(d[0] - x) < tol and abs(d[1] - y) < tol]
+
+    def die(self, x, y, faction="Horde"):
+        w = self.wow
+        w.H.player.faction = faction
+        w.run(f"__H.release = {{ {x}, {y} }}; __H.dead = true")
+        w.fire("PLAYER_DEAD")
+        w.run("__H.release = nil; __H.dead = false")
+        w.advance(1)
+
+    def test_listed_graveyards_show_on_a_zone_map_quietly(self):
+        hit = self.at(*self.DEATHKNELL)
+        self.assertEqual(len(hit), 1)
+        self.assertEqual(hit[0][2], "H")
+        self.assertIn("Deathknell", hit[0][4])
+        self.assertLess(hit[0][3], 1)
+
+    def test_brighter_while_dead(self):
+        self.wow.run("__H.dead = true")
+        self.assertEqual(self.at(*self.DEATHKNELL)[0][3], 1)
+
+    def test_only_with_the_corpse_runs_layer_on(self):
+        self.wow.run("ns.cfg.layers.runs = false")
+        self.assertEqual(self.drawn(), [])
+
+    def test_not_on_a_continent(self):
+        self.wow.run("__H.mapShown = 1415")
+        self.assertEqual(self.drawn(), [])
+
+    def test_dying_learns_the_release_spot_by_faction(self):
+        self.die(0.30, 0.20)
+        self.assertEqual(int(self.wow.eval("#WarpathGlobal.spirits")), 1)
+        self.assertIsNotNone(self.wow.eval("WarpathGlobal.spirits[1].H"))
+        hit = self.at(0.30, 0.20)
+        self.assertEqual([(d[2], d[4]) for d in hit], [("H", None)])
+
+    def test_both_factions_releasing_there_makes_it_shared(self):
+        # the list says Deathknell is Horde only; an Alliance character released there
+        self.die(*self.DEATHKNELL, faction="Alliance")
+        self.assertEqual(self.at(*self.DEATHKNELL)[0][2], "S")
+        self.assertEqual(int(self.wow.eval("#WarpathGlobal.spirits")), 1)
+
+    def test_a_second_death_at_the_same_graveyard_is_one_record(self):
+        self.die(0.30, 0.20)
+        self.die(0.301, 0.2005, faction="Alliance")
+        self.assertEqual(int(self.wow.eval("#WarpathGlobal.spirits")), 1)
+        self.assertEqual(self.at(0.30, 0.20)[0][2], "S")
+
+    def test_nothing_is_learned_inside_an_instance(self):
+        self.wow.run("ns.S.inInstance = true")
+        self.wow.run("__H.release = { 0.3, 0.2 }")
+        self.wow.run("pcall(ns.Spirits.OnDead)")
+        self.assertEqual(int(self.wow.eval("#(WarpathGlobal.spirits or {})")), 0)
+
+    def test_debug_spirits_runs(self):
+        self.die(0.30, 0.20)
+        self.wow.run('SlashCmdList.WARPATH("debug spirits")')
+        self.assertTrue(any("spirit healers:" in l for l in self.wow.chat))
 
 
 def lua_str(s):
