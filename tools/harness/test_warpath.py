@@ -2828,6 +2828,19 @@ class SpiritHealers(unittest.TestCase):
         self.assertIn("Deathknell", hit[0][4])
         self.assertLess(hit[0][3], 1)
 
+    def test_only_the_viewed_zones_own_graveyards(self):
+        # The zone lookup puts Deathknell in Ashenvale, a neighbour: left off
+        # though it's inside the Felwood map's edges. Everything else Felwood.
+        dk = 1883 / 4000
+        self.wow.run(f"__H.zoneAt = function(id, x, y) if math.abs(x - {dk}) < 0.001 then return 1440 end return 1448 end")
+        self.assertEqual(self.at(*self.DEATHKNELL), [])
+        self.assertGreater(len(self.drawn()), 0)
+
+    def test_a_city_inside_the_zone_counts(self):
+        self.wow.run("__H.maps[9999] = { name = 'Town', mapType = 3, parentMapID = 1448 }")
+        self.wow.run("__H.zoneAt = function() return 9999 end")
+        self.assertEqual(len(self.at(*self.DEATHKNELL)), 1)
+
     def test_brighter_while_dead(self):
         self.wow.run("__H.dead = true")
         self.assertEqual(self.at(*self.DEATHKNELL)[0][3], 1)

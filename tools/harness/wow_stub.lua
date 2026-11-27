@@ -436,6 +436,12 @@ C_Map.GetMapRectOnMap = function(child, parent)
     H.rectMisses[child .. ">" .. parent] = true
     return nil
 end
+-- Which map is at a point of another (Spirits.lua: which zone a graveyard is
+-- in). Off unless a test sets H.zoneAt(id, x, y); nil means "can't say".
+C_Map.GetMapInfoAtPosition = function(id, x, y)
+    local z = H.zoneAt and H.zoneAt(id, x, y)
+    if z then return C_Map.GetMapInfo(z) end
+end
 C_Map.GetMapChildrenInfo = function() return {} end
 C_Map.GetMapGroupID = function() return nil end
 C_Map.SetUserWaypoint = function(p) H.waypoint = p end

@@ -32,7 +32,8 @@ local ICON_PX = 32      -- icon size at 100% icon size, interface pixels (Joe: 1
 -- The raid frame's resurrect icon (Joe's pick B, 2026-11-26): the map's own
 -- graveyard tombstone (test1) duplicated the game's grave icon, which matters.
 local ICON = "RaidFrame-Icon-Rez"
-local QUIET = 0.6       -- alpha while you're alive; full while dead
+local BADGE_IN = 0.22  -- faction badge's centre, inside the icon's corner, as a share of its size (Claude's call)
+local QUIET = 0.6      -- alpha while you're alive; full while dead
 
 -- [continent] = { { worldX, worldY, faction, name }, ... }
 -- faction: "S" shared, "H" Horde only, "A" Alliance only
@@ -244,8 +245,35 @@ function Spirits.Side(k)
     return k.f or (k.H and "H") or (k.A and "A") or "S"
 end
 
--- Graveyards on a zone map, as { k, x, y } in map fractions. Cached per map;
--- rebuilt when something is learned.
+-- Is one map the other, or inside it (a city in its zone)?
+local function Related(a, b)
+    local function Under(child, parent)
+        for _ = 1, 6 do
+            if not child then return false end
+            if child == parent then return true end
+            local ok, info = pcall(C_Map.GetMapInfo, child)
+            child = ok and info and info.parentMapID or nil
+        end
+        return false
+    end
+    return Under(a, b) or Under(b, a)
+end
+
+-- Which zone a graveyard stands in, looked up on the viewed map's continent.
+-- nil when the client can't say (no API, over water): the caller keeps it.
+local function ZoneOf(k, cont)
+    if not (cont and C_Map.GetMapInfoAtPosition) then return end
+    local ok, _, pos = pcall(C_Map.GetMapPosFromWorldPos, k.c, Vec(k.x, k.y), cont)
+    if not (ok and pos) then return end
+    local x, y = pos:GetXY()
+    if not (x and y) then return end
+    local ok2, info = pcall(C_Map.GetMapInfoAtPosition, cont, x, y)
+    return ok2 and info and info.mapID or nil
+end
+
+-- Graveyards on a zone map, as { k, x, y } in map fractions: only the zone's
+-- own, not its neighbours' that the map's edges also show (Joe, 2026-11-27).
+-- Cached per map; rebuilt when something is learned.
 local onMap = {}
 local function ForMap(viewed)
     local hit = onMap[viewed]
@@ -262,7 +290,9 @@ local function ForMap(viewed)
             local ok, _, pos = pcall(C_Map.GetMapPosFromWorldPos, k.c, Vec(k.x, k.y), viewed)
             if ok and pos then
                 local x, y = pos:GetXY()
-                if x and y and x > 0.01 and x < 0.99 and y > 0.01 and y < 0.99 then
+                local inside = x and y and x > 0.01 and x < 0.99 and y > 0.01 and y < 0.99
+                local zone = inside and ZoneOf(k, info.parentMapID)
+                if inside and (not zone or Related(zone, viewed)) then
                     hit[#hit + 1] = { k = k, x = x, y = y }
                 end
             end
@@ -309,7 +339,6 @@ local function GetIcon(overlay, i)
         f.tex = f:CreateTexture(nil, "OVERLAY")
         f.tex:SetAllPoints()
         f.badge = f:CreateTexture(nil, "OVERLAY", nil, 1)
-        f.badge:SetPoint("CENTER", f, "BOTTOMRIGHT", 0, 2)
         f:EnableMouse(true)
         if f.SetMouseClickEnabled then f:SetMouseClickEnabled(false) end
         f:SetScript("OnEnter", Enter)
@@ -323,6 +352,10 @@ local function Size(f, k, scale)
     local h = ICON_PX * scale / k
     f:SetSize(h, h) -- the art is square (44 x 44)
     f.badge:SetSize(h * 0.75, h * 0.75)
+    -- Tucked into the icon's lower right so the two overlap a little (Joe,
+    -- 2026-11-27: centred on the corner it read as a separate icon).
+    f.badge:ClearAllPoints()
+    f.badge:SetPoint("CENTER", f, "BOTTOMRIGHT", -h * BADGE_IN, h * BADGE_IN)
 end
 
 -- viewed: the zone map to draw on, or nil to draw nothing (layer off,

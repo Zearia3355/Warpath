@@ -59,7 +59,7 @@ local NEW_IN = {
     "The book's close button works in combat.",
   } },
   { "3.8.4", {
-    "Spirit healers show on zone maps, with the corpse runs.",
+    "Spirit healers show on their own zone's map, with the corpse runs.",
     "A Horde or Alliance badge marks one-faction graveyards.",
     "Warpath learns each graveyard your characters release to.",
     "A kill several of you share names everyone in chat.",
