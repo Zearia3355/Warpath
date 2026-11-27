@@ -2099,73 +2099,82 @@ class Lingering(unittest.TestCase):
                  if min(Steadiness.dist(x, y, sg) for sg in path) > 1.5]
         self.assertEqual(stray, [], "older line drawn inside the area you're in")
 
-    def test_inside_the_area_you_are_in_the_line_fades_like_a_comet(self):
-        # Joe, 3.8.3-test8: "a more comet-like fade from the end to bright just
-        # behind me", still only 3 s long. The pieces of line inside the area
-        # are brightest and widest just behind you and fainter, thinner back.
-        self.walk(0.20, 0.50, 0.40, 0.50)
-        self.quest(0.40, 0.50, 8 * 60)
-        self.assertTrue(self.live())
-        self.wow.run("ns.Linger.SHOW = 6")             # long enough to hold a few pieces
-        self.wow.eval("ns.Redraw()")
-        r, g, b = (float(v) for v in self.wow.run(
-            "return ns.faction.r .. ' ' .. ns.faction.g .. ' ' .. ns.faction.b").split())
-        px, py = self.wow.H.player.x * 1002, self.wow.H.player.y * 668
-        pieces = []
-        for p in self.wow.run(self.COLLECT).split("\n"):
-            f = p.split("\t")
-            if f[0] != "L" or abs(float(f[2]) - r) > 0.01 or abs(float(f[3]) - g) > 0.01 or abs(float(f[4]) - b) > 0.01:
-                continue
-            a, x1, y1, x2, y2, w = (float(v) for v in f[5:11])
-            if a < 0.94:                                # the comet: fading pieces of line
-                d = ((x1 + x2) / 2 - px) ** 2 + ((y1 + y2) / 2 - py) ** 2
-                pieces.append((d, a, w))
-        self.assertGreaterEqual(len(pieces), 3, "no fading line behind you inside the area")
-        pieces.sort()
-        near, far = pieces[0], pieces[-1]
-        self.assertGreater(near[1], far[1] + 0.2, "the line doesn't fade away from you")
-        self.assertGreater(near[2], far[2], "the line doesn't thin away from you")
+    def run_frames(self, seconds, x, y, ang, speed=7 / 4000.0, dt=0.05, each=None):
+        """Run in a slow circle at running speed, frame by frame, with the map
+        open: the sampler and the map's 2 s redraws run as in game, and the
+        map's per-frame update (UpdateTail) every frame."""
+        import math
+        for f in range(int(round(seconds / dt))):
+            ang += 0.6 * dt
+            x += speed * dt * math.cos(ang)
+            y += speed * dt * math.sin(ang)
+            self.wow.H.player.x, self.wow.H.player.y = x, y
+            self.wow.advance(dt)
+            self.wow.run("ns.UpdateTail()")
+            if each:
+                each(f)
+        return x, y, ang
 
     def comet_pieces(self):
+        """Your own line inside the area you're in, within 3 s of running of
+        you (older trail there is steps not yet joined): {segment: (alpha, width)}."""
+        px, py = self.wow.H.player.x * 1002, self.wow.H.player.y * 668
         r, g, b = (float(v) for v in self.wow.run(
             "return ns.faction.r .. ' ' .. ns.faction.g .. ' ' .. ns.faction.b").split())
+        poly = self.outline_px()
         out = {}
         for p in self.wow.run(self.COLLECT).split("\n"):
             f = p.split("\t")
             if f[0] != "L" or abs(float(f[2]) - r) > 0.01 or abs(float(f[3]) - g) > 0.01 or abs(float(f[4]) - b) > 0.01:
                 continue
             a, x1, y1, x2, y2, w = (float(v) for v in f[5:11])
-            if a < 0.94:
+            near = ((x1 + x2) / 2 - px) ** 2 + ((y1 + y2) / 2 - py) ** 2 < 12 ** 2
+            if a > 0.01 and near and self.inside_ink(poly, [(x1, y1, x2, y2)], margin=0):
                 out[(round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1))] = (a, w)
         return out
 
-    def test_the_comet_fades_between_redraws(self):
-        # Joe, 3.8.3-test10: the comet "skipped". It's 3 s long and the map
-        # redraws every 2 s at most, so worked out only at redraws it froze,
-        # then jumped. Between redraws its pieces must keep fading where they
-        # lie: none brighter, none wider, and most of them fainter.
+    def into_live_area(self):
         self.walk(0.20, 0.50, 0.40, 0.50)
         self.quest(0.40, 0.50, 8 * 60)
         self.assertTrue(self.live())
-        self.wow.run("ns.Linger.SHOW = 6")             # long enough to hold a few pieces
         self.wow.eval("ns.Redraw()")
-        before = self.comet_pieces()
-        self.assertGreaterEqual(len(before), 3, "no comet to watch")
-        self.wow.run("__H.gt = __H.gt + 1.5; __H.now = __H.now + 1.5")  # no sample, no redraw
-        self.wow.run("ns.UpdateTail()")
-        after = self.comet_pieces()
-        faded = 0
-        for key, (a, w) in before.items():
-            if key not in after:
-                faded += 1                             # gone: faded right out
-                continue
-            a2, w2 = after[key]
-            self.assertLessEqual(a2, a + 1e-6, "a piece got brighter between redraws")
-            self.assertLessEqual(w2, w + 1e-6, "a piece got wider between redraws")
-            if a2 < a - 0.1:
-                faded += 1
-        self.assertGreater(faded, len(before) // 2, "the comet stood still between redraws")
-        self.assertEqual([k for k in after if k not in before], [], "a piece appeared between redraws")
+        return self.wow.H.player.x, self.wow.H.player.y
+
+    def test_inside_the_area_you_are_in_the_line_fades_like_a_comet(self):
+        # Joe, 3.8.3-test8: "a more comet-like fade from the end to bright just
+        # behind me", still only 3 s long. The pieces of line inside the area
+        # are brightest and widest just behind you and fainter, thinner back.
+        x, y = self.into_live_area()
+        self.run_frames(3, x, y, 0.0)
+        px, py = self.wow.H.player.x * 1002, self.wow.H.player.y * 668
+        pieces = sorted((((k[0] + k[2]) / 2 - px) ** 2 + ((k[1] + k[3]) / 2 - py) ** 2, a, w)
+                        for k, (a, w) in self.comet_pieces().items())
+        self.assertGreaterEqual(len(pieces), 10, "no comet behind you inside the area")
+        near, far = pieces[0], pieces[-1]
+        self.assertGreater(near[1], 0.85, "the comet isn't bright just behind you")
+        self.assertLess(far[1], 0.25, "the comet doesn't fade out behind you")
+        self.assertGreater(near[2], far[2], "the comet doesn't thin away from you")
+
+    def test_the_comet_never_vanishes_and_only_fades(self):
+        # Joe, 3.8.3-test13: "a full strength line forms behind me for 3
+        # seconds and then the whole thing disappears and a new line begins".
+        # Drawn from recorded steps at redraws, the comet was one line to your
+        # arrow that grew, then reset at each redraw. Running through redraws,
+        # frame by frame: the comet is always there, about as long, and each
+        # piece only fades where it lies.
+        x, y = self.into_live_area()
+        x, y, ang = self.run_frames(3, x, y, 0.0)        # the comet grows in
+        frames, drawn = [], self.wow.eval("ns.S.lastDraw")
+        self.run_frames(8, x, y, ang, each=lambda f: frames.append(self.comet_pieces()))
+        self.assertGreater(self.wow.eval("ns.S.lastDraw"), drawn + 4, "the map didn't redraw while running")
+        counts = [len(fr) for fr in frames]
+        self.assertGreater(min(counts), 0.6 * max(counts), f"the comet vanished: pieces per frame {counts}")
+        for before, after in zip(frames, frames[1:]):
+            for k, (a2, w2) in after.items():
+                if k in before:
+                    a, w = before[k]
+                    self.assertLessEqual(a2, a + 1e-6, "a piece of comet got brighter")
+                    self.assertLessEqual(w2, w + 1e-6, "a piece of comet got wider")
 
     def test_the_hidden_trail_stays_hidden_when_you_leave(self):
         # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes

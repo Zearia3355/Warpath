@@ -1137,7 +1137,7 @@ local function AreaScene(e, now, life)
                 -- in the area you're in, only your last few seconds of line
                 -- show (SHOW), fading out behind you like a comet's tail
                 -- (3.8.3; 3 s and cut off in 3.8.2, 45 s before): the area
-                -- is there to stop the scribble. DrawWalkLine sets k per piece.
+                -- is there to stop the scribble. DrawComet draws it, not this.
                 local c = { poly = poly, box = box, k = 0 }
                 settled[#settled + 1], liveClip = c, c
             end
@@ -1176,11 +1176,14 @@ local function HeldAge(visits, t, age)
 end
 
 -- The comet (3.8.3): inside the area you're in, your last SHOW seconds of
--- line fade out behind you. It's only 3 s long and the map redraws every
--- 2 s at most, so a comet worked out at each redraw froze, then jumped
--- (test10, Joe). Its pieces are kept here and faded every frame instead.
-local comet = {}
-local LIVE_K = 0.999 -- the live area's clip while drawing the comet: tells "inside" from "outside" (1)
+-- line fade out behind you. Drawn from recorded steps (about 12 yards
+-- apart) at redraws (every 2 s at most), it was one straight line to your
+-- arrow at one brightness that grew, then vanished at the next redraw
+-- (test12/13, Joe). It's drawn from where you've been while the map is
+-- open instead, sampled every TRACE_STEP: each piece stays where it lies
+-- and fades by its own age, frame by frame. Memory only; never saved or shared.
+local trace, cometLines = {}, {}
+local TRACE_STEP = 0.1
 -- A clock with fractions of a second (time() counts whole seconds), so the
 -- fade is smooth; set once, so it never runs backwards.
 local clockBase
@@ -1207,17 +1210,7 @@ local function InkPart(t0, t1, k)
     D.nl = D.nl + 1
     if q.count then D.ndash = D.ndash + 1 end
     local p = q.p
-    local thick, a = q.thick, q.a * k
-    local cm = q.comet
-    if cm and k < 1 and Linger.InPoly(cm.poly, (x1 + x2) / 2, (y1 + y2) / 2) then
-        a = q.a * k / LIVE_K -- another area over it can still dim it
-        local v = Comet((cm.now - q.t) / cm.show)
-        local l = PutLine(D.nl, q.sub, "BLEND", CometThick(thick, v), q.r, q.g, q.b, a * v,
-            (p.ox + x1 * p.sx) * D.w, -(p.oy + y1 * p.sy) * D.h, (p.ox + x2 * p.sx) * D.w, -(p.oy + y2 * p.sy) * D.h)
-        comet[#comet + 1] = { l = l, t = q.t, thick = thick, r = q.r, g = q.g, b = q.b, a = a }
-        return
-    end
-    PutLine(D.nl, q.sub, "BLEND", thick, q.r, q.g, q.b, a,
+    PutLine(D.nl, q.sub, "BLEND", q.thick, q.r, q.g, q.b, q.a * k,
         (p.ox + x1 * p.sx) * D.w, -(p.oy + y1 * p.sy) * D.h, (p.ox + x2 * p.sx) * D.w, -(p.oy + y2 * p.sy) * D.h)
 end
 local function InkOnce(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
@@ -1238,8 +1231,6 @@ end
 local function DrawWalkLine(D, scene)
     local w, now = D.w, D.now
     local cutoff = now - C.LINE_SOLID
-    local show = Linger and Linger.SHOW or 3
-    local cnow = CometNow()
     for _, e in ipairs(scene.zones) do
         local p, strokes = e.p, e.z.strokes
         local thick = p.far and w * 0.0012 or w * 0.0022
@@ -1258,22 +1249,11 @@ local function DrawWalkLine(D, scene)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
                         t1 = cutoff
                     end
-                    -- Inside the area you're in, the line is a comet's tail:
-                    -- full just behind you, gone SHOW seconds back, thinning
-                    -- as it fades (3.8.3; cut off at 3 s in 3.8.2). Each piece
-                    -- fades by its own age, so it only ever fades where it lies,
-                    -- frame by frame (UpdateComet), not only at redraws.
-                    -- Steps that haven't joined the area yet lie outside its
-                    -- outline and show whole.
-                    local lc = e.lg.live
-                    local mid = (t1 + t2) / 2
-                    if lc and cnow - mid < show then
-                        lc.k, ink.comet, ink.t = LIVE_K, { poly = lc.poly, now = cnow, show = show }, mid
-                        Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
-                        lc.k, ink.comet = 0, nil
-                    else
-                        Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
-                    end
+                    -- Inside the area you're in, nothing recorded is drawn:
+                    -- the comet (DrawComet) is your line there. Steps that
+                    -- haven't joined the area yet lie outside its outline
+                    -- and show whole.
+                    Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
                 end
             end
         end
@@ -1285,41 +1265,65 @@ end
 -- is open (the trail itself is redrawn every 2 seconds at most), so no gap
 -- opens behind your arrow as you move.
 local tail = {}
--- The comet's pieces fade by their own age between redraws.
-local function UpdateComet(now)
+-- Where you've been, every TRACE_STEP while the map is open; a jump (a
+-- new map, a flight, a teleport) starts it again.
+local function Trace(now, mapID, x, y)
+    local last = trace[#trace]
+    if last and (last.m ~= mapID or (x - last.x) ^ 2 + (y - last.y) ^ 2 > 0.0004) then
+        for i = #trace, 1, -1 do trace[i] = nil end
+        last = nil
+    end
+    if not last or now - last.t >= TRACE_STEP then trace[#trace + 1] = { x = x, y = y, t = now, m = mapID } end
     local show = Linger and Linger.SHOW or 3
-    for i = #comet, 1, -1 do
-        local c = comet[i]
-        local v = Comet((now - c.t) / show)
-        if v <= 0.01 then
-            c.l:Hide()
-            table.remove(comet, i)
-        else
-            c.l:SetThickness(CometThick(c.thick, v))
-            c.l:SetColorTexture(c.r, c.g, c.b, c.a * v)
+    while #trace >= 2 and now - trace[2].t >= show do table.remove(trace, 1) end
+end
+-- The comet: pieces of the trace inside the area you're in, each faded and
+-- thinned by the age at its middle, the last one running to your arrow.
+local function DrawComet(now, p, lc, x, y)
+    local n = 0
+    if lc then
+        local show, w, h = Linger.SHOW or 3, overlay:GetWidth(), overlay:GetHeight()
+        for i = 1, #trace do
+            local a, b = trace[i], trace[i + 1]
+            local bx, by, bt = x, y, now
+            if b then bx, by, bt = b.x, b.y, b.t end
+            local v = Comet((now - (a.t + bt) / 2) / show)
+            if v > 0.01 and (bx ~= a.x or by ~= a.y) and Linger.InPoly(lc.poly, (a.x + bx) / 2, (a.y + by) / 2) then
+                n = n + 1
+                local l = cometLines[n]
+                if not l then
+                    l = overlay:CreateLine(nil, "ARTWORK")
+                    l:SetDrawLayer("ARTWORK", 7)
+                    cometLines[n] = l
+                end
+                l:SetThickness(CometThick(tail.thick, v))
+                l:SetColorTexture(faction.r, faction.g, faction.b, 0.95 * v)
+                l:SetStartPoint("TOPLEFT", overlay, (p.ox + a.x * p.sx) * w, -(p.oy + a.y * p.sy) * h)
+                l:SetEndPoint("TOPLEFT", overlay, (p.ox + bx * p.sx) * w, -(p.oy + by * p.sy) * h)
+                l:Show()
+            end
         end
     end
+    for i = n + 1, #cometLines do cometLines[i]:Hide() end
 end
 local function UpdateTail()
     local l = tail.line
     if not l then return end
-    local now = CometNow()
-    if #comet > 0 then UpdateComet(now) end
     local p = tail.p
-    if not p or tail.stroke ~= cur.stroke or cur.mode then l:Hide() return end
     local mapID, x, y = ns.PlayerPos()
-    if mapID ~= cur.map then l:Hide() return end
-    -- inside the area you're in it's the head of the comet: faded by its
-    -- middle's age, like every other piece
-    local thick, a = tail.thick, 0.95
-    local lc = tail.lc
-    if lc and Linger.InPoly(lc.poly, (tail.x + x) / 2, (tail.y + y) / 2) then
-        local v = Comet((now - tail.t) / 2 / (Linger.SHOW or 3))
-        if v <= 0.01 then l:Hide() return end
-        thick, a = CometThick(thick, v), a * v
+    if not p or tail.stroke ~= cur.stroke or cur.mode or not mapID or mapID ~= cur.map then
+        l:Hide()
+        DrawComet()
+        return
     end
-    l:SetThickness(thick)
-    l:SetColorTexture(faction.r, faction.g, faction.b, a)
+    local now = CometNow()
+    Trace(now, mapID, x, y)
+    local lc = tail.lc
+    DrawComet(now, p, lc, x, y)
+    -- inside the area you're in, the comet is the line to your arrow
+    if lc and Linger.InPoly(lc.poly, (tail.x + x) / 2, (tail.y + y) / 2) then l:Hide() return end
+    l:SetThickness(tail.thick)
+    l:SetColorTexture(faction.r, faction.g, faction.b, 0.95)
     local w, h = overlay:GetWidth(), overlay:GetHeight()
     l:SetStartPoint("TOPLEFT", overlay, (p.ox + tail.x * p.sx) * w, -(p.oy + tail.y * p.sy) * h)
     l:SetEndPoint("TOPLEFT", overlay, (p.ox + x * p.sx) * w, -(p.oy + y * p.sy) * h)
@@ -1332,7 +1336,7 @@ local function SetTail(D, scene)
     for _, e in ipairs(scene.zones) do
         if e.p.mapID == cur.map then
             tail.stroke, tail.p, tail.x, tail.y = s, e.p, s[#s - 1], s[#s]
-            tail.t, tail.lc = s.ts and PointTime(s, #s / 2) or 0, s.ts and e.lg and e.lg.live
+            tail.lc = s.ts and e.lg and e.lg.live
             tail.thick = e.p.far and D.w * 0.0012 or D.w * 0.0022
             return
         end
@@ -2429,7 +2433,6 @@ local function Draw(scene, limit)
         nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0, ntag = 0, nair = 0 }
     local L = cfg.layers
     tail.stroke, tail.p, tail.lc = nil, nil, nil
-    for i = #comet, 1, -1 do comet[i] = nil end
     for i = #shimmer, 1, -1 do shimmer[i] = nil end
     for i = #twinkle, 1, -1 do twinkle[i] = nil end
 
