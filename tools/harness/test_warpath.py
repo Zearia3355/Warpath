@@ -1848,6 +1848,33 @@ class Lingering(unittest.TestCase):
                  if min(Steadiness.dist(x, y, sg) for sg in path) > 1.5]
         self.assertEqual(stray, [], "older line drawn inside the area you're in")
 
+    def test_inside_the_area_you_are_in_the_line_fades_like_a_comet(self):
+        # Joe, 3.8.3-test8: "a more comet-like fade from the end to bright just
+        # behind me", still only 3 s long. The pieces of line inside the area
+        # are brightest and widest just behind you and fainter, thinner back.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 8 * 60)
+        self.assertTrue(self.live())
+        self.wow.run("ns.Linger.SHOW = 6")             # long enough to hold a few pieces
+        self.wow.eval("ns.Redraw()")
+        r, g, b = (float(v) for v in self.wow.run(
+            "return ns.faction.r .. ' ' .. ns.faction.g .. ' ' .. ns.faction.b").split())
+        px, py = self.wow.H.player.x * 1002, self.wow.H.player.y * 668
+        pieces = []
+        for p in self.wow.run(self.COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] != "L" or abs(float(f[2]) - r) > 0.01 or abs(float(f[3]) - g) > 0.01 or abs(float(f[4]) - b) > 0.01:
+                continue
+            a, x1, y1, x2, y2, w = (float(v) for v in f[5:11])
+            if a < 0.94:                                # the comet: fading pieces of line
+                d = ((x1 + x2) / 2 - px) ** 2 + ((y1 + y2) / 2 - py) ** 2
+                pieces.append((d, a, w))
+        self.assertGreaterEqual(len(pieces), 3, "no fading line behind you inside the area")
+        pieces.sort()
+        near, far = pieces[0], pieces[-1]
+        self.assertGreater(near[1], far[1] + 0.2, "the line doesn't fade away from you")
+        self.assertGreater(near[2], far[2], "the line doesn't thin away from you")
+
     def test_the_hidden_trail_stays_hidden_when_you_leave(self):
         # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes
         # hidden while you were inside came back for a minute. With the solid

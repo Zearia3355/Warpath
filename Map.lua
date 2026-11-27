@@ -1111,6 +1111,7 @@ end
 -- their visits in time order (for holding links). Kept on the scene entry.
 local function AreaScene(e, now, life)
     local list, solid, dash, visits, hide, settled = {}, {}, {}, {}, {}, {}
+    local liveClip
     -- Linger.lua is new in 3.8: after a /reload without a restart the game
     -- hasn't loaded it, so draw the trail without areas rather than fail
     if not Linger then
@@ -1134,9 +1135,11 @@ local function AreaScene(e, now, life)
                 solid[#solid + 1], settled[#settled + 1] = c, c
             else
                 -- in the area you're in, only your last few seconds of line
-                -- show (SHOW, 3 s from 3.8.2; 45 s before): the area is
-                -- there to stop the scribble
-                settled[#settled + 1] = { poly = poly, box = box, k = 0 }
+                -- show (SHOW), fading out behind you like a comet's tail
+                -- (3.8.3; 3 s and cut off in 3.8.2, 45 s before): the area
+                -- is there to stop the scribble. DrawWalkLine sets k per piece.
+                local c = { poly = poly, box = box, k = 0 }
+                settled[#settled + 1], liveClip = c, c
             end
             for _, v in ipairs(a.v) do visits[#visits + 1] = { s = v.s, e = v.e, age = age, a = a } end
             -- Every step taken during a visit joined the area, so trail from
@@ -1154,7 +1157,8 @@ local function AreaScene(e, now, life)
         end
     end
     table.sort(visits, function(x, y) return x.s < y.s end)
-    e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide, settled = settled }
+    e.lg = { areas = list, solid = solid, dash = dash, visits = visits, hide = hide, settled = settled,
+        live = liveClip }
 end
 
 -- A link between two different areas stays at least as visible as the
@@ -1183,7 +1187,9 @@ local function InkPart(t0, t1, k)
     D.nl = D.nl + 1
     if q.count then D.ndash = D.ndash + 1 end
     local p = q.p
-    PutLine(D.nl, q.sub, "BLEND", q.thick, q.r, q.g, q.b, q.a * k,
+    local thick = q.thick
+    if q.taper and k < 1 then thick = thick * (Linger.TAPER + (1 - Linger.TAPER) * k) end
+    PutLine(D.nl, q.sub, "BLEND", thick, q.r, q.g, q.b, q.a * k,
         (p.ox + x1 * p.sx) * D.w, -(p.oy + y1 * p.sy) * D.h, (p.ox + x2 * p.sx) * D.w, -(p.oy + y2 * p.sy) * D.h)
 end
 local function InkOnce(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
@@ -1199,11 +1205,15 @@ local function Ink(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
     InkOnce(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
 end
 
+-- The comet's brightness at a fraction u of its length back from you.
+local function Comet(u) return (1 - Clamp(u)) ^ (Linger.CURVE or 1.5) end
+
 -- The line: your last minutes, solid (LINE_SOLID: 2.5 min in 3.8). Trail recorded before 3.4
 -- has no point times and isn't drawn.
 local function DrawWalkLine(D, scene)
     local w, now = D.w, D.now
     local cutoff = now - C.LINE_SOLID
+    local show = Linger and Linger.SHOW or 3
     for _, e in ipairs(scene.zones) do
         local p, strokes = e.p, e.z.strokes
         local thick = p.far and w * 0.0012 or w * 0.0022
@@ -1222,18 +1232,20 @@ local function DrawWalkLine(D, scene)
                         ax, ay = ax + (bx - ax) * k, ay + (by - ay) * k
                         t1 = cutoff
                     end
-                    -- older than a few seconds: settled, so hidden inside the area you're in too
-                    -- (steps that haven't joined yet lie outside its outline, so they still show)
-                    local settle = now - (Linger and Linger.SHOW or 3)
-                    if t2 <= settle then
+                    -- Inside the area you're in, the line is a comet's tail:
+                    -- full just behind you, gone SHOW seconds back, thinning
+                    -- as it fades (3.8.3; cut off at 3 s in 3.8.2). Each piece
+                    -- fades by its own age, so it only ever fades where it lies.
+                    -- Steps that haven't joined the area yet lie outside its
+                    -- outline and show whole.
+                    local lc = e.lg.live
+                    local age = now - (t1 + t2) / 2
+                    if lc and age < show then
+                        lc.k, ink.taper = Comet(age / show), true
                         Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
-                    elseif t1 >= settle or t2 <= t1 then
-                        Ink(D, p, e.lg.solid, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
+                        lc.k, ink.taper = 0, nil
                     else
-                        local k = (settle - t1) / (t2 - t1)
-                        local mx, my = ax + (bx - ax) * k, ay + (by - ay) * k
-                        Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, mx, my)
-                        Ink(D, p, e.lg.solid, 7, thick, faction.r, faction.g, faction.b, 0.95, mx, my, bx, by)
+                        Ink(D, p, e.lg.settled, 7, thick, faction.r, faction.g, faction.b, 0.95, ax, ay, bx, by)
                     end
                 end
             end

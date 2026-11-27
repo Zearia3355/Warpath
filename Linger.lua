@@ -16,7 +16,9 @@ local FORM_YD = 225                -- ...within this of its centre: an area form
                                    -- questing in the open world roams 200-330 yd every 4 min)
 local FORM_N = 6                   -- and you moved about (standing still isn't lingering)
 local LAG = 45                     -- a step joins the area 45 s later, if you're still in it
-local SHOW = 3                     -- inside the area you're in, only this much of your line shows (3.8.2)
+local SHOW = 3                     -- inside the area you're in, only this much of your line shows (3.8.2)...
+local CURVE, TAPER = 1.0, 0.5      -- ...fading out behind you (3.8.3): brightness (1 - age/SHOW)^CURVE,
+                                   -- width down to TAPER of the line's at the far end
 local MARGIN_YD = 90               -- this far outside the area is leaving it...
 local TRIP_T, TRIP_YD = 120, 150   -- ...but back within 2 min, never further out than this,
                                    -- and the trip was part of lingering: it joins
@@ -586,7 +588,7 @@ local function Visits(a)
 end
 
 ns.Linger = {
-    LAG = LAG, SHOW = SHOW, Visits = Visits, MapYards = MapYards,
+    LAG = LAG, SHOW = SHOW, CURVE = CURVE, TAPER = TAPER, Visits = Visits, MapYards = MapYards,
     Step = Step, Reset = Reset, Outline = Outline, Clip = Clip, InPoly = InPoly,
     Live = function() return st.live end,
     State = function() return st end, -- for tests
