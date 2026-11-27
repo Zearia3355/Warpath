@@ -392,9 +392,13 @@ local function Layers(panel, item, x, y)
         end
         Bind(item, cb, "layers." .. key)
         h = h + 22
+        -- guildmates' fighting is part of the one haze, not a layer of its own
+        if key == "battle" then
+            Bind(item, MakeCheck(panel, x + 24, y + h, "with guildmates' fighting"), "guildHaze")
+            h = h + 22
+        end
     end
-    Bind(item, MakeCheck(panel, x, y + h, "Guildmates' battle haze"), "guildHaze")
-    return h + 28
+    return h + 6
 end
 
 local function Row(panel, spec, y)
@@ -436,7 +440,8 @@ local function BuildSection(R, key)
     local panel = CreateFrame("Frame", nil, R)
     panel:SetAllPoints()
     local items, y = {}, 70
-    for _, spec in ipairs(SPEC[key]) do
+    for i, spec in ipairs(SPEC[key]) do
+        if spec[1] == "topic" and i > 1 then y = y + 8 end -- room above a heading
         local item, h = Row(panel, spec, y)
         items[#items + 1] = item
         y = y + h

@@ -999,6 +999,12 @@ function ns.VersionOlder(a, b)
     if a1 ~= b1 then return a1 < b1 end
     if a2 ~= b2 then return a2 < b2 end
     if a3 ~= b3 then return a3 < b3 end
+    -- two builds of one release: by their number (3.8.3-test8 before -test9),
+    -- so a new test build opens the book too
+    if at and bt then
+        local an, bn = tonumber(a:match("(%d+)$")), tonumber(b:match("(%d+)$"))
+        return an ~= nil and bn ~= nil and an < bn
+    end
     return at and not bt
 end
 ns.Waypoint = Waypoint

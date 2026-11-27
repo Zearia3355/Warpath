@@ -258,9 +258,6 @@ class NewIn(unittest.TestCase):
         # 3.8.3: a "NEW" mark beside each release newer than the last seen
         self.assertEqual(text.split("\n").count("NEW"), 1, "only 3.8.3 is new since 3.8.2")
         self.assertIn("ON THE MAP", text, "3.8.3's notes are grouped under topics")
-        self.assertIn("Settings", wow.eval("""(function() for _, f in ipairs(WarpathChronicle.__children) do
-            for _, c in ipairs(f.__children) do for _, b in ipairs(c.__children) do
-            if b.__template == "UIPanelButtonTemplate" and b:IsVisible() then return b:GetText() end end end end end)()"""))
 
     def test_closing_the_book_marks_the_release_seen(self):
         wow = self.booted("3.8.2")
@@ -339,11 +336,17 @@ class NewIn(unittest.TestCase):
     def test_versions_order_with_test_builds_first(self):
         wow = Wow()
         for a, b in (("3.7.11", "3.8.0"), ("3.8.0", "3.8.1"), ("3.8.0-test4", "3.8.0"),
-                     ("3.8.9", "3.8.10"), ("3.3.5", "3.4")):
+                     ("3.8.9", "3.8.10"), ("3.3.5", "3.4"), ("3.8.3-test8", "3.8.3-test9"),
+                     ("3.8.3-test9", "3.8.3-test10")):
             with self.subTest(a=a, b=b):
                 self.assertTrue(wow.eval(f"ns.NewIn.Older({lua_str(a)}, {lua_str(b)})"))
                 self.assertFalse(wow.eval(f"ns.NewIn.Older({lua_str(b)}, {lua_str(a)})"))
         self.assertFalse(wow.eval('ns.NewIn.Older("3.8.0", "3.8.0")'))
+        self.assertFalse(wow.eval('ns.NewIn.Older("3.8.3-test9", "3.8.3-test9")'))
+
+    def test_a_new_test_build_opens_the_book(self):
+        # Joe, test9: the book stayed shut after test8, both "3.8.3" builds
+        self.assertTrue(self.shown(self.booted("3.8.3-test8")))
 
     def test_opens_after_a_release_in_the_same_series(self):
         # The case 3.8.1 is for: before, an earlier 3.8 build kept it shut.

@@ -899,7 +899,7 @@ local NEWS_TOP, NEWS_FLOOR = 66, PH - 44   -- the right page's notes run between
 local function ShareCheck(L)
     local cb = CreateFrame("CheckButton", nil, L, "UICheckButtonTemplate")
     cb:SetSize(22, 22)
-    cb:SetPoint("BOTTOMLEFT", 32, 98)
+    cb:SetPoint("BOTTOMLEFT", 32, 74)
     cb.label = Font(L, QuestFont, GameFontHighlight, INK)
     cb.label:SetPoint("LEFT", cb, "RIGHT", 2, 1)
     cb.label:SetText("Guild sharing")
@@ -937,16 +937,7 @@ local function BuildNewsPages(f)
     n.prose:SetWidth(inner)
     n.prose:SetJustifyV("TOP")
     n.prose:SetSpacing(3)
-    n.share = ShareCheck(L)
-    local settings = CreateFrame("Button", nil, L, "UIPanelButtonTemplate")
-    settings:SetSize(130, 24)
-    settings:SetPoint("BOTTOM", 0, 40)
-    settings:SetText("Settings")
-    settings:SetScript("OnClick", function()
-        view.section = "settings"
-        UISound("IG_ABILITY_PAGE_TURN", 836)
-        Render()
-    end)
+    n.share = ShareCheck(L) -- 3.8.3: the Settings tab is beside this one, so no Settings button
 
     local head = Font(R, QuestTitleFont, GameFontNormal, RUBRIC, 15)
     head:SetPoint("TOP", 0, -30)
@@ -978,7 +969,7 @@ local function Welcome()
     return table.concat({
         "Warpath draws your war on the world map: the roads you travel, today's trail, where you fought, killed and fell, and the enemies you've seen.",
         "This book keeps a campaign for each time you ride out, and your ledger of grudges. Open it from the minimap button or with /warpath chronicle.",
-        "On the world map, the crossed swords in the top-right corner hide Warpath or choose what it shows. Everything else is under Settings.",
+        "On the world map, the crossed swords in the top-right corner hide Warpath or choose what it shows. Everything else is on the Settings tab.",
     }, "\n\n")
 end
 
