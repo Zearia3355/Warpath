@@ -15,46 +15,47 @@ do
 -- Every release gets an entry (Joe, 2026-11-24), newest last. The
 -- chronicle's Warpath tab shows them all, newest first, and opens by itself
 -- after each update, marking the releases this account hasn't seen. One
--- plain line per change, for players.
+-- plain line per change, for players: short, one line on the page where it
+-- can be (Joe's layout C, 2026-11-26: the mock's lines were short, which is
+-- what made it fit), under "## Topic" lines.
 local NEW_MAX = 8
 local NEW_IN = {
-  { "3.8.0", {
-    "Roads rebuilt: one road for each way you really travel, raised like gold trim. A road turns from silver to gold as it becomes a habit, and your most-worn roads carry a streak of your faction's colour. They only ever fade, never jump.",
-    "Today's trail: where you lingered (questing, a town) becomes an outlined area; hover it for when and how long. Between areas, a solid line turns to dashes with arrows showing which way you went.",
-    "Flight paths: the routes you fly most, on two or more days, show as blue dashes.",
-    "Your map settings were reset for this release: every layer is on and today's trail stays 12 hours. Change them on the Map tab.",
+  { "3.8.0", title = "Roads, trails and flights", {
+    "Roads turn from silver to gold as they become habits.",
+    "Your most-worn roads carry your faction's colour.",
+    "Where you linger, the trail becomes an outlined area.",
+    "Between areas, dashes and arrows show your way.",
+    "Flights taken on two or more days show as blue dashes.",
+    "Map settings reset: every layer on, trail kept 12 hours.",
   } },
   { "3.8.1", {
-    "When a guildmate runs a newer Warpath, you're told in chat once, so you know to update (both of you need guild sharing on).",
-    "/warpath trail clear clears today's trail and lingering areas (as /warpath clear trail does).",
-    "This window now opens after every update, small ones included.",
+    "You're told once when a guildmate runs a newer Warpath.",
+    "/warpath trail clear clears today's trail.",
+    "This page opens after every update.",
   } },
   { "3.8.2", {
-    "Inside the area you're lingering in, only a short tail of trail shows behind you, not a scribble of the last 45 seconds.",
+    "Inside your current area, only a short tail of trail shows.",
   } },
-  { "3.8.3", title = "Scores, a clearer trail, settings in this book", {
+  { "3.8.3", title = "Scores and a clearer trail", {
     "## On the map",
-    "Scores everywhere: one for each continent on the world map, one for each zone on continent maps, and a zone's own in its map's corner. Blue when you're ahead, yellow when it's close, red when you're behind.",
-    "Where pins crowd on continent and world maps, they combine into one larger sword or skull. Hover it for how many, and how many were yours.",
-    "Flight paths on Kalimdor and Eastern Kingdoms are thinner and smoother.",
-    "In a battleground your other maps still show your war; only the battleground's own map stays clean.",
+    "Scores everywhere: blue ahead, yellow close, red behind.",
+    "Crowded pins combine into one sword or skull; hover for the count.",
+    "Flight paths on continents are thinner and smoother.",
+    "In a battleground, your other maps still draw.",
     "## Your trail",
-    "Older trail stays crimson in long dashes with a dark edge, solid through sharp turns. Where you went the same way twice, only the newer pass shows.",
-    "Along roads your trail fades after 10 minutes, so the roads read clean.",
-    "Inside the area you're lingering in, the short tail behind you fades out like a comet instead of ending sharply.",
-    "Lingering areas are wider in the open world and tighter in cities, and areas that touch become one. Their labels stay readable longer.",
+    "Older trail is crimson dashes, easy to follow.",
+    "Along roads it fades after 10 minutes.",
+    "Lingering areas fit the land; touching ones merge.",
+    "The tail behind you fades like a comet.",
     "## This book",
-    "Settings live here now, on the Settings tab, in plain words. The separate options window is gone.",
-    "What's new opens here after each update. Campaigns list their deeds by zone, and grudges their encounters by day.",
-    "## Settings that changed",
-    "\"Announce on screen\" replaces the banner, big-text and quiet switches. If you had quiet mode on, announcing, sounds and the zone line stay off.",
-    "Guildmates' kill and death lines in chat can be turned off without turning off sharing.",
-    "Recent flights get their own length on the map, beside corpse runs.",
-    "Guild sharing starts on for new players. Yours stays as you set it, with a switch on this page.",
+    "Settings live here now, on the Settings tab.",
+    "\"Announce on screen\" replaces quiet mode and big text.",
+    "Guildmates' chat lines can be switched off.",
+    "Recent flights get their own length on the map.",
     "## Fixes",
-    "Ground you've fought on speaks up wherever you've fought, so your hunting grounds and contested ground get called out too; before, only places you'd died counted.",
-    "Dangerous-ground warnings stay up long enough to read. A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too). The map button no longer prints a chat line.",
-    "/killshot and /pks are gone; use /warpath shot.",
+    "Ground warnings cover hunting and contested ground too.",
+    "Warnings stay up longer; a shared kill is pinned once.",
+    "/killshot is gone: use /warpath shot.",
   } },
 }
 

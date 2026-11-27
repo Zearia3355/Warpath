@@ -894,6 +894,7 @@ end
 ---------------------------------------------------------------------------
 
 local NEWS_TOP, NEWS_FLOOR = 66, PH - 44   -- the right page's notes run between these
+local NEWS_SIZE = 13                       -- the notes' type: smaller than the welcome, as in Joe's pick (C)
 
 -- The sharing switch on the welcome page (3.8.3), the same as Settings, Guild.
 local function ShareCheck(L)
@@ -938,6 +939,10 @@ local function BuildNewsPages(f)
     n.prose:SetJustifyV("TOP")
     n.prose:SetSpacing(3)
     n.share = ShareCheck(L) -- 3.8.3: the Settings tab is beside this one, so no Settings button
+    n.measure = Font(R, QuestFont, GameFontHighlight, INK, NEWS_SIZE) -- measures notes for the page count
+    n.measure:SetWidth(PW - 64 - 14)
+    n.measure:SetSpacing(2)
+    n.measure:Hide()
 
     local head = Font(R, QuestTitleFont, GameFontNormal, RUBRIC, 15)
     head:SetPoint("TOP", 0, -30)
@@ -979,8 +984,8 @@ end
 local function NewsHead(n, i)
     local h = n.heads[i]
     if not h then
-        h = { ver = Font(n.R, QuestTitleFont, GameFontNormal, RUBRIC, 15),
-            title = Font(n.R, QuestFontNormalSmall, GameFontNormalSmall, FADED),
+        h = { ver = Font(n.R, QuestTitleFont, GameFontNormal, RUBRIC, 18),
+            title = Font(n.R, QuestFontNormalSmall, GameFontNormalSmall, FADED, 11),
             badge = Solid(n.R, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 1),
             new = Font(n.R, QuestFontNormalSmall, GameFontNormalSmall, { 0.94, 0.80, 0.51 }, 10),
             rule = Solid(n.R, "ARTWORK", RUBRIC[1], RUBRIC[2], RUBRIC[3], 0.5) }
@@ -1007,7 +1012,7 @@ local function PlaceHead(n, h, y, ver, title, new)
     h.new:SetShown(new)
     h.badge:SetShown(new)
     h.rule:ClearAllPoints()
-    h.rule:SetPoint("TOPLEFT", 32, -(y + 22))
+    h.rule:SetPoint("TOPLEFT", 32, -(y + 24))
     h.rule:SetWidth(PW - 64)
     for _, part in ipairs({ h.ver, h.title, h.rule }) do part:Show() end
 end
@@ -1017,7 +1022,7 @@ local function HideHead(h) for _, part in pairs(h) do part:Hide() end end
 local function NewsLine(n, i)
     local l = n.lines[i]
     if not l then
-        l = Font(n.R, QuestFont, GameFontHighlight, INK)
+        l = Font(n.R, QuestFont, GameFontHighlight, INK, NEWS_SIZE)
         l:SetWidth(PW - 64 - 14)
         l:SetJustifyV("TOP")
         l:SetSpacing(2)
@@ -1037,74 +1042,89 @@ end
 -- A line's height once wrapped (measured, or guessed before it's drawn).
 local function LineHeight(l, text)
     local lh = l:GetStringHeight() or 0
-    local guess = math.ceil(((l:GetStringWidth() or #text * 6)) / (PW - 78)) * 15
+    local guess = math.ceil(((l:GetStringWidth() or #text * 6)) / (PW - 78)) * (NEWS_SIZE + 2)
     return math.max(lh, guess)
 end
 
 -- 3.8.3: grouped by topic ("## " lines) under each release's heading. A
--- page starts at a release (newsStart) and an item within it (newsLine); a
--- release too long for what's left of the page carries on to the next.
-local function RenderNews()
-    local f, n = book, book.news
-    local list = ns.NewIn and ns.NewIn.List or {}
-    f.left.number:SetText("")
-    f.right.number:SetText("")
-    n.version:SetText("Version " .. tostring(ns.VERSION))
-    n.headline:SetText(gdb.installed and "Warpath" or "Welcome to Warpath")
-    n.prose:SetText(Welcome())
-    n.share:SetChecked(cfg.share and true or false)
+-- page starts at a release and an item within it; a release too long for
+-- what's left of the page carries on to the next. Lay() draws one page, or
+-- with draw false only measures it (for the page count); it returns where
+-- the next page starts, or nil on the last.
+local function Lay(n, list, i, j, draw)
     local Older = ns.NewIn and ns.NewIn.Older
-    view.newsStart = math.min(view.newsStart or #list, #list)
-    view.newsLine = view.newsLine or 1
-    view.newsNext = nil
-    local y, nh, nl, nt, placed = NEWS_TOP, 0, 0, 0, 0
-    local i, j = view.newsStart, view.newsLine
-    while i >= 1 and not view.newsNext do
+    local y, nh, nl, nt, placed, nxt = NEWS_TOP, 0, 0, 0, 0, nil
+    while i >= 1 and not nxt do
         local rel = list[i]
         local items = rel[2]
-        if y + 30 + 30 > NEWS_FLOOR and placed > 0 then
-            view.newsNext = { i, j } -- no room for a heading and a line
-            break
+        if y + 30 + 30 > NEWS_FLOOR and placed > 0 then nxt = { i, j } break end -- no room for a heading and a line
+        if draw then
+            nh = nh + 1
+            local new = view.newSince and Older and Older(view.newSince, rel[1]) and true or false
+            PlaceHead(n, NewsHead(n, nh), y, rel[1] .. (j > 1 and " (continued)" or ""), rel.title, new)
         end
-        nh = nh + 1
-        local new = view.newSince and Older and Older(view.newSince, rel[1]) and true or false
-        PlaceHead(n, NewsHead(n, nh), y, rel[1] .. (j > 1 and " (continued)" or ""), rel.title, new)
-        y = y + 32
+        y = y + 34
         while j <= #items do
             local text = items[j]
             local topic = text:sub(1, 3) == "## " and text:sub(4)
             if topic then
-                if y + 20 + 30 > NEWS_FLOOR and placed > 0 then view.newsNext = { i, j } break end
-                nt = nt + 1
-                NewsTopic(n, nt):Set(topic, 32, y)
+                if y + 20 + 30 > NEWS_FLOOR and placed > 0 then nxt = { i, j } break end
+                if draw then
+                    nt = nt + 1
+                    NewsTopic(n, nt):Set(topic, 32, y)
+                end
                 y = y + 20
             else
-                nl = nl + 1
-                local l = NewsLine(n, nl)
+                local l = draw and NewsLine(n, nl + 1) or n.measure
                 l:SetText(text)
                 local lh = LineHeight(l, text)
                 if y + lh > NEWS_FLOOR and placed > 0 then
-                    l:Hide() l.dot:Hide()
-                    nl = nl - 1
-                    view.newsNext = { i, j }
+                    if draw then l:Hide() l.dot:Hide() end
+                    nxt = { i, j }
                     break
                 end
-                l:ClearAllPoints()
-                l:SetPoint("TOPLEFT", 46, -y)
-                l.dot:ClearAllPoints()
-                l.dot:SetPoint("CENTER", n.R, "TOPLEFT", 38, -(y + 7))
-                y = y + lh + 5
+                if draw then
+                    nl = nl + 1
+                    l:ClearAllPoints()
+                    l:SetPoint("TOPLEFT", 46, -y)
+                    l.dot:ClearAllPoints()
+                    l.dot:SetPoint("CENTER", n.R, "TOPLEFT", 38, -(y + 7))
+                end
+                y = y + lh + 4
                 placed = placed + 1
             end
             j = j + 1
             if items[j] and items[j]:sub(1, 3) == "## " then y = y + 4 end
         end
         y = y + 12
-        i, j = i - 1, 1
+        if not nxt then i, j = i - 1, 1 end
     end
-    for k = nh + 1, #n.heads do HideHead(n.heads[k]) end
-    for k = nl + 1, #n.lines do n.lines[k]:Hide() n.lines[k].dot:Hide() end
-    for k = nt + 1, #n.topics do n.topics[k]:SetShown(false) end
+    if draw then
+        for k = nh + 1, #n.heads do HideHead(n.heads[k]) end
+        for k = nl + 1, #n.lines do n.lines[k]:Hide() n.lines[k].dot:Hide() end
+        for k = nt + 1, #n.topics do n.topics[k]:SetShown(false) end
+    end
+    return nxt
+end
+
+local function RenderNews()
+    local f, n = book, book.news
+    local list = ns.NewIn and ns.NewIn.List or {}
+    f.left.number:SetText("")
+    n.version:SetText("Version " .. tostring(ns.VERSION))
+    n.headline:SetText(gdb.installed and "Warpath" or "Welcome to Warpath")
+    n.prose:SetText(Welcome())
+    n.share:SetChecked(cfg.share and true or false)
+    view.newsStart = math.min(view.newsStart or #list, #list)
+    view.newsLine = view.newsLine or 1
+    view.newsNext = Lay(n, list, view.newsStart, view.newsLine, true)
+    -- "1 of 2" under the notes, as in the mock (pages open newest first)
+    local page, pages, at = #view.newsStack + 1, #view.newsStack + 1, view.newsNext
+    while at and pages < 50 do
+        pages = pages + 1
+        at = Lay(n, list, at[1], at[2], false)
+    end
+    f.right.number:SetText(pages > 1 and (page .. " of " .. pages) or "")
     if view.newsNext then n.earlier:Enable() else n.earlier:Disable() end
     if #view.newsStack > 0 then n.later:Enable() else n.later:Disable() end
 end

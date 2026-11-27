@@ -340,14 +340,33 @@ class NewIn(unittest.TestCase):
         self.assertNotIn("2.0.1\n", first + "\n", "the oldest release can't fit on the first page")
         earlier = "WarpathChronicle.news.earlier"
         self.assertTrue(wow.eval(f"{earlier}:IsEnabled()"))
+        turns = 0
         for _ in range(20):
             if not wow.eval(f"{earlier}:IsEnabled()"):
                 break
             wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
+            turns += 1
         self.assertFalse(wow.eval(f"{earlier}:IsEnabled()"), "Earlier never reached the oldest page")
         self.assertIn("2.0.1", self.page(wow), "the oldest release is on the last page")
+        # 3.8.3 (layout C, as mocked): "1 of N" under the notes, counted ahead
+        pages = wow.eval("WarpathChronicle.right.number:GetText()")
+        n = pages.split(" of ")[1]
+        self.assertEqual(int(n), turns + 1, "the count matches the pages turned")
+        self.assertEqual(pages, f"{n} of {n}", "the last page counts itself last")
+        wow.run("ns.Chronicle.News('3.8.2')")
+        self.assertEqual(wow.eval("WarpathChronicle.right.number:GetText()"), f"1 of {n}",
+                         "the first page knows how many follow")
         wow.run("WarpathChronicle.news.later:GetScript('OnClick')(WarpathChronicle.news.later)")
         self.assertNotIn("2.0.1\n", self.page(wow) + "\n")
+
+    def test_notes_stay_short(self):
+        # Joe picked layout C for its short lines (2026-11-26); test10's
+        # paragraphs let two topics fill a page.
+        wow = self.booted("3.8.2")
+        longest = wow.eval("""(function() local m, at = 0, ""
+            for _, rel in ipairs(ns.NewIn.List) do for _, l in ipairs(rel[2]) do
+                if #l > m then m, at = #l, l end end end return at end)()""")
+        self.assertLessEqual(len(longest), 70, f"a note too long for one line: {longest!r}")
 
     def test_a_long_release_carries_on_to_the_next_page(self):
         # 3.8.3-test8 drew a release whole, however long, so it ran off the book.
