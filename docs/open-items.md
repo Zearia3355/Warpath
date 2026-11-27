@@ -4,7 +4,7 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## Spirit healers on the map (3.8.4): installed as 3.8.4-test5 (2026-11-26, commit `653e76b`, by script; test4 `26da87c`, test3 `ea48dd9`, test2 `aa11ef5`, test1 `e937987`)
+## Spirit healers on the map (3.8.4): in 3.8.4-test6 (unchanged since test5, 2026-11-26, commit `653e76b`, by script; test4 `26da87c`, test3 `ea48dd9`, test2 `aa11ef5`, test1 `e937987`)
 
 Joe asked (2026-11-26) for the backlog's "Spirit healers on the map", noting whether each is shared, Horde or Alliance, on the corpse runs layer. His picks: faction from **both** a built-in list and what his characters learn; shown **always, quiet**. Built as `Spirits.lua` (new file: a full restart, not `/reload`). Details in `how-it-works.md` (Runs layer, Spirit healers).
 
@@ -17,7 +17,7 @@ To check in game (none of this can be seen outside the client):
 - Whether `C_DeathInfo.GetGraveyardsForMap` returns anything outside battlegrounds (not used yet; it gives no faction).
 - Whether the vanilla list matches WoW Forever: graveyards this server added show once a character releases there; ones the list has that the server doesn't can't be detected and would need removing by hand.
 
-## Shared kills name everyone (3.8.4, Joe 2026-11-26): built, not installed
+## Shared kills name everyone (3.8.4, Joe 2026-11-26): installed as 3.8.4-test6 (2026-11-27, commit `3bf86b6`, by script; backup `-2026-11-27-3.8.4-test6/`)
 
 A kill several of you get credit for prints one line naming the others, "(with …)", and its pin's tooltip names them (`Share.lua` `NoteKill`/`SayKill`, `KILL_HOLD` 2 s; `Record.lua` hands your own line to it). Chat shows three names at most, then "and N others"; the tooltip has all. Tests in `Share` (5 new; mutation-checked: without the names, 4 fail; without the cap, the big-group test fails). Receiver-side only.
 
