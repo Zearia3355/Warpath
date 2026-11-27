@@ -12,7 +12,7 @@ Version: **3.8.4** (Joe, 2026-11-26: 3.9 is already decided as battleground mode
 
 To check in game (none of this can be seen outside the client):
 - The tombstones sit on the graveyards: stand at a spirit healer and run `/warpath debug spirits`; "nearest listed" should be a few yards. If it's hundreds, the world X/Y order is swapped in `Spirits.lua` (`Vec(k.x, k.y)`).
-- The art: test1's tombstone duplicated the game's grave icon (Joe). Now `RaidFrame-Icon-Rez` (Joe's pick B from a mock cropped out of Blizzard's art sheets). The `poi-horde` / `poi-alliance` badges sit at different places in the retail sheet than in Forever's atlas list, so the mock's badge may not be what the game draws: check it. Size (64 px, Joe's "try 64" after test2), badge placement and the quiet alpha (0.6) are Claude's calls.
+- The art: test1's tombstone duplicated the game's grave icon (Joe). Now `RaidFrame-Icon-Rez` (Joe's pick B from a mock cropped out of Blizzard's art sheets). The `poi-horde` / `poi-alliance` badges sit at different places in the retail sheet than in Forever's atlas list, so the mock's badge may not be what the game draws: check it. Size (48 px: Joe tried 15, then 64), badge placement and the quiet alpha (0.6) are Claude's calls.
 - Learning: die in the open world, then `/warpath debug spirits` shows the release spot's distance from the nearest listed graveyard, and a learned count.
 - Whether `C_DeathInfo.GetGraveyardsForMap` returns anything outside battlegrounds (not used yet; it gives no faction).
 - Whether the vanilla list matches WoW Forever: graveyards this server added show once a character releases there; ones the list has that the server doesn't can't be detected and would need removing by hand.

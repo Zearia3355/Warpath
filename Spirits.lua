@@ -28,7 +28,7 @@ local Spirits = {}
 ns.Spirits = Spirits
 
 local MATCH_YD = 60     -- a learned spot this close to a listed graveyard is that graveyard
-local ICON_PX = 64      -- icon size at 100% icon size, interface pixels (Joe, test2: 15 was too small; "try 64")
+local ICON_PX = 48      -- icon size at 100% icon size, interface pixels (Joe: 15 too small in test2, 64 too big in test3)
 -- The raid frame's resurrect icon (Joe's pick B, 2026-11-26): the map's own
 -- graveyard tombstone (test1) duplicated the game's grave icon, which matters.
 local ICON = "RaidFrame-Icon-Rez"
