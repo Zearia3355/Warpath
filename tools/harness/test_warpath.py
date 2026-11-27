@@ -2201,9 +2201,10 @@ class Lingering(unittest.TestCase):
 
     def test_the_hidden_trail_stays_hidden_when_you_leave(self):
         # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes
-        # hidden while you were inside came back for a minute. With the solid
-        # line short, nothing at all may be drawn inside just after leaving.
-        self.wow.run("ns.C.LINE_SOLID = 5")
+        # hidden while you were inside came back for a minute. Nothing at all
+        # may be drawn inside just after leaving. 3.8.3-test14 (Joe,
+        # Undercity): the solid line still came back, because this test had
+        # shortened it to 5 s; it now runs at the real 2.5 min.
         self.walk(0.20, 0.50, 0.40, 0.50)
         self.quest(0.40, 0.50, 8 * 60)
         # inside the area you're in: only your last seconds, around you

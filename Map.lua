@@ -1125,13 +1125,15 @@ local function AreaScene(e, now, life)
         if age < life and a.h and #a.h >= 2 and a.v and #a.v > 0 then
             local poly, box = Linger.Outline(a)
             list[#list + 1] = { a = a, poly = poly, box = box, age = age, live = isLive }
-            -- Dashes inside are hidden, in the area you're in and after you
-            -- leave alike: they were never shown there, so they mustn't come
-            -- back when you go. Only the solid line, which shows inside while
-            -- you're there, fades out over a minute after you leave.
+            -- Your line inside is hidden, in the area you're in and after you
+            -- leave alike: it was never shown there (only the comet, which
+            -- fades on by itself), so it mustn't come back when you go.
+            -- Until 3.8.3-test14 the solid line came back on leaving and
+            -- faded over a minute, from when 45 s of it showed inside (Joe,
+            -- Undercity: "I see my trail in it where it should be empty").
             dash[#dash + 1] = { poly = poly, box = box, k = 0 }
             if not isLive then
-                local c = { poly = poly, box = box, k = 1 - Smooth((now - a.e) / 60) }
+                local c = { poly = poly, box = box, k = 0 }
                 solid[#solid + 1], settled[#settled + 1] = c, c
             else
                 -- in the area you're in, only your last few seconds of line
@@ -1277,9 +1279,8 @@ local function Trace(now, mapID, x, y)
     local show = Linger and Linger.SHOW or 3
     while #trace >= 2 and now - trace[2].t >= show do table.remove(trace, 1) end
 end
--- How much of your line an area lets show at a point: 1 outside every
--- area, 0 inside the one you're in or an old one (until it reopens), in
--- between in one you left less than a minute ago (AreaScene).
+-- How much of your line the areas let show at a point (AreaScene): 1
+-- outside every area, 0 inside any (the one you're in, or one you've left).
 local function ClipK(clips, x, y)
     local k = 1
     for _, c in ipairs(clips) do
