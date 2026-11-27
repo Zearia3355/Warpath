@@ -2117,6 +2117,47 @@ class Lingering(unittest.TestCase):
         self.assertGreater(near[1], far[1] + 0.2, "the line doesn't fade away from you")
         self.assertGreater(near[2], far[2], "the line doesn't thin away from you")
 
+    def comet_pieces(self):
+        r, g, b = (float(v) for v in self.wow.run(
+            "return ns.faction.r .. ' ' .. ns.faction.g .. ' ' .. ns.faction.b").split())
+        out = {}
+        for p in self.wow.run(self.COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] != "L" or abs(float(f[2]) - r) > 0.01 or abs(float(f[3]) - g) > 0.01 or abs(float(f[4]) - b) > 0.01:
+                continue
+            a, x1, y1, x2, y2, w = (float(v) for v in f[5:11])
+            if a < 0.94:
+                out[(round(x1, 1), round(y1, 1), round(x2, 1), round(y2, 1))] = (a, w)
+        return out
+
+    def test_the_comet_fades_between_redraws(self):
+        # Joe, 3.8.3-test10: the comet "skipped". It's 3 s long and the map
+        # redraws every 2 s at most, so worked out only at redraws it froze,
+        # then jumped. Between redraws its pieces must keep fading where they
+        # lie: none brighter, none wider, and most of them fainter.
+        self.walk(0.20, 0.50, 0.40, 0.50)
+        self.quest(0.40, 0.50, 8 * 60)
+        self.assertTrue(self.live())
+        self.wow.run("ns.Linger.SHOW = 6")             # long enough to hold a few pieces
+        self.wow.eval("ns.Redraw()")
+        before = self.comet_pieces()
+        self.assertGreaterEqual(len(before), 3, "no comet to watch")
+        self.wow.run("__H.gt = __H.gt + 1.5; __H.now = __H.now + 1.5")  # no sample, no redraw
+        self.wow.run("ns.UpdateTail()")
+        after = self.comet_pieces()
+        faded = 0
+        for key, (a, w) in before.items():
+            if key not in after:
+                faded += 1                             # gone: faded right out
+                continue
+            a2, w2 = after[key]
+            self.assertLessEqual(a2, a + 1e-6, "a piece got brighter between redraws")
+            self.assertLessEqual(w2, w + 1e-6, "a piece got wider between redraws")
+            if a2 < a - 0.1:
+                faded += 1
+        self.assertGreater(faded, len(before) // 2, "the comet stood still between redraws")
+        self.assertEqual([k for k in after if k not in before], [], "a piece appeared between redraws")
+
     def test_the_hidden_trail_stays_hidden_when_you_leave(self):
         # Joe, 3.8.0-test3: leaving an area filled it with trail. The dashes
         # hidden while you were inside came back for a minute. With the solid
