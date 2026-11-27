@@ -1,6 +1,79 @@
 Warpath changelog
 
 =====================================================================
+3.8.3
+=====================================================================
+
+On the map
+- Scores everywhere. The world map shows one for each continent,
+  continent maps one for each zone, and a zone's own map shows its
+  score in the top-left corner. Blue when you're ahead, yellow when
+  it's close, red when you're behind.
+- Where pins crowd on continent and world maps, three or more kills
+  or deaths close together become one slightly bigger sword or skull.
+  Hover it for how many, and how many were yours.
+- Flight paths on Kalimdor and Eastern Kingdoms are thinner and
+  smoother, with clean evenly spaced dashes and no doubled lines.
+- In a battleground, your other maps still show your war. Only the
+  battleground's own map stays clean. The map button, minimap button
+  and this book work inside too.
+
+Your trail
+- Older trail stays crimson (or your faction's colour) in long dashes
+  with a dark edge, so you can follow it hours later even on busy map
+  art. Sharp turns stay solid. Where you went the same way twice, only
+  the newer pass shows; crossings still show both.
+- Along roads you can see, your trail fades away after about 10
+  minutes, so the roads read clean.
+- Lingering areas are wider in the open world and tighter in cities,
+  and areas that touch become one. Past area outlines are drawn like
+  the trail around them, and their time labels are yellow and stay
+  readable longer.
+- Inside the area you're lingering in, and in old areas you walk
+  back into, the short tail behind you fades out smoothly like a
+  comet instead of ending sharply.
+- Leaving an area no longer brings your line back inside it for a
+  minute: the area stays clean.
+
+The chronicle
+- The book has a Warpath tab: a welcome and What's New. After every
+  update the book opens there by itself, with the new release marked.
+- Settings live in the book now, on the Settings tab, in plain words,
+  with Restore defaults for each section. The separate options window
+  is gone. /warpath setup and the minimap button's right-click open it.
+- Campaigns list their deeds by zone, and only highlights with
+  something to say. Grudges list encounters by day, and a grudge with
+  no kills either way says "no blood yet".
+- The book's close button works in combat.
+
+Settings that changed
+- "Announce on screen" replaces the banner, big-text and quiet-mode
+  switches. If you had quiet mode on, announcing, sounds and the line
+  under the zone name stay off.
+- Guildmates' kill and death lines in chat can be switched off without
+  turning off guild sharing.
+- Recent flights get their own length on the map, beside corpse runs.
+- Guild sharing starts on for new players. Yours stays as you set it,
+  and there's a switch for it on the welcome page.
+
+Fixes
+- Ground warnings now speak wherever you've fought, so your hunting
+  grounds and contested ground get called out too, not only places
+  you've died. The setting counts fights (after 1, 2 or 3).
+- Ground warnings stay up long enough to read.
+- A kill several guildmates get credit for is announced and pinned
+  once. Guildmates need 3.8.3 too for this.
+- The map button no longer prints a chat line, and hiding Warpath
+  with it no longer leaves the last drawing on the map.
+- /killshot and /pks no longer work: use /warpath shot.
+
+- Your saved data: everything is kept. Your settings carry over into
+  the new switches; nothing else about your data changes.
+- No new files: a /reload loads it, but restart the game to see the
+  new version number and have the book open on What's New.
+- Includes 3.8.0 to 3.8.2.
+
+=====================================================================
 3.8.2
 =====================================================================
 

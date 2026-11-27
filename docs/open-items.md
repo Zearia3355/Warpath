@@ -4,9 +4,11 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3 batch: installed as 3.8.3-test10 (branch `areas-merge`)
+## 3.8.3: release prepared 2026-11-26 (from branch `areas-merge`; installed in game as 3.8.3-test15)
 
-Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN` for 3.8.3 is written. Not yet: changelog, release version.
+Changelog, `NEW_IN` and version written; not yet tagged or published. The checks below that Joe hasn't confirmed ship unconfirmed unless he says otherwise.
+
+Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN`, changelog and release version are written.
 
 - Ground warnings ("DANGEROUS GROUND" etc.) stay up 4–6.5 s by line length instead of under 2 s (`Overlay.Show` takes `hold`; `Overlay.ReadHold`). Kill text unchanged. Tests in `Overlay` (mutation-checked: without the hold, the reading test fails).
 - The map button's left-click shows/hides Warpath without a chat line; `/warpath map` still replies. Tests in `MapButton` (mutation-checked).
