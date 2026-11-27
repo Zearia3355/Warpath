@@ -1,5 +1,5 @@
 
--- Warpath 3.8.4-test6
+-- Warpath 3.8.4-test7
 -- Your war, inked on the map.
 --
 -- Map layers (/warpath layer <name> [on|off], or right-click the map button):
