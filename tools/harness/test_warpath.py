@@ -579,9 +579,13 @@ class Share(unittest.TestCase):
         self.wow.run("ns.cfg.share = true")
         self.chat_from = len(self.wow.chat)
 
-    def receive(self, text, sender="Bob Smith", channel="GUILD"):
+    def receive(self, text, sender="Bob Smith", channel="GUILD", settle=True):
         # WoW Forever: senders arrive as "First Last", a space and no realm.
         self.wow.run(f"ns.OnComm('WARPATH', {lua_str(text)}, {lua_str(channel)}, {lua_str(sender)})")
+        # 3.8.4: a kill's line waits 2 s for anyone else with credit;
+        # settle=False for reports arriving together
+        if settle and "|K|" in text:
+            self.wow.advance(2.1)
 
     def new_chat(self):
         return self.wow.chat[self.chat_from:]
@@ -653,8 +657,8 @@ class Share(unittest.TestCase):
         return lua_count(self.wow, f"WarpathDB.maps[{mapID}] and WarpathDB.maps[{mapID}].gmarks")
 
     def test_two_guildmates_killing_one_enemy_say_it_once(self):
-        self.receive(self.kill_msg("Thrall"), sender="Bob Smith")
-        self.receive(self.kill_msg("Thrall", 0.41, 0.61), sender="Ann Lee")
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith", settle=False)
+        self.receive(self.kill_msg("Thrall", 0.41, 0.61), sender="Ann Lee", settle=False)
         self.receive(self.kill_msg("Thrall"), sender="Cid Roe", channel="PARTY")
         self.assertEqual(len(self.kill_lines()), 1, self.new_chat())
         self.assertEqual(self.gpins(), 1)
@@ -682,11 +686,11 @@ class Share(unittest.TestCase):
         self.assertEqual(len(self.kill_lines()), 2, self.new_chat())
 
     def test_old_senders_without_a_name_group_by_place(self):
-        self.receive(self.kill_msg(), sender="Bob Smith")
-        self.receive(self.kill_msg(x=0.405), sender="Ann Lee")       # same spot
+        self.receive(self.kill_msg(), sender="Bob Smith", settle=False)
+        self.receive(self.kill_msg(x=0.405), sender="Ann Lee", settle=False)  # same spot
         self.receive(self.kill_msg(x=0.60), sender="Cid Roe")        # far away
         self.assertEqual(len(self.kill_lines()), 2, self.new_chat())
-        self.wow.advance(11)
+        self.wow.advance(9)
         self.receive(self.kill_msg(x=0.405), sender="Dee Fox")       # same spot, later
         self.assertEqual(len(self.kill_lines()), 3, self.new_chat())
 
@@ -716,13 +720,73 @@ class Share(unittest.TestCase):
         self.wow.run("ns.cfg.selfChat = true")
         mx = self.wow.eval("(select(2, ns.PlayerPos()))")
         my = self.wow.eval("(select(3, ns.PlayerPos()))")
-        self.receive(self.kill_msg("Thrall", mx, my), sender="Bob Smith")
-        lines = len(self.kill_lines())
+        self.receive(self.kill_msg("Thrall", mx, my), sender="Bob Smith", settle=False)
         self.assertEqual(self.gpins(), 1)
         self.own_kill()
         self.assertEqual(self.wow.eval("WarpathDB.kills"), 1)
-        self.assertEqual(len(self.kill_lines()), lines, self.new_chat())
-        self.assertEqual(self.gpins(), 0)  # your own mark is there instead
+        lines = self.kill_lines()
+        self.assertEqual(len(lines), 1, self.new_chat())
+        self.assertIn("Bob Smith", lines[0])
+        self.assertTrue(lines[0].endswith("(with Tester)"), lines[0])
+        self.assertEqual(self.gpins(), 0)  # your own mark is there instead, naming Bob
+        self.assertEqual(self.wow.eval("ns.JoinNames(ns.db.maps[1448].marks[#ns.db.maps[1448].marks].with)"), "Bob Smith")
+
+    # 3.8.4: everyone with credit is named on the one line and its pin.
+    def test_everyone_with_credit_is_named_on_the_line(self):
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith", settle=False)
+        self.assertEqual(self.kill_lines(), [], "the line waits for others with credit")
+        self.receive(self.kill_msg("Thrall", 0.41, 0.61), sender="Ann Lee", settle=False)
+        self.receive(self.kill_msg("Thrall"), sender="Cid Roe")
+        lines = self.kill_lines()
+        self.assertEqual(len(lines), 1, self.new_chat())
+        self.assertIn("Bob Smith", lines[0])
+        self.assertTrue(lines[0].endswith("(with Ann Lee and Cid Roe)"), lines[0])
+        self.assertEqual(self.wow.eval("ns.JoinNames(ns.db.maps[1448].gmarks[1].with)"), "Ann Lee and Cid Roe")
+
+    def test_a_big_group_is_counted_not_listed_in_chat(self):
+        names = [f"Mate {c}" for c in "ABCDEFGHIJ"]
+        for n in names:
+            self.receive(self.kill_msg("Thrall"), sender=n, settle=False)
+        self.wow.advance(2.1)
+        lines = self.kill_lines()
+        self.assertEqual(len(lines), 1, self.new_chat())
+        self.assertTrue(lines[0].endswith("(with Mate B, Mate C, Mate D and 6 others)"), lines[0])
+        # the pin's tooltip has them all
+        self.assertEqual(lua_count(self.wow, "ns.db.maps[1448].gmarks[1].with"), 9)
+        # four reporters besides the first: all four named, nothing counted
+        self.assertEqual(self.wow.eval('ns.JoinNames({"A", "B", "C", "D"}, 3)'), "A, B, C and D")
+
+    def test_a_lone_kill_names_no_one_else(self):
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith")
+        lines = self.kill_lines()
+        self.assertEqual(len(lines), 1, self.new_chat())
+        self.assertNotIn("(with", lines[0])
+        self.assertIsNone(self.wow.eval("ns.db.maps[1448].gmarks[1].with"))
+
+    def test_a_late_report_joins_the_pin_not_a_second_line(self):
+        self.receive(self.kill_msg("Thrall"), sender="Bob Smith")
+        self.receive(self.kill_msg("Thrall"), sender="Ann Lee")  # after the line printed
+        self.assertEqual(len(self.kill_lines()), 1, self.new_chat())
+        self.assertEqual(self.wow.eval("ns.JoinNames(ns.db.maps[1448].gmarks[1].with)"), "Ann Lee")
+
+    def test_a_guildmate_with_credit_for_your_kill_is_named_on_your_line(self):
+        self.wow.run("ns.cfg.selfChat = true")
+        self.wow.run(f"""ns.Foes.Pick = function() return "Thrall-Realm", "Thrall", "SHAMAN", "target" end""")
+        self.wow.H.combat = True
+        self.wow.fire("PLAYER_REGEN_DISABLED")
+        self.wow.H.hk = (self.wow.H.hk or 0) + 1
+        self.wow.fire("PLAYER_PVP_KILLS_CHANGED")
+        self.wow.advance(0.5)
+        self.assertEqual(self.wow.eval("WarpathDB.kills"), 1)
+        mx = self.wow.eval("(select(2, ns.PlayerPos()))")
+        my = self.wow.eval("(select(3, ns.PlayerPos()))")
+        self.receive(self.kill_msg("Thrall", mx, my), sender="Bob Smith")
+        lines = self.kill_lines()
+        self.assertEqual(len(lines), 1, self.new_chat())
+        self.assertIn("Tester", lines[0])
+        self.assertTrue(lines[0].endswith("(with Bob Smith)"), lines[0])
+        self.assertEqual(self.gpins(), 0)
+        self.assertEqual(self.wow.eval("ns.JoinNames(ns.db.maps[1448].marks[#ns.db.maps[1448].marks].with)"), "Bob Smith")
 
     def test_announce_off_says_your_kill_in_chat_instead(self):
         # 3.8.3: "Announce on screen" off (once quiet mode): no banner, a chat line

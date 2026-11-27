@@ -194,6 +194,9 @@ local function PinEnter(self)
         if d.tag and TAGS[d.tag] then
             GameTooltip:AddLine(d.tag == "streak" and ("Streak of " .. (d.streak or "?")) or TAGS[d.tag], 1, 0.62, 0.16)
         end
+        if type(d.with) == "table" and #d.with > 0 then -- guildmates with credit too (3.8.4)
+            GameTooltip:AddLine("With " .. ns.JoinNames(d.with), 0.6, 0.8, 1, true)
+        end
         GameTooltip:AddLine(date("%b %d, %H:%M", d[3]), 0.8, 0.8, 0.8)
         if d.shot then
             GameTooltip:AddLine(" ")
@@ -222,7 +225,8 @@ local function PinEnter(self)
         end
         GameTooltip:AddLine("Zoom in to see each one", 0.6, 0.6, 0.6)
     elseif self.kind == "skill" then
-        GameTooltip:AddLine(d.from .. " scored a kill here", 0.6, 0.8, 1)
+        local with = type(d.with) == "table" and #d.with > 0 and (" with " .. ns.JoinNames(d.with)) or ""
+        GameTooltip:AddLine(d.from .. " scored a kill here" .. with, 0.6, 0.8, 1, true)
         GameTooltip:AddLine(Ago(d.t), 0.8, 0.8, 0.8)
     else -- shared death
         GameTooltip:AddLine(d.from .. " was killed here", 1, 0.5, 0.4)

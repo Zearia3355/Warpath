@@ -18,8 +18,17 @@ On the map
 - /warpath debug spirits says how close the nearest known spirit
   healer is.
 
+Guild sharing
+- When several of you get credit for one kill, its chat line now names
+  everyone, not just whoever reported it first: the others are added
+  at the end, "(with ...)". A big group shows three names and a
+  count ("and 6 others"); the pin's tooltip names them all.
+  The line comes about 2 seconds after the kill, to wait for the
+  others. Only your copy needs 3.8.4 to see this.
+
 - Your saved data: everything is kept. One new account-wide list of
-  the graveyards your characters have released to.
+  the graveyards your characters have released to, and kill pins
+  remember who else had credit.
 - Needs a full game restart (a new file), not just /reload.
 
 =====================================================================

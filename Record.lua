@@ -669,8 +669,11 @@ local function OnKill(full, short, class)
             mk = m.mk, ft = k.feat })
         Share("K", mapID, m[1], m[2], nil, kfields)
     end
-    -- a guildmate who also got credit may have said it already (3.8.3)
-    local said = m and ns.NoteKill(short, mapID, m[1], m[2])
+    -- a guildmate who also got credit may have said it already (3.8.3);
+    -- your own chat line waits for anyone else with credit (3.8.4)
+    local line = cfg.selfChat and Feats.GuildKillLine(myName, k.zone, strsplit("|", kfields)) or nil
+    if m then ns.NoteKill(short, mapID, m[1], m[2], nil, myName, line, m)
+    elseif line then ns.Print(line) end
     if k.grudge then ns.Grudge.OnKill(full, mapID, true) end
 
     -- One line per kill: the big text for multi-kills and streak milestones,
@@ -679,8 +682,6 @@ local function OnKill(full, short, class)
     local big = cfg.announce and Feats.OverlayFor(n, k, feats)
     if big then ns.Overlay.Show(big) end
     local function Announce()
-        -- your own kill in chat, worded as your guild sees it (3.7.6)
-        if cfg.selfChat and not said then ns.Print(Feats.GuildKillLine(myName, k.zone, strsplit("|", kfields))) end
         if big then return end
         if not cfg.announce or n >= 2 or P.StreakPool(k.streak) then
             if not cfg.announce then

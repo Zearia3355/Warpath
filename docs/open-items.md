@@ -17,6 +17,15 @@ To check in game (none of this can be seen outside the client):
 - Whether `C_DeathInfo.GetGraveyardsForMap` returns anything outside battlegrounds (not used yet; it gives no faction).
 - Whether the vanilla list matches WoW Forever: graveyards this server added show once a character releases there; ones the list has that the server doesn't can't be detected and would need removing by hand.
 
+## Shared kills name everyone (3.8.4, Joe 2026-11-26): built, not installed
+
+A kill several of you get credit for prints one line naming the others, "(with …)", and its pin's tooltip names them (`Share.lua` `NoteKill`/`SayKill`, `KILL_HOLD` 2 s; `Record.lua` hands your own line to it). Chat shows three names at most, then "and N others"; the tooltip has all. Tests in `Share` (5 new; mutation-checked: without the names, 4 fail; without the cap, the big-group test fails). Receiver-side only.
+
+To check in game, with a guildmate in the group:
+- Kill one enemy together: one line, ending "(with" and their name, about 2 s after the kill. Your banner doesn't wait.
+- The kill's pin tooltip says "With" and their name.
+- Whether 2 s is long enough: a report that arrives later adds no line, only its name on the pin. If names go missing, the hold needs to be longer.
+
 ## 3.8.3: released 2026-11-26 (tag on `8d4b3d9`; CI run 45938193545 uploaded to CurseForge, "Success!", and GitHub Releases; listed on the files page)
 
 The checks below that Joe hadn't confirmed shipped unconfirmed; check them in game on the release.

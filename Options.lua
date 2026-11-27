@@ -62,6 +62,7 @@ local NEW_IN = {
     "Spirit healers show on zone maps, with the corpse runs.",
     "A Horde or Alliance badge marks one-faction graveyards.",
     "Warpath learns each graveyard your characters release to.",
+    "A kill several of you share names everyone in chat.",
   } },
 }
 

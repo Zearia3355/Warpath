@@ -76,13 +76,16 @@ end
 -- 3.7.0 appended an empty realm ("First Last-"), so whispers back failed.
 -- One kill, said once (3.8.3). When several guildmates get credit for the
 -- same enemy, each sends a kill; the first report (or your own kill) prints
--- and pins, later ones of the same enemy fold into it silently. Same enemy:
--- same name on the same map within KILL_SAME s; a sender with no victim
--- name (before 3.7) matches by place, within KILL_NEAR of the map and
--- KILL_NONAME s. Only different reporters fold: one guildmate's two kills
--- are two kills. Each guildmate's haze still counts it (their fight).
-local KILL_SAME, KILL_NONAME, KILL_NEAR = 30, 10, 0.015
-local recentKills = {} -- { v = victim (lower case, no realm) or nil, map, x, y, at, by }
+-- and pins, later ones of the same enemy fold into it. Same enemy: same name
+-- on the same map within KILL_SAME s; a sender with no victim name (before
+-- 3.7) matches by place, within KILL_NEAR of the map and KILL_NONAME s. Only
+-- different reporters fold: one guildmate's two kills are two kills. Each
+-- guildmate's haze still counts it (their fight).
+-- 3.8.4: the line waits KILL_HOLD s, so everyone who reports the kill in
+-- that time is named on it ("(with Ann Lee)"), and on its pin. A report
+-- after the line printed is still folded, unnamed.
+local KILL_SAME, KILL_NONAME, KILL_NEAR, KILL_HOLD = 30, 10, 0.015, 2
+local recentKills = {} -- { v = victim (lower case, no realm) or nil, map, x, y, at, by, who, with, line, pin, said }
 
 local function VictimKey(name)
     if type(name) ~= "string" or name == "" then return nil end
@@ -106,24 +109,56 @@ local function SameKill(v, mapID, x, y, by)
     end
 end
 
--- True when someone else already reported this kill (you or a guildmate);
--- otherwise remembers it and returns false plus its record. by: the
--- reporter (nil: you). Your own kill arriving after a guildmate's report of
--- it takes that report's pin off the map: your own mark is there.
-local function NoteKill(victim, mapID, x, y, by)
+-- "Ann", "Ann and Bob", "Ann, Bob and Cid". max: at most that many names,
+-- the rest counted ("Ann, Bob, Cid and 7 others").
+local function JoinNames(list, max)
+    if #list <= 1 then return list[1] or "" end
+    if max and #list > max + 1 then
+        return table.concat(list, ", ", 1, max) .. (" and %d others"):format(#list - max)
+    end
+    return table.concat(list, ", ", 1, #list - 1) .. " and " .. list[#list]
+end
+ns.JoinNames = JoinNames
+
+local function SayKill(e)
+    e.said = true
+    if e.line then
+        -- three names at most in chat; the pin's tooltip has them all
+        Print(#e.with > 0 and (e.line .. " (with " .. JoinNames(e.with, 3) .. ")") or e.line)
+    end
+end
+
+-- A kill reported (by: the reporter's full name; nil: you). who: the name
+-- to show; line: the chat line to print, or nil (or set .line on the
+-- record before the timer fires); pin: its mark, if already made. True when someone else already reported this kill: the reporter is
+-- added to its line (if not yet printed) and its pin. Otherwise remembers
+-- it, schedules its line and returns false plus its record (set .pin).
+-- Your own kill arriving after a guildmate's report takes that report's pin
+-- off the map: your own mark is there, and names them.
+local function NoteKill(victim, mapID, x, y, by, who, line, pin)
     local v = VictimKey(victim)
     by = by or ""
     local e = SameKill(v, mapID, x, y, by)
     if e then
-        if by == "" and e.pin then
-            local list = db.maps[mapID] and db.maps[mapID].gmarks or {}
-            for i = #list, 1, -1 do if list[i] == e.pin then table.remove(list, i) S.dirty = true break end end
-            e.pin = nil
+        if by == "" and pin then
+            if e.pin then
+                local list = db.maps[mapID] and db.maps[mapID].gmarks or {}
+                for i = #list, 1, -1 do if list[i] == e.pin then table.remove(list, i) S.dirty = true break end end
+            end
+            local names = { e.who }
+            for _, n in ipairs(e.with) do names[#names + 1] = n end
+            e.pin, pin.with = pin, names
+        elseif e.pin then
+            e.pin.with = e.pin.with or {}
+            table.insert(e.pin.with, who)
+            S.dirty = true
         end
+        if not e.said then table.insert(e.with, who) end
         return true
     end
-    e = { v = v, map = mapID, x = x, y = y, at = GetTime(), by = by }
+    e = { v = v, map = mapID, x = x, y = y, at = GetTime(), by = by, who = who, with = {}, line = line, pin = pin }
     recentKills[#recentKills + 1] = e
+    C_Timer.After(KILL_HOLD, function() SayKill(e) end)
     return false, e
 end
 
@@ -222,8 +257,10 @@ local function Receive(prefix, text, channel, sender)
     end
 
     local full = FullSender(sender)
+    local zone = MapName(mapID)
+    local say = cfg.guildChat ~= false
     local said, kill
-    if kind == "K" then said, kill = NoteKill(f9, mapID, x, y, full) end
+    if kind == "K" then said, kill = NoteKill(f9, mapID, x, y, full, from) end
     if said then
         -- someone already said this kill: their haze only, no pin, no line
         diag.folded = diag.folded + 1
@@ -256,10 +293,9 @@ local function Receive(prefix, text, channel, sender)
     -- Kills and deaths get one chat line wherever they happen, unless that's
     -- turned off (3.8.3); sightings are map-only. A 3.7 sender's line carries
     -- the tier and feat.
-    local zone = MapName(mapID)
-    local say = cfg.guildChat ~= false
     if kind == "K" then
-        if say then Print(ns.Feats.GuildKillLine(from, zone, f1, f2, f3, f4, f5, f6, f7, f8, f9)) end
+        -- printed by NoteKill's timer, with anyone else who has credit
+        if say then kill.line = ns.Feats.GuildKillLine(from, zone, f1, f2, f3, f4, f5, f6, f7, f8, f9) end
     elseif kind == "D" then
         if f1 and f1 ~= "" then ns.Feats.GuildDeath(f1, from) end
         if say then Print(ns.Feats.GuildDeathLine(from, zone, f1, f2, f3, f4 or "")) end
