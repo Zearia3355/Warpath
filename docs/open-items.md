@@ -4,7 +4,7 @@ Only open things live here: work in progress and checks waiting on Joe. Close it
 
 ---
 
-## 3.8.3 batch: installed as 3.8.3-test9 (branch `areas-merge`)
+## 3.8.3 batch: installed as 3.8.3-test10 (branch `areas-merge`)
 
 Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test2 installed 2026-11-25 (commit `8977243`; backup `-3.8.3-test2/`) with the first three items. **test3** installed 2026-11-25 by script (commit `3a9957d`; full restart; backup `tools/out/savedvars-backup-2026-11-25-3.8.3-test3/`), with everything below. `NEW_IN` for 3.8.3 is written. Not yet: changelog, release version.
 
@@ -34,7 +34,7 @@ Built from the backlog on 2026-11-25, alongside 3.8.3-test1's area changes. test
 
 - Settings in the chronicle, layout C, settings review (Joe, 2026-11-26; decisions in `docs/settings-review.md`): a **Settings** tab beside Warpath with six sections, every change at once, Restore defaults per section; the options window is gone. Quiet mode and big text became "Announce on screen" (accounts with quiet on keep announcing, sounds and the zone line off); a switch for guildmates' kill lines in chat; recent flights get their own length; sharing on for new installs and a switch on the welcome page. What's New grouped by topic with a NEW mark; campaign deeds under zone headings and only highlights with something to say; grudges with "no blood yet" and encounters by day. 3.8.3's `NEW_IN` rewritten under topics. Tests: `AlertSettings` (6), `SettingsTab` (7), `Share` (2 new), `NewIn` (updated, 1 new); `upgrade_matrix.py` follows quiet mode into its new form. Mutation-checked: guild lines always printed, a section 100 px taller, and quiet mode not keeping sounds off each fail. In test9 (installed 2026-11-26 by script; **full restart**, the `.toc` changed; backup `-3.8.3-test9/`). The book's look has only been mocked, not rendered from code (the harness has no book renderer).
 
-- After test9 (not installed yet): ground warnings fire on any fighting of yours (the haze), so hunting and contested ground speak too; settings say "Ground you've fought on", after 1/2/3 fights. Tests `GroundWarnings` (4; mutation-checked: the old death-only trigger fails the hunting test). Also: no Settings button on the welcome page, new test builds open the book, "with guildmates' fighting" under Battle haze, room above headings.
+- After test9, in test10 (installed 2026-11-26 by script; `/reload` is enough; backup `-3.8.3-test10/`): ground warnings fire on any fighting of yours (the haze), so hunting and contested ground speak too; settings say "Ground you've fought on", after 1/2/3 fights. Tests `GroundWarnings` (4; mutation-checked: the old death-only trigger fails the hunting test). Also: no Settings button on the welcome page, new test builds open the book, "with guildmates' fighting" under Battle haze, room above headings.
 
 **Joe to check in game**
 - Walk into a zone where you've killed but never died: "Your hunting ground" once, gold, no sound.
