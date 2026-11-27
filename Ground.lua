@@ -1,8 +1,9 @@
 -- Warpath: Ground
--- Dangerous ground (3.7, replaces killing fields). Your PvP deaths are kept
--- on the battle-haze grid, spreading and fading the same way. Walk onto
--- ground where they reach the threshold and Warpath says what that ground
--- has been for you, from your kills and deaths there:
+-- Dangerous ground (3.7, replaces killing fields). Walk onto ground where
+-- you've fought (from 3.8.3 your own battle haze, kills and deaths alike,
+-- spreading and fading as on the map; until 3.8.2 your deaths only, so a
+-- hunting ground where you'd never died stayed silent) and Warpath says what
+-- that ground has been for you, from your kills and deaths there:
 --   dangerous ground (deaths at least twice your kills), contested ground,
 --   or your hunting ground (kills at least twice your deaths).
 -- Out of combat only, never in neutral towns, once per area per session.
@@ -23,7 +24,10 @@ local function Fields(mapID)
     if e and GetTime() - e.at < 10 then return e.mine, e.guild end
     local z = db.maps[mapID]
     if not z then return {}, {} end
-    local mine, guild = ns.DeathField(z)
+    -- mine: your fighting here (the haze, yours only); guild: guildmates'
+    -- deaths, which only add a sentence
+    local mine = ns.BattleField(z, false)
+    local _, guild = ns.DeathField(z)
     cache[mapID] = { at = GetTime(), mine = mine, guild = guild }
     return mine, guild
 end
@@ -57,14 +61,16 @@ local function Tone(k, d)
     return "contested"
 end
 
--- "danger" / "contested" / "hunting" for a spot that counts as dangerous
--- ground (enough of your deaths), else nil.
+-- "danger" / "contested" / "hunting" for a spot you've fought on enough
+-- (cfg.groundAfter fights), else nil.
 function Ground.ToneAt(mapID, x, y, skipAfter)
     if not (mapID and x and y) then return end
     local mine = Fields(mapID)
     local v = mine[Cell(x, y, C.SW, C.SH)]
     if not v or v < (cfg.groundAfter or 2) then return end
-    return Tone(Tally(mapID, x, y, skipAfter or (time() - 1)))
+    local k, d = Tally(mapID, x, y, skipAfter or (time() - 1))
+    if k + d == 0 then return end
+    return Tone(k, d)
 end
 
 -- The worst ground within a few cells of where you stand, for the war table.
@@ -159,7 +165,7 @@ function Ground.Check()
     local cx, cy = c % C.SW, math.floor(c / C.SW)
     for dy = -2, 2 do for dx = -2, 2 do warned[mapID .. ":" .. ((cy + dy) * C.SW + cx + dx)] = true end end
     local k, d = Tally(mapID, x, y)
-    if d == 0 then return end
+    if k + d == 0 then return end -- haze spread from further off: nothing of yours right here
     local tone = Tone(k, d)
     local g = guild[c] and math.floor(guild[c] / C.GROUND_GUILD + 0.5) or 0
     local text = Ground.Text(tone, k, d, g)

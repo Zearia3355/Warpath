@@ -269,7 +269,7 @@ function H.sound(arg)
     Print("sounds " .. State(v) .. ".")
 end
 
--- Dangerous-ground warnings, on screen and in chat (3.7: replaces killing fields).
+-- Ground warnings (hunting, contested, dangerous), on screen and in chat (3.7: replaces killing fields).
 function H.fields(arg)
     local v = OnOff(arg, cfg.groundScreen or cfg.groundChat)
     if v == nil then Print("usage: /warpath fields [on|off]") return end
@@ -542,7 +542,7 @@ local LIST = {
     { "sound",     "sound [on|off]",                "sounds only",                        "Alerts", false, H.sound },
     { "overlay",   "overlay test",                  "a sample of the big text for multi-kills", "Alerts", false, H.overlay },
     { "chat",      "chat [on|off]",                 "your own kills and deaths in chat", "Alerts", false, H.chat },
-    { "fields",    "fields [on|off]",               "dangerous-ground warnings", "Alerts", false, H.fields },
+    { "fields",    "fields [on|off]",               "ground you've fought on: hunting, contested or dangerous", "Alerts", false, H.fields },
     { nil,         "zone chat|text [on|off]",       "zone stats in chat / under the zone name", "Alerts" },
     { "setup",     "setup",                         "all settings",                       "Settings", true, H.setup },
     { "memory",    "memory <days>",                 "how fast long memory (roads, haze, routes) fades", "Settings", false, H.memory },

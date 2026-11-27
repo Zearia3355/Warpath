@@ -153,7 +153,7 @@ class Overlay(unittest.TestCase):
             local _, x, y = ns.PlayerPos()
             local z = ns.db.maps[1448]
             for i = 1, 3 do z.marks[#z.marks + 1] = { x, y, time() - i * 60, "death", pvp = true } end
-            ns.DeathField = function() return setmetatable({}, { __index = function() return 5 end }), {} end
+            ns.BattleField = function() return setmetatable({}, { __index = function() return 5 end }) end
             ns.Ground.Forget()
             ns.Ground.Check()""")
         return wow
@@ -188,6 +188,47 @@ class Overlay(unittest.TestCase):
         wow2 = Wow().login()
         wow2.run('ns.Overlay.Show({ title = "DOUBLE KILL", sub = "Thrall" })')
         self.assertFalse(self.shown_after(wow2, 2.0))
+
+
+class GroundWarnings(unittest.TestCase):
+    """3.8.3: any fighting here sets it off, not only your deaths (Joe:
+    "an 'activity here' tag to fire hunting/contested/dangerous")."""
+
+    def walk_onto(self, kills, deaths, after=2):
+        wow = Wow().login()
+        wow.advance(10)
+        wow.run(f"""
+            ns.cfg.groundAfter = {after}
+            local mapID, x, y = ns.PlayerPos()
+            local z = ns.db.maps[mapID]
+            for i = 1, {kills} do
+                z.marks[#z.marks + 1] = {{ x, y, time() - i * 600, "kill" }}
+                ns.AddBattle(mapID, x, y, ns.C.BATTLE_W.kill)
+            end
+            for i = 1, {deaths} do
+                z.marks[#z.marks + 1] = {{ x, y, time() - i * 600 - 300, "death", pvp = true }}
+                ns.AddBattle(mapID, x, y, ns.C.BATTLE_W.death)
+                ns.AddDeathHeat(mapID, x, y, 1)
+            end
+            ns.Ground.Forget()
+            ns.Ground.Check()""")
+        return " ".join(wow.chat)
+
+    def test_a_hunting_ground_where_you_never_died_speaks(self):
+        chat = self.walk_onto(3, 0)
+        self.assertTrue(any(w in chat for w in ("hunting ground", "Good hunting", "You own this ground")), chat)
+
+    def test_contested_ground_speaks(self):
+        chat = self.walk_onto(2, 2)
+        self.assertTrue(any(w in chat for w in ("Contested", "Hard-fought", "Even fighting")), chat)
+
+    def test_dangerous_ground_still_speaks(self):
+        chat = self.walk_onto(0, 3)
+        self.assertTrue(any(w in chat for w in ("Dangerous", "Careful")), chat)
+
+    def test_one_fight_is_not_enough_at_two(self):
+        chat = self.walk_onto(1, 0, after=2)
+        self.assertFalse(any(w in chat for w in ("hunting ground", "Good hunting", "You own this ground")), chat)
 
 
 class MapButton(unittest.TestCase):

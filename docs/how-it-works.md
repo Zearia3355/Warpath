@@ -193,10 +193,11 @@ Why: on a friend's single hour of questing in Silithus, the trail was a red scri
 - Until 3.8.2: quiet mode (`cfg.quiet`, shown inverted as "Raid-warning banners and sounds") also stopped every alert sound, the big text, on-screen ground warnings and the zone line; and a separate big-text switch (`cfg.overlay`) sent multi-kills to the banner instead. 3.8.3's upgrade (`Events.lua`): quiet on becomes announce off, sounds off and the zone line off; both keys are dropped. `/warpath quiet [on|off]` is now a shortcut for announce and sounds together; `/warpath overlay test` still shows a sample.
 
 ### Dangerous ground (3.7.0, replaced killing fields)
-- PvP deaths on the haze grid. Walking onto ground where they add up: **Dangerous** (red, warning sound), **Contested** (amber, softer), **Your hunting ground** (gold, no sound). Guildmates' deaths add on.
+- Walking onto ground you've fought on: **Dangerous** (red, warning sound; deaths at least twice your kills), **Contested** (amber, softer), **Your hunting ground** (gold, no sound; kills at least twice your deaths). The tone is from your kills and PvP deaths within 2.5 cells (`Tally`).
+- What sets it off (3.8.3, Joe: "an 'activity here' tag to fire hunting/contested/dangerous"): your own battle haze there (`BattleField(z, false)`: kills and deaths alike, spread and fading as on the map) reaching `cfg.groundAfter` fights (1/2/3, default 2). Until 3.8.2 only your deaths counted (the death field), so a hunting ground where you'd never died never spoke. Guildmates' deaths only add a sentence ("Guildmates have died here twice").
 - Out of combat only, never in neutral towns, once per area per session, never on top of a kill's big text.
 - Shown in the kill big text's frame, but held long enough to read (3.8.3): 4–6.5 s at full strength, about a second per 15 letters of the line under the title (`Overlay.ReadHold`). Kill text keeps its short flash (1.2 s hold). A kill while a warning shows replaces it.
-- Settings: on-screen, in chat, warn after 1/2/3 deaths (default 2). `/warpath fields on|off` toggles both.
+- Settings (Alerts, "Ground you've fought on"): on screen, in chat, after 1/2/3 fights (default 2). `/warpath fields on|off` toggles both. The "Ground taken" feat and the war table's "dangerous ground nearby" use the same trigger.
 - War table shows "Dangerous ground nearby"; `/warpath zone` counts spots.
 
 ---
@@ -383,6 +384,8 @@ Who decided what. Add to this on every release. **Claude's calls are open to Joe
 | 2026-11-26 | 3.8.3 chronicle: a release's "new since you last played" became a small red NEW mark; each 3.8.x release can have a short title; a deed row drops "Slew … in <zone>." for the name, with the zone as the heading and the tag on the right; a zone heading repeats when you come back to a zone later that night; highlights with nothing to say are left out; grudge encounters show only the time, under day headings | Claude (open to veto) |
 | 2026-11-26 | After test9 in game: the welcome page's Settings button goes (the tab is beside it); a new test build opens the book like a release (test8 → test9 stayed shut) | Joe |
 | 2026-11-26 | After test9: "with guildmates' fighting" sits indented under Battle haze (it adds to the one haze; it read like a layer of its own); 8 px above every heading after the first (headings sat on the line above in game) | Claude (open to veto) |
+| 2026-11-26 | Ground warnings fire on any fighting of yours there (the haze), not only your deaths, so hunting and contested ground speak too | Joe |
+| 2026-11-26 | That trigger is your own haze, faded like the map's (not all-time pin counts), at the same 1/2/3 setting, now "fights"; the settings heading becomes "Ground you've fought on" with "On screen" / "In chat"; guildmates' fighting doesn't set it off | Claude (open to veto) |
 | 2026-11-26 | 3.8.3: the comet fades evenly (`CURVE` 1, not the faster 1.5) and thins to half width (`TAPER` 0.5); fade per piece by the age at its middle | Claude (open to veto) |
 | 2026-11-26 | With that: the map button, the minimap button and the chronicle work by hand inside too, settings included; the war table, banners, zone header and update window stay off there | Claude (open to veto) |
 | 2026-11-26 | Reversed after test5: scores dodging pins jumped about as pins came and faded. Scores stay put and draw over pins (Joe) | Joe |

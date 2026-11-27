@@ -52,6 +52,7 @@ local NEW_IN = {
     "Recent flights get their own length on the map, beside corpse runs.",
     "Guild sharing starts on for new players. Yours stays as you set it, with a switch on this page.",
     "## Fixes",
+    "Ground you've fought on speaks up wherever you've fought, so your hunting grounds and contested ground get called out too; before, only places you'd died counted.",
     "Dangerous-ground warnings stay up long enough to read. A kill several guildmates get credit for is announced and pinned once (guildmates need 3.8.3 too). The map button no longer prints a chat line.",
     "/killshot and /pks are gone; use /warpath shot.",
   } },
@@ -86,7 +87,7 @@ for i, m in ipairs(C.TRAIL_MIN_CHOICES) do TRAIL[i] = { m, m < 60 and (m .. "m")
 ---------------------------------------------------------------------------
 
 local SECTIONS = {
-    { "alerts",  "Alerts",         "What happens when you kill, die, or walk into danger" },
+    { "alerts",  "Alerts",         "What happens when you kill, die, or return to old ground" },
     { "map",     "Map",            "What the world map shows, and for how long" },
     { "guild",   "Guild",          "Your war shared with guildmates, and theirs with you" },
     { "shots",   "Screenshots",    "Kill screenshots and their captions" },
@@ -146,11 +147,11 @@ local SPEC = {
         { "radios", "overlaySize", "Big text", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } }, indent = 24, when = On("announce") },
         { "check", "selfChat", "Also in chat", "One line for each kill or death, worded as your guild sees it." },
         { "topic", "Sound" },
-        { "check", "sound", "Play sounds", "For kills, dangerous ground and grudge sightings, and this book's pages." },
-        { "topic", "Dangerous ground" },
-        { "note", "A warning when you walk where you've died before: dangerous, contested, or your hunting ground." },
-        { "pair", { "groundScreen", "Warn on screen" }, { "groundChat", "Warn in chat" }, after = GroundChanged },
-        { "radios", "groundAfter", "After", { { 1, "1 death" }, { 2, "2 deaths" }, { 3, "3 deaths" } }, indent = 24,
+        { "check", "sound", "Play sounds", "For kills, dangerous or contested ground, grudge sightings, and this book's pages." },
+        { "topic", "Ground you've fought on" },
+        { "note", "When you walk where you've fought before, Warpath says what it's been for you: your hunting ground, contested, or dangerous." },
+        { "pair", { "groundScreen", "On screen" }, { "groundChat", "In chat" }, after = GroundChanged },
+        { "radios", "groundAfter", "After", { { 1, "1 fight" }, { 2, "2 fights" }, { 3, "3 fights" } }, indent = 24,
             after = GroundChanged, when = function() return cfg.groundScreen or cfg.groundChat end },
     },
     map = {
