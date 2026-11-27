@@ -56,6 +56,7 @@ local NEW_IN = {
     "Ground warnings cover hunting and contested ground too.",
     "Warnings stay up longer; a shared kill is pinned once.",
     "/killshot is gone: use /warpath shot.",
+    "The book's close button works in combat.",
   } },
 }
 
