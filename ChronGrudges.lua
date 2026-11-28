@@ -50,7 +50,7 @@ local G = {
     lsheet = { 576, 446, 1025, 662 },
     lwin = { 578, 449, 1023, 659 },
     lcord = { 1016, 455, 653 },
-    log = { x0 = 586, x1 = 1001, start = 445, day = 18, dayAfter = 4, line = 23, tail = 14, glyph = 593, gdy = -5,
+    log = { x0 = 586, x1 = 1001, start = 444, dayDrop = 3, line = 23, tail = 14, glyph = 593, gdy = -5,
         time = 606, text = 644, slewGap = 5, band = { 580, 1005, -17, 6 } },
     way = { 592, 676, 792, 698 },
     forgive = { 901, 676, 1011, 698 },
@@ -183,7 +183,11 @@ end
 Page.GlobalLog = GlobalLog
 
 -- The log as rows under day headings, each with its baseline (render px,
--- unscrolled), and the content's height.
+-- unscrolled), and the content's height. Every row, heading or entry, takes
+-- one 23 px slot; a heading sits 3 px down in its slot, so it has clear
+-- room under the line above and under the sheet's top edge (3.8.5-test4,
+-- Joe's shot 26: at 18 px above the next entry, headings touched the line
+-- above, and the chosen line's wash touched the heading; Claude's call).
 local function LogRows(ev)
     local L = G.log
     local rows, day, y = {}, nil, L.start
@@ -192,9 +196,8 @@ local function LogRows(ev)
         local d = date("%Y%m%d", e.t)
         if d ~= day then
             day = d
-            y = y + L.day
-            rows[#rows + 1] = { day = d == today and "Today" or MonthDay(e.t), y = y }
-            y = y + L.dayAfter
+            y = y + L.line
+            rows[#rows + 1] = { day = d == today and "Today" or MonthDay(e.t), y = y + L.dayDrop }
         end
         y = y + L.line
         rows[#rows + 1] = { e = e, y = y }
