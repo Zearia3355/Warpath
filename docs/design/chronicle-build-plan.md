@@ -183,3 +183,37 @@ Release once, when all five tabs are done: `CHANGELOG.txt`, `NEW_IN`, "Your save
 - **Lua limits.** Many font strings per row (one font per string) push locals and upvalues; the file split and keeping layouts in data tables keep each file small. `check.py` reports it.
 - **Frame counts.** The Ledger has hundreds of font strings. Spreads are built lazily, on first view, and pooled.
 - **The map art** may not crop cleanly from `GetMapArtLayerTextures`. If it can't, the pictures need Joe's decision; no offline image of Blizzard's art ships.
+
+---
+
+## Merged so far (into `chronicle`, 2026-11-27)
+
+Reviewed by the orchestrator, then merged; 270 tests pass on the merged branch with Joe's real characters (`check.py` clean).
+
+| Piece | Branch | What landed |
+|---|---|---|
+| Chronicler | `claude/chronicle-chronicler-21e2a7` | `Chronicler.lua` (`Write(camp, who, foe)`: date, title, prose runs); `ns.DisplayName`, `NumberWord`, `OrdinalWord`, `DateWords`, `MonthName`, `DayName` in `Warpath.lua` (so phase 1's kit doesn't need its own number and date words). Lethality's prose matches `samples.txt` word for word. |
+| Settings behaviour | `claude/chronicle-settings-behaviour-97ea54` | Layers `runs`/`flights`/`spirits` and `guildMarks`/`guildSights` (old keys kept for 3.8.4); sharing off hides guild pins, sightings, haze and guild deaths in `DeathField`; lengths under their layers; `ns.KillCard.Text/Strip(k, parent, scale)`; grudge wording; Settings wording as the spec's "Final wording". |
+| Ledger data | `claude/chronicle-ledger-data-44878f` | Recordings (`db.flights`, `db.runs`/`z.runs_n`, `db.spirit`, `db.ghostYards`, `m.my`, `m.hp`, `m.odds`, `m.cause`/`m.how`/`m.ct`, `g.vn`/`g.vc` with the kill message's new trailing class); `Ledger.lua` (`Stats`, `Roster`, `Summarize`, `Account`). |
+| Book art | `claude/chronicle-art-dac0d1` | `Art/book/book.tga` (1024², RLE, 2.38 MB, 1:1 with the right-edge strip folded into spare rows), `book-shadow.tga` (9-slice), `sheet-shadow.tga`, `map-mask.tga`; generator in `tools/art/`. |
+
+### Calls the sessions made (for the decision log and Joe's veto)
+
+- **Chronicler:** one-zone title "The Skirmish" / "in Felwood" (prototype: "The Felwood Skirmish"); lowercase articles inside titles; phrases for 35 zones the prototype lacked; numbers as words up to 999; "The Barrens went badly"; with no faction the foe is "the enemy"; two prototype crashes fixed.
+- **Settings:** guildmates' rows grey and their marks hide while the parent layer is off; the three "kept for" rows step 22 px (Map was 2 px over its page); guild entries in the map button's menu indented under their parents; "Sharing off" chat line adds that marks are hidden, not deleted.
+- **Ledger data:** Bloodbath counts `mk == 5` (the spec's `>= 5` would count a chain of six twice); campaign records only from campaigns with a fight; "Longest streak" uses the latest time the best was reached; corpse run vs spirit healer by distance at unghost (100 yd); an expired breath or fatigue timer beats a creature; "Worst odds won" only when outnumbered; "Struck down" in the account view takes the highest count, since `killers` is account-wide.
+- **Book art:** the art is 1062×704 (not 1056×696) so the corner shadows aren't cut; the book's drop shadow is a separate 9-slice; packing option (d).
+
+### To check in game (first build that wires each in)
+
+- RLE textures with varying alpha (the leather's corners and shadows); the map mask stretched over a picture (corners may stretch: sliced mask or four corners).
+- Map and Alerts settings still fitting with Friz.
+- `flightHours` seems to draw nothing (recent "f" strokes have no look in `RUN_LOOK`; flights draw only as legs): decide what Flights' "kept for" should do.
+- Ledger recordings: `MIRROR_TIMER_*`, `IsFalling`, `UnitCreatureType`, `PLAYER_UNGHOST`, `GetGuildRosterInfo`'s return order, the 100 yd body distance.
+
+### Player lines collected for 3.8.5
+
+- Settings (`NEW_IN`): corpse runs, flights and spirit healers are separate map layers; guildmates' pins and sightings each have a switch, under yours; with guild sharing off, guildmates' marks are hidden, not deleted; trail, corpse-run and flight lengths sit under their layers in Settings.
+- Guild: guildmates need the new version for the Ledger to show their victims' classes; kills from older versions show the class as unknown.
+- Saved data: settings only change by copying; nothing is removed; new Ledger counts start from the first fight on 3.8.5; each character's "All characters" summary is built from what it already has at its first login.
+- Install: new files (`Chronicler.lua`, `Ledger.lua`, `Art/`, `Fonts/`) need a full restart.
