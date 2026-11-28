@@ -3169,6 +3169,62 @@ class CampaignsPage(unittest.TestCase):
         self.assertIn("SAMPLE PAGES", self.date_text())
 
 
+class SmallCaps(unittest.TestCase):
+    """Book.Caps (3.8.5-test4 fix): in game a lone small "R" in Morpheus
+    measured wider than it draws, so one string a letter, placed by each
+    letter's width, opened gaps ("Gr udges"). Runs of same-size letters are
+    one string each, placed by the run's width; letterspaced capitals are
+    placed by the width of their run up to each letter. The stub here makes
+    a lone "R" (and "S") measure 5 units too wide, as the client did."""
+
+    def setUp(self):
+        import book_render as B
+        self.wow, typ = B.boot(fonts="repo")
+        real = self.real = self.wow.H.measure
+        self.wow.H.measure = lambda path, size, text: real(path, size, text) + (5 if text in ("R", "S") else 0)
+        self.wow.run("""
+            local f = CreateFrame("Frame", nil, UIParent)
+            __H.caps = ns.Book.Caps(f, "morph", 25, ns.Book.RUBRIC, { ratio = 0.78, track = 0.6 })
+            __H.spaced = ns.Book.Caps(f, "friz", 12, ns.Book.FADED, { track = 1.2 })""")
+
+    def strings(self, obj):
+        out = []
+        for i in range(1, 60):
+            if not self.wow.eval(f"{obj}.letters[{i}] ~= nil and {obj}.letters[{i}]:IsShown()"):
+                break
+            out.append((self.wow.eval(f"{obj}.letters[{i}]:GetText()"), self.wow.eval(f"{obj}.letters[{i}].bx"),
+                        self.wow.eval(f"{obj}.letters[{i}].bpx")))
+        return out
+
+    def test_a_heading_is_one_string_a_run(self):
+        w = self.wow.eval('__H.caps:Set("Grudges", 300, 100, "l")')
+        got = self.strings("__H.caps")
+        self.assertEqual([t for t, _, _ in got], ["G", "RUDGES"])
+        self.assertEqual([p for _, _, p in got], [25, 19])
+        g = self.wow.eval('ns.Book.Measure("morph", 25, "G")')
+        rudges = self.wow.eval('ns.Book.Measure("morph", 19, "RUDGES")')
+        self.assertAlmostEqual(got[1][1], 300 + g + 0.6, places=6, msg="placed by the run's width")
+        self.assertAlmostEqual(w, g + 0.6 + rudges, places=6)
+
+    def test_a_lone_letters_width_moves_nothing(self):
+        # the quirk only touches a letter measured alone: runs don't see it
+        self.wow.run('__H.caps:Set("Version Encounters", 300, 100, "l")')
+        got = self.strings("__H.caps")
+        self.assertEqual([t for t, _, _ in got], ["V", "ERSION", " E", "NCOUNTERS"])
+        x = 300
+        for text, bx, px in got:
+            self.assertAlmostEqual(bx, x, places=6, msg=text)
+            x += self.wow.eval(f'ns.Book.Measure("morph", {px}, "{text}")') + 0.6
+
+    def test_letterspaced_capitals_place_by_the_run(self):
+        self.wow.run('__H.spaced:Set("SIRS", 100, 50, "l")')
+        got = self.strings("__H.spaced")
+        self.assertEqual([t for t, _, _ in got], ["S", "I", "R", "S"])
+        self.wow.H.measure = self.real
+        self.wow.run('__H.spaced:Set("SIRS", 100, 50, "l")')
+        for (t, quirky, _), (_, clean, _) in zip(got, self.strings("__H.spaced")):
+            self.assertAlmostEqual(quirky, clean, places=6, msg=f"{t} moved by a lone letter's width")
+
 class WorldPrint(unittest.TestCase):
     """The sepia map print (Book.WorldPrint), drawn by the client's rules as
     Joe's 3.8.5-test4 screenshots showed them: a mask can't soften MOD, and an

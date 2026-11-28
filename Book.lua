@@ -177,10 +177,22 @@ function Book.Measure(face, px, text)
     return (fs:GetStringWidth() or 0) * 1.2
 end
 
--- Letter by letter (small caps and letterspaced capitals), as the design
--- sets them: each letter its own string, upper case; a lower-case letter is
--- its capital at int(px * ratio); each followed by `track` px. Returns an
--- object: :Set(text, x, y, align) lays it out and returns its width in px.
+-- Small caps and letterspaced capitals. A lower-case letter is its capital
+-- at int(px * ratio); everything else is at px.
+--
+-- 3.8.5-test4 set one string per letter, placed by each letter's own
+-- GetStringWidth: in game Morpheus's small "R" measures wider than it draws,
+-- so a gap opened after every R ("Gr udges", "Encounter s"). Now:
+--   * small caps (track under 1 px): each run of same-size letters is one
+--     string, placed by the run's width; the design's 0.6 px between letters
+--     is kept only between runs, where the size changes (Claude's call: a
+--     whole run's tracking gathered at its end would read as a gap);
+--   * letterspaced capitals (track 1 px or more, the date and kicker lines,
+--     where the spacing is the look): still a string a letter, but each is
+--     placed by the width of its run up to it, measured as one string, plus
+--     the tracking; never by a letter measured alone.
+-- :Set(text, x, y, align, rel, ox, oy) lays it out and returns its width in
+-- px. .letters holds the strings drawn, in order; .runs the runs.
 local Caps = {}
 Caps.__index = Caps
 
@@ -190,8 +202,7 @@ function Book.Caps(parent, face, px, col, opt)
         ratio = opt.ratio or 1, track = opt.track or 0, shadow = opt.shadow, layer = opt.layer }, Caps)
 end
 
-function Caps:Letter(i, small)
-    local px = small and math.floor(self.px * self.ratio) or self.px
+function Caps:Str(i, px)
     local l = self.letters[i]
     if not l or l.bpx ~= px then
         if l then l:Hide() end
@@ -202,28 +213,55 @@ function Caps:Letter(i, small)
     return l
 end
 
-function Caps:Set(text, x, y, align, rel, ox, oy)
-    text = text or ""
-    local n, w = 0, 0
-    local parts = {}
+-- text -> runs { text (upper case), px, n (letters) }
+function Caps:Runs(text)
+    local runs = {}
     for ch in text:gmatch("[%z\1-\127\194-\244][\128-\191]*") do
-        local small = ch:match("^%l$") ~= nil
-        n = n + 1
-        local l = self:Letter(n, small)
-        l:SetText(ch:upper())
+        local px = ch:match("^%l$") and math.floor(self.px * self.ratio) or self.px
+        local r = runs[#runs]
+        if r and r.px == px then
+            r.text, r.n = r.text .. ch:upper(), r.n + 1
+            r.chars[#r.chars + 1] = ch:upper()
+        else
+            runs[#runs + 1] = { text = ch:upper(), px = px, n = 1, chars = { ch:upper() } }
+        end
+    end
+    return runs
+end
+
+function Caps:Set(text, x, y, align, rel, ox, oy)
+    local runs = self:Runs(text or "")
+    self.runs = runs
+    local spaced = self.track >= 1
+    -- where each string goes, from the left: { px, text, dx }
+    local place, w = {}, 0
+    for ri, r in ipairs(runs) do
+        if ri > 1 then w = w + self.track end
+        if spaced then
+            -- the run's width up to a letter, measured with a tail so that
+            -- no letter is ever measured alone
+            local pre, tail = "", Book.Measure(self.face, r.px, "HH")
+            for k, ch in ipairs(r.chars) do
+                local at = k == 1 and 0 or (Book.Measure(self.face, r.px, pre .. "HH") - tail)
+                place[#place + 1] = { r.px, ch, w + at + (k - 1) * self.track }
+                pre = pre .. ch
+            end
+            w = w + Book.Measure(self.face, r.px, r.text) + (r.n - 1) * self.track
+        else
+            place[#place + 1] = { r.px, r.text, w }
+            w = w + Book.Measure(self.face, r.px, r.text)
+        end
+    end
+    local left = x
+    if align == "m" then left = x - w / 2 elseif align == "r" then left = x - w end
+    for i, p in ipairs(place) do
+        local l = self:Str(i, p[1])
+        l:SetText(p[2])
         l:Show()
-        local lw = Book.Wpx(l)
-        parts[n] = lw
-        w = w + lw + self.track
+        Book.Put(l, left + p[3], y, "l", rel, ox, oy)
     end
-    for i = n + 1, #self.letters do self.letters[i]:Hide() end
-    local cx = x
-    if align == "m" then cx = x - w / 2 elseif align == "r" then cx = x - w end
-    for i = 1, n do
-        Book.Put(self.letters[i], cx, y, "l", rel, ox, oy)
-        cx = cx + parts[i] + self.track
-    end
-    self.width, self.x0 = w, (align == "m" and x - w / 2) or (align == "r" and x - w) or x
+    for i = #place + 1, #self.letters do self.letters[i]:Hide() end
+    self.width, self.x0 = w, left
     return w
 end
 
