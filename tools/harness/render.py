@@ -5,6 +5,7 @@
     python tools/harness/render.py ... --map 1448 --out felwood.png
     python tools/harness/render.py ... --ref 3.7.5 --ref main      # before / after
     python tools/harness/render.py ... --ref main --ref work       # main vs uncommitted
+    python tools/harness/render.py ... --book campaigns            # the chronicle (book_render.py)
 
 This is the "render before/after from his real saved data before building"
 step: run the addon's own Map.lua against a character's SavedVariables, catch
@@ -403,7 +404,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--wtf", default=os.environ.get("WARPATH_WTF"),
                     help="the WTF\\Account\\<NAME> folder (or set WARPATH_WTF)")
-    ap.add_argument("--char", required=True, help="character folder name, e.g. Name-Realm")
+    ap.add_argument("--char", help="character folder name, e.g. Name-Realm (required for the map; "
+                    "for --book, none renders a fresh character)")
     ap.add_argument("--map", type=int, help="uiMapID to view (default: the zone with the most roads)")
     ap.add_argument("--at", help="unix time to render at (default: the character's last logout)")
     ap.add_argument("--ref", action="append",
@@ -413,7 +415,25 @@ def main():
     ap.add_argument("--out", default="warpath-render.png")
     ap.add_argument("--backdrop", help="in-game screenshot of the same map, to draw over its real art")
     ap.add_argument("--canvas", help="x1,y1,x2,y2 of the map canvas in the screenshot (default: the whole image)")
+    bk = ap.add_argument_group("the chronicle (--book)")
+    bk.add_argument("--book", metavar="TAB", help="render the chronicle open on a tab: campaigns, grudges, settings, warpath")
+    bk.add_argument("--page", type=int, help="campaigns: the Nth campaign, newest first; warpath: the Nth page of "
+                    "What's New; grudges: the Nth grudge in the list")
+    bk.add_argument("--section", help="settings: alerts, map, guild, shots, zones or grudges")
+    bk.add_argument("--preview", action="store_true", help="the sample pages (the book's preview)")
+    bk.add_argument("--scale", type=float, default=1.0, help="scale the 1092x748 canvas (1.175: in-game size)")
+    bk.add_argument("--beside", metavar="DESIGN.png", help="put a design render beside the code's, at the same scale")
+    bk.add_argument("--onion", metavar="DESIGN.png", help="blend a design render 50/50 over the code's")
+    bk.add_argument("--origin", default="shot", help="the book's top-left on the canvas: shot (Joe's screenshot, "
+                    "default), canon (chronicle.md's conversion) or x,y")
+    bk.add_argument("--fonts", default="standin", choices=("standin", "game", "repo"),
+                    help="standin: the design renders' faces at their sizes (default); game: the same faces sized "
+                         "to the widths the game measured (the probe); repo: EB Garamond for every face (tests)")
     args = ap.parse_args()
+    if args.book:
+        return book_main(ap, args)
+    if not args.char:
+        ap.error("--char is required")
     if not args.wtf:
         ap.error("--wtf or WARPATH_WTF is required")
 
@@ -464,6 +484,53 @@ def main():
         out.paste(p, (x, 0))
         x += p.width + 8
     out.save(args.out)
+    print(f"wrote {args.out}")
+
+
+def book_main(ap, args):
+    import book_render as B
+    saved = account = None
+    name = "Tester"
+    at = float(args.at) if args.at else None
+    if args.char:
+        if not args.wtf:
+            ap.error("--wtf or WARPATH_WTF is required with --char")
+        wtf = Path(args.wtf)
+        saved = next(wtf.glob(f"*/{args.char}/SavedVariables/Warpath.lua"), None)
+        if not saved:
+            ap.error(f"no Warpath SavedVariables for {args.char} under {wtf}")
+        account = wtf / "SavedVariables" / "Warpath.lua"
+        account = account if account.exists() else None
+        name = args.char.split("-")[0]
+        at = at or saved.stat().st_mtime
+    origin = args.origin
+    if "," in origin:
+        origin = tuple(float(v) for v in origin.split(","))
+    elif origin not in B.ORIGINS:
+        ap.error("--origin is shot, canon or x,y")
+    addon_dir = addon_from_ref(args.ref[0]) if args.ref and args.ref[0] != "work" else REPO
+    wow, typ = B.boot(saved, account, name, at, args.fonts, addon_dir)
+    already = B.open_book(wow, args.book, args.page, args.section, args.preview)
+    img, painter = B.render_book(wow, typ, origin)
+    what = args.book + (f" {args.section}" if args.section else "") + (f" p{args.page}" if args.page else "")
+    label = f"code: {what}  -  {args.char or 'fresh character'}  -  {args.ref[0] if args.ref else 'working copy'}"
+    if already == args.book:
+        label += "  -  opened by itself at login"
+    if args.onion:
+        out = B.onion(img, B.design_canvas(args.onion), args.scale, label + "   50/50 with   " + Path(args.onion).name)
+    elif args.beside:
+        out = B.beside(img, B.design_canvas(args.beside), args.scale, label, "design: " + Path(args.beside).name)
+    else:
+        out = B.scaled(img, args.scale)
+    out.save(args.out)
+    print(label)
+    print("fonts: " + "; ".join(sorted(typ.used)))
+    print("stand-ins for game art: " + ", ".join(sorted(painter.standins)))
+    errors = wow.H.errors
+    if errors:
+        print("Lua errors caught by the error handler:")
+        for i in range(1, len(errors) + 1):
+            print("  " + str(errors[i]))
     print(f"wrote {args.out}")
 
 
