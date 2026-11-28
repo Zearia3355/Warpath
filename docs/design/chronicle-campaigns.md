@@ -54,12 +54,12 @@ Tabs (five, 92 units each, `ledger/lbase.py` `TABS_A`), Campaigns raised: Campai
 | Date line: "WEDNESDAY, NOVEMBER 25 · A SKIRMISH" (two spaces either side of the dot) | Friz 12, letterspaced capitals (+1.2 px), faded | centred on CX, y 107 |
 | Date rules | 1 px, rubric at 55% | 40 px long, 12 px from the text each side, y 103 |
 | Title, two lines: "From Searing Gorge" / "to Dustwallow Marsh" (`Chronicler.Write().title`; one line when the title has one) | Morpheus small caps 31 (lower case 24), rubric, rubric shadow | centred on CX, y 150 and 185 |
-| Ornament | rules: 1 px rubric at 55% (y −1) and 30% (y +2), from 16 to 120 px either side of centre; diamonds: rubric, radius 5 at the centre, radius 2 at ±11 | centred on CX, y 167 (the last title line + 17 − 35) |
-| Prose | Friz 18, ink, 22 px leading, wrapped by hand to the column L0–LR (428 px), one string per line and per name | first baseline y 207 (ornament + 40) |
-| Drop cap | the prose's first letter, Morpheus, rubric, rubric shadow, sized so its ink is two leadings plus the body's cap height tall (55 px in the stand-ins: Palatino 80) | baseline on the third line (y 251), left edge x 81 |
+| Ornament | rules: 1 px rubric at 55% (y −1) and 30% (y +2), from 16 to 120 px either side of centre; diamonds: rubric, radius 5 at the centre, radius 2 at ±11 | centred on CX, y 202 (the last title line + 17) |
+| Prose | Friz 18, ink, 22 px leading, wrapped by hand to the column L0–LR (428 px), one string per line and per name | first baseline y 242 (ornament + 40) |
+| Drop cap | the prose's first letter, Morpheus, rubric, rubric shadow, sized so its ink is two leadings plus the body's cap height tall (55 px in the stand-ins: Palatino 80) | baseline on the third line (y 286), left edge x 81 |
 | Tuck | lines 1–2 start at the letter's stem + 5 (x 115 for "L"), line 3 clears its foot + 6 (x 136) | |
 | Names in the prose (N2) | Friz 18, N2 colour, black shadow; punctuation after a name is ink | in the line, hover: GameTooltip |
-| Route map | 372 × 180, the world map's art printed in sepia (below), a soft rounded mask | left x 110 (centred on CX), top y = max(478, the line after the prose + 2) |
+| Route map | 372 × 180, the world map's art printed in sepia (below), a soft rounded mask | left x 110 (centred on CX), top y = max(478, the line after the prose + 2): 486 for the reference campaign's eleven lines |
 
 The prose's words are measured with `GetStringWidth` and broken where the next word would pass the column's right edge less the line's indent (`type.py` `rich_wrap`).
 

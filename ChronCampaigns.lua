@@ -92,11 +92,13 @@ local function Filter(all, showQuiet)
 end
 Page.Filter = Filter
 
-local function Load(preview)
+-- keep: stay on the campaign that's open (a refresh, the quiet box);
+-- otherwise open on the newest.
+local function Load(preview, keep)
     local all = preview and { Campaign.Sample() } or Campaign.List()
     if #all == 0 then all = { db.campaign } end
     view.all = all
-    local keep = view.list and view.list[view.page]
+    keep = keep and view.list and view.list[view.page]
     local quietN = 0
     for i = 2, #all do if Quiet(all[i]) then quietN = quietN + 1 end end
     view.quietN = quietN
@@ -190,7 +192,7 @@ local function BuildFooter(L)
         if view.preview or not cfg then return end
         cfg.chronQuiet = not cfg.chronQuiet or nil
         UISound(cfg.chronQuiet and "IG_MAINMENU_OPTION_CHECKBOX_ON" or "IG_MAINMENU_OPTION_CHECKBOX_OFF", 856)
-        Load(false)
+        Load(false, true)
         P.folded, P.sheet.scroll = {}, 0
         Chron.Render()
     end)
@@ -677,7 +679,10 @@ local function Row(i)
             local it = self.item
             if not it or view.preview then return end
             local e = it.e
-            Book.FoeTooltip(self, { name = e.f and ns.DisplayName(e.f) or e.n and ns.DisplayName(e.n) or nil,
+            local key, slain, slew = e.f or e.n, 0, 0
+            for _, k in ipairs(P.camp.kl or {}) do if key and (k.f or k.n) == key then slain = slain + 1 end end
+            for _, d in ipairs(P.camp.dl or {}) do if key and (d.f or d.n) == key then slew = slew + 1 end end
+            Book.FoeTooltip(self, { slain = slain, slew = slew, name = e.f and ns.DisplayName(e.f) or e.n and ns.DisplayName(e.n) or nil,
                 text = e.n, key = e.f or e.n, class = e.c, level = e.lv, race = e.ra, guild = e.gu, shot = e.shot,
                 waypoint = e.z and e.x and true }, P.me)
         end)
@@ -878,11 +883,12 @@ end
 local function Render()
     local camp = view.list[view.page]
     if not camp then return end
-    P.me = Me()
+    P.me, P.camp = Me(), camp
     local w = ns.Chronicler.Write(camp, myName)
     P.written = w
     local top = LayHead(camp, w)
-    local after = LayChronicle(w, top)
+    local after, nLines = LayChronicle(w, top)
+    P.nLines = nLines
     LayMap(camp, math.max(G.map.top, after + 2))
     LayDeeds(camp)
     LayReckoning(camp)
@@ -895,7 +901,7 @@ Chron.pages.campaigns = {
     Render = Render,
     Open = function(preview) Load(preview) end,
     Reset = function() if P then P.folded = {} P.sheet.scroll = 0 end end,
-    Refresh = function() Load(false) end,
+    Refresh = function() Load(false, true) end,
 }
 
 function Page.Frames() return P end
