@@ -92,6 +92,13 @@ function LG.Comma(v, places)
     return int .. frac
 end
 
+-- One character off the end of a text, then an ellipsis.
+function LG.Shorten(s)
+    s = s:gsub("\226\128\166$", "")
+    s = s:gsub("[%z\1-\127\194-\244][\128-\191]*$", "")
+    return s .. "\226\128\166"
+end
+
 function LG.Name(key) return key and (ns.DisplayName(key) or key) or nil end
 
 ---------------------------------------------------------------------------

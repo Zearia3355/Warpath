@@ -255,7 +255,7 @@ local function LayRecords(ctx)
             local r = recs[spec[1]]
             if r then
                 local value, detail, start, shot = spec[5](r)
-                if ctx.account and r.char and detail then
+                if ctx.account and ctx.plural and r.char and detail then
                     detail = detail .. "  \194\183  " .. ((LG.Name(r.char) or r.char):match("^%S+"))
                 end
                 -- a campaign opens only from this character's own book
@@ -281,7 +281,12 @@ local function LayRecords(ctx)
             row:Set(e[1], e[2], g.x0, g.x1, y, e[2] == "none yet")
             d:SetShown(e[3] ~= nil)
             if e[3] then
-                Set(d, e[3])
+                -- a long detail is cut short with "..." at the value's right edge
+                local text = e[3]
+                while Book.Measure("gari", g.dpx, text) > g.x1 - g.dx and #text > 4 do
+                    text = LG.Shorten(text)
+                end
+                Set(d, text)
                 Put(d, g.dx, y + g.dy, "l")
             end
             hot.label, hot.def, hot.start, hot.shot = e[1], e[4], e[5], e[6]
