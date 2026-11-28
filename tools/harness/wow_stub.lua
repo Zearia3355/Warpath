@@ -329,6 +329,12 @@ end
 function Widget:RemoveMaskTexture(m)
     for i, x in ipairs(self.__masks or {}) do if x == m then table.remove(self.__masks, i) break end end
 end
+-- ScrollFrame: the child is drawn at the frame's top-left, moved up by the
+-- scroll, and clipped to the frame (book_render.py does both).
+function Widget:SetScrollChild(c) self.__scrollChild = c c.__scrollParent = self end
+function Widget:GetScrollChild() return self.__scrollChild end
+function Widget:SetVerticalScroll(v) self.__vscroll = v end
+function Widget:GetVerticalScroll() return self.__vscroll or 0 end
 function Widget:GetNumMaskTextures() return #(self.__masks or {}) end
 -- BackdropTemplate
 function Widget:SetBackdrop(t) self.__backdrop = t end
@@ -562,6 +568,10 @@ C_DeathInfo = {
 }
 C_Map.GetMapRectOnMap = function(child, parent)
     if child == parent then return 0, 1, 0, 1 end
+    if parent == 947 and not (H.rects and H.rects[child] and H.rects[child][947]) and H.worldRects[child] then
+        local r = H.worldRects[child]
+        return r[1], r[2], r[3], r[4]
+    end
     local r = H.rects and H.rects[child] and H.rects[child][parent]
     if r then return r[1], r[2], r[3], r[4] end
     -- Both maps were in a capture: the client said 0,0,0,0, i.e. no overlap.
@@ -577,6 +587,33 @@ C_Map.GetMapInfoAtPosition = function(id, x, y)
     if z then return C_Map.GetMapInfo(z) end
 end
 C_Map.GetMapChildrenInfo = function() return {} end
+-- Zones and continents on the world map (947), which the 2026-11-23 capture
+-- didn't cover. NOT captured: the four zones of Lethality's 25 November
+-- campaign are where the design render placed them by eye on Joe's world
+-- map screenshot (book/refine.py ROUTE, its canvas at 208-1792 x 61-1117 of
+-- world.png), each as a tiny rect round that point; the continents are
+-- fitted to those points through their zones' captured rects on 1414/1415.
+-- Re-capture in game for the real values (see the build report).
+H.worldRects = {
+    [1427] = { 0.7470, 0.7480, 0.5308, 0.5318 },   -- Searing Gorge (1392, 622)
+    [1443] = { 0.1636, 0.1646, 0.5743, 0.5753 },   -- Desolace (468, 668)
+    [1452] = { 0.2874, 0.2884, 0.2940, 0.2950 },   -- Winterspring (664, 372)
+    [1445] = { 0.2899, 0.2909, 0.6292, 0.6302 },   -- Dustwallow Marsh (668, 726)
+    [1414] = { -0.182, 0.644, 0.071, 0.897 },      -- Kalimdor, fitted
+    [1415] = { 0.338, 1.164, 0.027, 0.854 },       -- Eastern Kingdoms, fitted
+}
+-- The world map's art (probe: 12 tiles of 256 px, layer 1002 x 668). The
+-- client gives file ids; here, names the book renderer cuts from Joe's
+-- world map screenshot when it has one.
+C_Map.GetMapArtLayers = function(id)
+    return { { layerWidth = 1002, layerHeight = 668, tileWidth = 256, tileHeight = 256, minScale = 1, maxScale = 1 } }
+end
+C_Map.GetMapArtLayerTextures = function(id, layer)
+    local out = {}
+    for i = 1, 12 do out[i] = "worldmap:" .. id .. ":" .. i end
+    return out
+end
+GetCursorPosition = function() return 0, 0 end
 C_Map.GetMapGroupID = function() return nil end
 C_Map.SetUserWaypoint = function(p) H.waypoint = p end
 C_Map.ClearUserWaypoint = function() H.waypoint = nil end
@@ -622,9 +659,17 @@ Screenshot = function() H.shots = (H.shots or 0) + 1 end
 SOUNDKIT = setmetatable({}, { __index = function(_, k) return k end })
 geterrorhandler = function() return function(e) H.errors = H.errors or {} H.errors[#H.errors + 1] = e end end
 securecall = function(f, ...) return f(...) end
-RAID_CLASS_COLORS = setmetatable({}, { __index = function()
-    return { r = 1, g = 1, b = 1, colorStr = "ffffffff", GenerateHexColor = function() return "ffffffff" end }
-end })
+-- The game's class colours (the design renders' TRUE table uses the same),
+-- so names in class colour render as in game; any other token reads white.
+local function ClassCol(r, g, b)
+    local hex = ("ff%02x%02x%02x"):format(r * 255, g * 255, b * 255)
+    return { r = r, g = g, b = b, colorStr = hex, GenerateHexColor = function() return hex end }
+end
+RAID_CLASS_COLORS = setmetatable({
+    WARRIOR = ClassCol(0.78, 0.61, 0.43), ROGUE = ClassCol(1, 0.96, 0.41), MAGE = ClassCol(0.41, 0.8, 0.94),
+    DRUID = ClassCol(1, 0.49, 0.04), SHAMAN = ClassCol(0, 0.44, 0.87), PALADIN = ClassCol(0.96, 0.55, 0.73),
+    PRIEST = ClassCol(1, 1, 1), HUNTER = ClassCol(0.67, 0.83, 0.45), WARLOCK = ClassCol(0.58, 0.51, 0.79),
+}, { __index = function() return ClassCol(1, 1, 1) end })
 LOCALIZED_CLASS_NAMES_MALE = setmetatable({}, { __index = function(_, k) return k end })
 FACTION_HORDE, FACTION_ALLIANCE = "Horde", "Alliance"
 STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"

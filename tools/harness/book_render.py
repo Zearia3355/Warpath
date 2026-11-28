@@ -142,8 +142,8 @@ class Type:
         if w is None:
             if caps:
                 w = 0.0
-                for ch, sub in self.caps_parts(s):
-                    w += self.font(file, px * (SMALLCAPS_RATIO if sub else 1)).getlength(ch) + SMALLCAPS_TRACK * px
+                for i, (ch, sub) in enumerate(self.caps_parts(s)):
+                    w += self.font(file, px * (SMALLCAPS_RATIO if sub else 1)).getlength(ch) + (SMALLCAPS_TRACK * px if i else 0)
             else:
                 w = self.font(file, px).getlength(s)
             self._widths[key] = w
@@ -434,6 +434,14 @@ class Tree:
             self._rect[k] = r
             return r
         s = self.scale(o)
+        sp = o["__scrollParent"]
+        if sp is not None:               # a scroll child: at its frame's top-left, moved up by the scroll
+            pr = self.rect(sp)
+            if pr is None:
+                return None
+            v = (sp["__vscroll"] or 0) * s
+            self._rect[k] = (pr[0], pr[1] - v, pr[0] + (o["__w"] or 0) * s, pr[1] - v + (o["__h"] or 0) * s)
+            return self._rect[k]
         L = R = CX = T = B = CY = None
         for point, rel, relp, x, y in self.anchors(o):
             if rel is None:
@@ -607,12 +615,36 @@ def load_addon_texture(path):
     return None
 
 
+# The world map's art stands in from Joe's screenshot of it (the design
+# renders' source, in the main checkout's ignored design folder): its map
+# canvas is 208-1792 x 61-1117 of world.png, the client's layer 1002 x 668.
+WORLD_PNG = Path(os.environ.get("WARPATH_DESIGN", "C:/Users/Joe/Documents/Warpath/tools/out/design")) / "book" / "world.png"
+WORLD_CANVAS = (208, 61, 1792, 1117)
+_world = {}
+
+
+def world_tile(tex):
+    """Tile i (1-12, 4 a row, 256 layer px) of the world map, or None."""
+    if "im" not in _world:
+        _world["im"] = Image.open(WORLD_PNG).convert("RGBA") if WORLD_PNG.exists() else None
+    im = _world["im"]
+    if im is None:
+        return None
+    i = int(str(tex).rsplit(":", 1)[1]) - 1
+    c, r = i % 4, i // 4
+    k = (WORLD_CANVAS[2] - WORLD_CANVAS[0]) / 1002
+    box = (WORLD_CANVAS[0] + c * 256 * k, WORLD_CANVAS[1] + r * 256 * k,
+           WORLD_CANVAS[0] + (c + 1) * 256 * k, WORLD_CANVAS[1] + (r + 1) * 256 * k)
+    return im.crop(tuple(int(round(v)) for v in box)).resize((256, 256), Image.LANCZOS)
+
+
 # ---------------------------------------------------------------------------- painting
 class Painter:
     def __init__(self, tree, origin, ss=2):
         self.tree, self.ox, self.oy, self.ss = tree, origin[0], origin[1], ss
         self.im = Image.new("RGBA", (CANVAS[0] * ss, CANVAS[1] * ss), BACKGROUND + (255,))
         self.records = []
+        self.clip = None
         self.standins = {}
         self._files = {}
 
@@ -639,6 +671,11 @@ class Painter:
         r, b = min(W, x + tile.width), min(H, y + tile.height)
         if r <= l or b <= t:
             return
+        if self.clip:                    # inside a scroll frame: only what its window shows
+            cl, ct, cr, cb = (int(round(v)) for v in self.clip)
+            l, t, r, b = max(l, cl), max(t, ct), min(r, cr), min(b, cb)
+            if r <= l or b <= t:
+                return
         tile = tile.crop((l - x, t - y, r - x, b - y))
         if blend == "ADD":
             base = self.im.crop((l, t, r, b))
@@ -690,6 +727,11 @@ class Painter:
             self.standins[name] = True
             return im
         src = None
+        if isinstance(tex, str) and tex.startswith("worldmap:"):
+            if tex not in self._files:
+                self._files[tex] = world_tile(tex)
+            self.standins["world map art: " + ("cut from Joe's world map screenshot" if self._files[tex] is not None
+                                               else "missing (no world.png)")] = True
         if isinstance(tex, str):
             if tex not in self._files:
                 self._files[tex] = load_addon_texture(tex)
@@ -732,6 +774,10 @@ class Painter:
 
     def shade(self, o, tile):
         """Vertex colour, gradient, desaturation, alpha and masks."""
+        if o["__desat"]:                 # the client greys the texture, then tints it with the vertex colour
+            a = tile.getchannel("A")
+            tile = tile.convert("L").convert("RGBA")
+            tile.putalpha(a)
         v = o["__vertex"]
         if v is not None:
             tile = ImageChops.multiply(tile, Image.new("RGBA", tile.size, tuple(
@@ -739,10 +785,6 @@ class Painter:
         g = o["__gradient"]
         if g is not None:
             tile = ImageChops.multiply(tile, gradient(g[1], g[2], g[3], tile.size))
-        if o["__desat"]:
-            a = tile.getchannel("A")
-            tile = tile.convert("L").convert("RGBA")
-            tile.putalpha(a)
         a = self.tree.alpha(o)
         if a < 0.999:
             tile.putalpha(tile.getchannel("A").point(lambda x, a=a: int(x * a)))
@@ -836,10 +878,11 @@ class Painter:
             f = typ.font(file, px)
             d.text((x, y), t, font=f, fill=fill, anchor="ls", **kw)
             return x + f.getlength(t)
-        for ch, sub in typ.caps_parts(t):
+        for i, (ch, sub) in enumerate(typ.caps_parts(t)):
             f = typ.font(file, px * (SMALLCAPS_RATIO if sub else 1))
+            x += SMALLCAPS_TRACK * px if i else 0
             d.text((x, y), ch, font=f, fill=fill, anchor="ls", **kw)
-            x += f.getlength(ch) + SMALLCAPS_TRACK * px
+            x += f.getlength(ch)
         return x
 
     # -- frames: what the client's templates and backdrops draw
@@ -956,8 +999,20 @@ class Painter:
         self.record("furniture", f, (x0, y0, x1, y1), what="backdrop")
 
     # -- everything
+    def clip_of(self, f):
+        """The window of the scroll frame f sits in, in px, or None."""
+        w = f
+        while w is not None:
+            sp = w["__scrollParent"]
+            if sp is not None:
+                r = self.tree.rect(sp)
+                return self.px_box(r) if r else None
+            w = w["__parent"]
+        return None
+
     def paint(self):
         for f, regs in self.tree.walk():
+            self.clip = self.clip_of(f)
             self.furniture(f, "under")
             for reg in regs:
                 kind = reg["__kind"]
@@ -969,6 +1024,7 @@ class Painter:
                 elif kind == "FontString":
                     self.text(reg)
             self.furniture(f, "over")
+        self.clip = None
         return self.im.convert("RGB").resize(CANVAS, Image.LANCZOS)
 
 
@@ -990,7 +1046,7 @@ def gradient(orient, lo, hi, size):
 
 
 # ---------------------------------------------------------------------------- driving the addon
-TABS = ("campaigns", "grudges", "settings", "warpath")
+TABS = ("campaigns", "grudges", "ledger", "settings", "warpath")
 
 
 def boot(saved=None, account=None, name="Tester", at=None, fonts="standin", addon_dir=REPO):
@@ -1026,6 +1082,46 @@ def open_book(wow, tab="campaigns", page=None, section=None, preview=False):
         elif tab == "grudges":
             wow.run(f"local r = WarpathChronicle.gr.rows[{int(page)}] if r and r:IsShown() then r:GetScript('OnClick')(r) end")
     return already
+
+
+# The design renders' right page lists a made-up 21-kill night (the design
+# folder's type/overflow.py LONG) under Lethality's real 25 November left
+# page. This puts that night into the 25 November campaign (found by its
+# start), so the right page can be set beside ov_V5a/ov_V5b. Times are that
+# evening's; 0:07 and after fall on the 26th.
+DESIGN_NIGHT = r"""
+local LONG = {
+  {1427,"17:35","Bluey","ROGUE",57,"first"},
+  {1443,"20:31","Balrog","MAGE",48,"first"},
+  {1452,"22:52","Pherk","DRUID",60,"first"},
+  {1452,"22:52","Felon","WARRIOR",55,"first",2},
+  {1452,"22:56","Felon","WARRIOR",55,"streak",nil,5},
+  {1452,"23:01","Aelric","MAGE",58}, {1452,"23:04","Thornn","SHAMAN",60},
+  {1452,"23:09","Mirelle","ROGUE",59}, {1452,"23:12","Brannoc","WARRIOR",60},
+  {1452,"23:15","Sylvae","DRUID",57}, {1452,"23:18","Kestrel","ROGUE",60,"avenged"},
+  {1452,"23:24","Ondrin","MAGE",56}, {1452,"23:26","Halvard","SHAMAN",60,"streak",nil,10},
+  {1452,"23:31","Lunara","DRUID",58}, {1452,"23:33","Pyke","ROGUE",55},
+  {1445,"23:59","Xylanthian","SHAMAN",49,"first"},
+  {1445,"0:07","Dorrin","WARRIOR",50}, {1445,"0:11","Elspeth","MAGE",52},
+  {1445,"0:12","Tamsin","ROGUE",48,nil,2}, {1445,"0:20","Corwin","WARRIOR",51},
+  {1445,"0:26","Vela","DRUID",50},
+}
+for _, c in ipairs(WarpathDB.campaigns) do
+  if date("%d %m", c.start) == "25 11" then
+    local base = date("*t", c.start)
+    base.hour, base.min, base.sec = 0, 0, 0
+    local day = time(base)
+    c.kl = {}
+    for i, k in ipairs(LONG) do
+      local h, m = k[2]:match("(%d+):(%d+)")
+      local t = day + tonumber(h) * 3600 + tonumber(m) * 60 + i
+      if tonumber(h) < 12 then t = t + 86400 end
+      c.kl[i] = { z = k[1], t = t, n = k[3], f = k[3] .. "-Design", c = k[4], lv = k[5], tag = k[6], mk = k[7],
+        st = k[8] or i, shot = 10 + i, x = 0.5, y = 0.5 }
+    end
+    c.kills, c.best = 21, 10
+  end
+end"""
 
 
 def lua_str(s):

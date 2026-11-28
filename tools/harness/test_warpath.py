@@ -2791,14 +2791,19 @@ class BookRender(unittest.TestCase):
                 self.assertBox(plate["box"], (320.5, 23.6, 776.5, 100.4))
                 close = [r for r in self.renders[tab][1].records if r.get("what") == "close"][0]
                 self.assertBox(close["box"], (1040.5, 38.0, 1078.9, 76.4))
-        # the open tab stands taller: 32 units against 26
-        self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].edge")["box"], (63.7, 11.6, 202.9, 50.0))
-        self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[2].edge")["box"], (210.1, 18.8, 349.3, 50.0))
-        self.assertBox(self.of("warpath", "WarpathChronicle.tabs[4].edge")["box"], (894.1, 11.6, 1033.3, 50.0))
+        # five tabs of 92 units (ledger/lbase.py TABS_A), the open one taller:
+        # its top at 12 against 20, each with a 1 px dark edge round its rim
+        for i, x0, x1 in ((1, 65, 175), (2, 183, 293), (3, 301, 411), (4, 813, 923), (5, 931, 1041)):
+            with self.subTest(tab=i):
+                self.assertBox(self.of("warpath", f"WarpathChronicle.tabs[{i}].rim")["box"],
+                               (x0, 12 if i == 5 else 20, x1 + 1, 46))
+        self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].rim")["box"], (65, 12, 176, 46))
+        self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].edge")["box"], (64, 11, 177, 46))
 
     def test_headings_sit_where_the_code_puts_them(self):
         # right page: TOP 0,-30, Morpheus 15; baseline 0.88 of the line down
-        for tab, s in (("campaigns", "Deeds and Losses"), ("warpath", "What's New")):
+        # (Campaigns' heading is the 3.8.5 page's: CampaignsPage checks it)
+        for tab, s in (("warpath", "What's New"),):
             with self.subTest(heading=s):
                 r = self.text(tab, s)
                 self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 801.7, delta=0.5)
@@ -2871,6 +2876,27 @@ class BookRender(unittest.TestCase):
         self.assertEqual(P(321, 31), (255, 255, 255), "and drops the corner")
         self.assertNotEqual(P(380, 10), (255, 0, 255), "a hidden frame draws nothing")
 
+    def test_a_scroll_child_moves_with_the_scroll_and_is_clipped(self):
+        # 3.8.5: the Campaigns sheet scrolls a real child frame
+        wow, B = self.wow, self.B
+        wow.run("""
+            local f = CreateFrame("Frame", nil, WarpathChronicle)
+            f:SetFrameLevel(200) f:SetSize(400, 300) f:SetPoint("TOPLEFT", 100, -200)
+            local bg = f:CreateTexture(nil, "BACKGROUND") bg:SetAllPoints() bg:SetColorTexture(1, 1, 1, 1)
+            local sf = CreateFrame("ScrollFrame", nil, f) sf:SetSize(100, 50) sf:SetPoint("TOPLEFT", 50, -50)
+            local c = CreateFrame("Frame", nil, sf) c:SetSize(100, 200) sf:SetScrollChild(c)
+            local a = c:CreateTexture(nil, "ARTWORK") a:SetSize(100, 40) a:SetPoint("TOPLEFT", 0, 0) a:SetColorTexture(1, 0, 0, 1)
+            local b = c:CreateTexture(nil, "ARTWORK") b:SetSize(100, 40) b:SetPoint("TOPLEFT", 0, -60) b:SetColorTexture(0, 0, 1, 1)
+            local g = c:CreateTexture(nil, "ARTWORK") g:SetSize(100, 40) g:SetPoint("TOPLEFT", 0, -150) g:SetColorTexture(0, 1, 0, 1)
+            sf:SetVerticalScroll(55)
+            __H.testFrame = f""")
+        img, _ = B.render_book(wow, self.typ)
+        wow.run("__H.testFrame:Hide()")
+        P = lambda ux, uy: img.getpixel((round(20.5 + (100 + ux) * 1.2), round(40.4 + (200 + uy) * 1.2)))
+        self.assertGreater(P(100, 60)[2], 200, "the blue piece scrolled up into the window")
+        self.assertEqual(P(100, 20), (255, 255, 255), "the red piece scrolled out above it is clipped")
+        self.assertEqual(P(100, 160), (255, 255, 255), "the green piece below the window is clipped")
+
     def test_every_real_character_renders_every_tab(self):
         root = os.environ.get("WARPATH_WTF")
         if not root:
@@ -2888,6 +2914,314 @@ class BookRender(unittest.TestCase):
                     self.assertIsNone(wow.H.errors)
                     self.assertTrue(any(r["kind"] == "text" and r["top"] > 60 for r in painter.records))
             self.assertEqual(before, [hashlib.md5(p.read_bytes()).hexdigest() for p in files])
+
+
+# The reference campaign (Lethality's 25 November, as saved), for tests that
+# must run without real saved data.
+REF_CAMPAIGN = r"""
+local start = time({ year = 2026, month = 11, day = 25, hour = 14, min = 46 })
+local function K(z, hm, n, f, c, lv, tag, st, mk, shot)
+  local h, m = hm:match("(%d+):(%d+)")
+  local t = time({ year = 2026, month = 11, day = 25, hour = tonumber(h), min = tonumber(m) }) + st
+  return { z = z, t = t, n = n, f = f, c = c, lv = lv, tag = tag, st = st, mk = mk, shot = shot, x = 0.5, y = 0.5 }
+end
+__H.ref = { start = start, stop = start + 9 * 3600, played = 32160, cur = 0, kills = 6, deaths = 0, best = 6,
+  streak = 6, yards = 267500, sightings = 90, avenged = 0, grudges = 0,
+  zones = { [1427] = { k = 1, d = 0 }, [1443] = { k = 1, d = 0 }, [1452] = { k = 3, d = 0 }, [1445] = { k = 1, d = 0 } },
+  kl = {
+    K(1427, "17:35", "Bluey", "Bluey-Vitruvius", "ROGUE", 57, "first", 1, nil, 11),
+    K(1443, "20:31", "Balrog", "Balrog-Fury", "MAGE", 48, "first", 2, nil, 12),
+    K(1452, "22:52", "Pherk", "Pherk-Pawpads", "DRUID", 60, "first", 3, nil, 13),
+    K(1452, "22:52", "Felon", "Felon-Keller", "WARRIOR", 55, "first", 4, 2, 14),
+    K(1452, "22:56", "Felon", "Felon-Keller", "WARRIOR", 55, "streak", 5, nil, 15),
+    K(1445, "23:29", "Xylanthian", "Xylanthian-Warcaster", "SHAMAN", 49, "first", 6, nil, 16),
+  }, dl = {} }
+WarpathDB.campaigns = { __H.ref }
+WarpathDB.campaign = { start = time(), stop = time(), played = 0, cur = 0, kills = 0, deaths = 0, zones = {}, kl = {}, dl = {} }
+"""
+
+
+class CampaignsPage(unittest.TestCase):
+    """The Campaigns page (3.8.5, ChronCampaigns.lua) against its spec,
+    docs/design/chronicle-campaigns.md, whose geometry table is the page's
+    GEOMETRY. Laid out by the book renderer (book_render.py) with EB
+    Garamond for every face (--fonts repo), so the numbers don't depend on
+    the machine's fonts; centring and right edges are checked against the
+    widths the code itself measured."""
+
+    def setUp(self):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo")
+        self.wow.run(REF_CAMPAIGN)
+        self.wow.run("ns.Chronicle.Open(false, 'campaigns')")
+        self.P = "ns.ChronCampaigns.Frames()"
+        self.paint()
+
+    def paint(self):
+        self.img, self.painter = self.B.render_book(self.wow, self.typ)
+        self.recs = {}
+        for r in self.painter.records:
+            self.recs.setdefault(r["obj"]["__seq"], r)
+
+    def rec(self, lua):
+        seq = self.wow.eval(lua + ".__seq")
+        self.assertIn(seq, self.recs, f"{lua} not drawn")
+        return self.recs[seq]
+
+    def near(self, got, want, what, tol=1.2):
+        # within 1 unit (1.2 render px), as the spec asks
+        self.assertAlmostEqual(got, want, delta=tol, msg=f"{what}: {got:.2f} != {want}")
+
+    def G(self, path):
+        return self.wow.eval("ns.ChronCampaigns.GEOMETRY." + path)
+
+    # -- geometry -------------------------------------------------------------
+    def test_the_left_page_lands_where_the_spec_says(self):
+        P = self.P
+        cx = self.G("CX")
+        first = self.rec(f"{P}.date.letters[1]")
+        self.near(first["baseline"], self.G("date.y"), "date baseline")
+        width = self.wow.eval(f"{P}.date.width")
+        self.near(first["box"][0] + width / 2, cx, "date centred")
+        rule = self.rec(f"{P}.dateRules[1]")
+        self.near(rule["box"][1], self.G("date.y") + self.G("date.dy"), "date rule y")
+        self.near(rule["box"][2], cx - width / 2 - self.G("date.gap"), "date rule's end", 1.5)
+        for i, y in ((1, 150), (2, 185)):
+            r = self.rec(f"{P}.title[{i}].letters[1]")
+            self.near(r["baseline"], y, f"title line {i}")
+            self.near(r["box"][0] + self.wow.eval(f"{P}.title[{i}].width") / 2, cx, f"title line {i} centred")
+        cap = self.rec(f"{P}.cap")
+        self.near(cap["baseline"], 286, "drop cap on the third line")
+        self.near(cap["box"][0], self.G("cap.x"), "drop cap's left")
+        line1 = self.rec(f"{P}.lines[1]")
+        self.near(line1["baseline"], 242, "the prose's first line")
+        capw = self.wow.eval(f"{P}.cap:GetStringWidth()") * 1.2
+        self.near(line1["box"][0], 82 + 0.583 * capw + 5, "line 1 tucked to the L's stem")
+        third = [r for r in self.painter.records if r["kind"] == "text" and abs((r.get("baseline") or 0) - 286) < 0.5
+                 and 90 < r["box"][0] < 200]
+        self.near(min(r["box"][0] for r in third), 82 + capw + 6, "line 3 clears the foot")
+        self.near(self.wow.eval(f"{P}.mapRect[1]"), 110, "map left")
+        self.near(self.wow.eval(f"{P}.mapRect[2]"), max(478, 242 + 22 * self.wow.eval(f"{P}.nLines") + 2), "map top")
+        self.assertGreaterEqual(self.wow.eval(f"{P}.mapRect[2]"), 478)
+        masked = self.rec(f"{P}.mapPool.tex[1]")
+        self.assertIsNotNone(masked)
+        self.near(self.wow.eval(f"{P}.mapRect[3]") - self.wow.eval(f"{P}.mapRect[1]"), 372, "map width")
+        self.near(self.wow.eval(f"{P}.mapRect[4]") - self.wow.eval(f"{P}.mapRect[2]"), 180, "map height")
+
+    def test_the_right_page_lands_where_the_spec_says(self):
+        P = self.P
+        h = self.rec(f"{P}.head.letters[1]")
+        self.near(h["baseline"], 120, "Deeds and Losses")
+        self.near(h["box"][0] + self.wow.eval(f"{P}.head.width") / 2, 802, "heading centred")
+        paper = self.rec(f"{P}.sheet.paper")
+        for got, want, what in zip(paper["box"], (576, 142, 1026, 421), ("left", "top", "right", "bottom")):
+            self.near(got, want, "sheet " + what)
+        zone = self.rec(f"{P}.zones[1].name")
+        self.near(zone["baseline"], self.G("first"), "first zone line")
+        self.near(zone["box"][0], 598, "zone name x")
+        tally = self.rec(f"{P}.zones[1].tally")
+        self.near(tally["box"][2], 1005, "tally right edge")
+        t = self.rec(f"{P}.rows[1].time")
+        self.near(t["baseline"], 184, "first row")
+        self.near(t["box"][0], 616, "time x")
+        self.near(self.rec(f"{P}.rows[1].name")["box"][0], 658, "name x")
+        self.near(self.rec(f"{P}.rows[2].time")["baseline"], 237, "a zone's line and rows step 4 + 22 + 27")
+        tile = self.rec(f"{P}.rows[1].tile.parts[2]")
+        self.near(tile["box"][0], 586, "tile x")
+        self.near(tile["box"][1], 167, "tile top")
+        self.near(tile["box"][2] - tile["box"][0], 23, "tile rim, 22 px inclusive")
+        rh = self.rec(f"{P}.reckHead.letters[1]")
+        self.near(rh["baseline"], 448, "The Reckoning")
+        for i in range(1, 7):
+            lab = self.rec(f"{P}.reck[{i}].label")
+            self.near(lab["baseline"], 488 + 26 * (i - 1), f"reckoning row {i}")
+            self.near(lab["box"][0], 616, "reckoning label x")
+            self.near(self.rec(f"{P}.reck[{i}].value.twin")["box"][2], 987, "value right edge (bold copy)")
+        share = self.rec(f"{P}.share")
+        for got, want in zip(share["box"], (938, 95, 1023, 121)):
+            self.near(got, want, "Share")
+
+    def test_the_footer_lands_where_the_spec_says(self):
+        P = self.P
+        e = self.rec(f"{P}.earlier.label")
+        self.near(e["baseline"], 692, "Earlier")
+        self.near(e["box"][0], 106, "Earlier x")
+        self.near(self.rec(f"{P}.later.label")["box"][2], 990, "Later right edge")
+        fl = self.rec(f"{P}.folioL")
+        self.near(fl["baseline"], 694, "left folio")
+        self.near(fl["box"][0], 200, "left folio x")
+        fr = self.rec(f"{P}.folioR")
+        self.near((fr["box"][0] + fr["box"][2]) / 2, 801, "right folio centred")
+        self.near(self.rec(f"{P}.count")["box"][0], fl["box"][2] + 14, "count 14 px after the folio")
+
+    def test_the_geometry_table_is_the_specs(self):
+        # the spec's numbers, so a change to one has to be made in both
+        spec = (Path(__file__).resolve().parents[2] / "docs" / "design" / "chronicle-campaigns.md").read_text(encoding="utf-8")
+        for text in ("x 576–1025, y 142–420", "x 578–1023, y 146–416", "first zone line y 162",
+                     "y 488, 514, 540, 566, 592, 618", "372 × 180", "centred on CX, y 107", "y 120; ornament y 133", "centred on CX, y 202", "first baseline y 242"):
+            with self.subTest(text=text):
+                self.assertIn(text, spec)
+        self.assertEqual([self.G(f"sheet[{i}]") for i in range(1, 5)], [576, 142, 1025, 420])
+        self.assertEqual([self.G(f"win[{i}]") for i in range(1, 5)], [578, 146, 1023, 416])
+        self.assertEqual((self.G("first"), self.G("date.y"), self.G("head.y"), self.G("head.orn")), (162, 107, 120, 133))
+        self.assertEqual((self.G("map.w"), self.G("map.h"), self.G("reck.y"), self.G("reck.lh")), (372, 180, 488, 26))
+        self.assertEqual((self.G("row"), self.G("zone"), self.G("after"), self.G("folded")), (27, 22, 4, 26))
+
+    # -- words ----------------------------------------------------------------
+    def date_text(self):
+        w = self.wow
+        out = []
+        for i in range(1, 80):
+            if not w.eval(f"{self.P}.date.letters[{i}] ~= nil and {self.P}.date.letters[{i}]:IsShown()"):
+                break
+            out.append(w.eval(f"{self.P}.date.letters[{i}]:GetText()"))
+        return "".join(out)
+
+    def test_the_left_page_reads_as_the_design(self):
+        w = self.wow
+        self.assertEqual(w.eval(f"{self.P}.written.title[1]"), "From Searing Gorge")
+        self.assertEqual(w.eval(f"{self.P}.written.title[2]"), "to Dustwallow Marsh")
+        self.assertTrue(self.date_text().startswith("WEDNESDAY, NOVEMBER 25  ·  A SKIRMISH"), self.date_text())
+        self.assertEqual(w.eval(f"{self.P}.cap:GetText()"), "L")
+        self.assertEqual(w.eval(f"{self.P}.lines[1]:GetText()"), "ethality", "the cap's letter leaves the prose")
+        # names are their own strings, in N2 with a black shadow
+        found = w.eval(f"""(function() for _, fs in ipairs({self.P}.lines) do
+            if fs:IsShown() and fs:GetText() == "Bluey" then local r, g, b = fs:GetTextColor()
+            local x = fs:GetShadowOffset() return r .. "," .. g .. "," .. b .. "," .. x end end end)()""")
+        self.assertIsNotNone(found)
+        r, g, b, x = (float(v) for v in found.split(","))
+        self.assertGreater(x, 0, "a name has its shadow")
+        self.assertGreater(r, b, "a rogue's N2 is warm")
+
+    def test_tags_raise_only_the_rare_part(self):
+        rows = self.wow.eval(f"""(function() local out = {{}}
+            for _, g in ipairs({self.P}.groups) do for _, it in ipairs(g.items) do
+              out[#out + 1] = table.concat(it.plain, ", ") .. "|" .. table.concat(it.raised, ", ") end end
+            return table.concat(out, ";") end)()""").split(";")
+        self.assertEqual(rows, ["first blood|", "first blood|", "first blood|", "first blood|double kill",
+                                "|streak of 5", "first blood|"])
+        self.assertEqual(self.wow.eval(f"{self.P}.groups[3].honours"), 2)
+        self.assertTrue(self.wow.eval(f"{self.P}.rows[4].band.strips[1][1]:IsShown()"), "an honour row has its band")
+        self.assertFalse(self.wow.eval(f"{self.P}.rows[3].band.strips[1] ~= nil and {self.P}.rows[3].band.strips[1][1]:IsShown()"))
+        self.assertEqual(self.wow.eval(f"{self.P}.zones[3].tally:GetText()"), "3 slain")
+
+    def test_the_tooltip_names_the_foe_first_last(self):
+        w = self.wow
+        w.run("__H.tip = {} GameTooltip.AddLine = function(self, t) table.insert(__H.tip, t) end")
+        w.run(f"local r = {self.P}.rows[1] r:GetScript('OnEnter')(r)")
+        self.assertEqual(w.eval("__H.tip[1]"), "Bluey Vitruvius")
+        self.assertIn("Slain once this campaign", [w.eval(f"__H.tip[{i}]") for i in range(1, 6)])
+        w.run("__H.tip = {}")
+        w.run(f"local h = {self.P}.hovers[1] h:GetScript('OnEnter')(h)")
+        self.assertEqual(w.eval("__H.tip[1]"), "Bluey Vitruvius", "a name in the prose has the same tooltip")
+
+    # -- the sheet ------------------------------------------------------------
+    def test_the_sheet_scrolls_fades_and_keeps_its_size(self):
+        w, P = self.wow, self.P
+        S = f"{P}.sheet"
+        # six rows in four zones: 282 px of content in a 270 px window
+        self.assertEqual(w.eval(f"{S}.content"), 282)
+        self.assertEqual(w.eval(f"{S}:Range()"), 12)
+        self.assertTrue(w.eval(f"{S}.bar:IsShown()"), "the bar shows while the deeds overflow")
+        self.assertEqual(w.eval(f"{P}.zones[1]:GetAlpha()"), 1, "no fade at the top before scrolling")
+        w.run(f"{S}.frame:GetScript('OnMouseWheel')({S}.frame, -1)")
+        self.assertEqual(w.eval(f"{S}.scroll"), 12, "the wheel scrolls, never past the end")
+        self.assertLess(w.eval(f"{P}.zones[1]:GetAlpha()"), 1, "scrolled: the top fades")
+        self.assertEqual(w.eval(f"{P}.rows[6]:GetAlpha()"), 1, "at the end: nothing below to fade into")
+        self.paint()
+        paper = self.rec(f"{S}.paper")["box"]
+        self.assertAlmostEqual(paper[3] - paper[1], 279, delta=0.5, msg="the sheet never changes size")
+        # a short night: no bar, no fades, same sheet
+        w.run("for i = 2, 6 do __H.ref.kl[i] = nil end ns.Chron.Render()")
+        self.assertFalse(w.eval(f"{S}.bar:IsShown()"))
+        self.assertEqual(w.eval(f"{S}:Range()"), 0)
+        self.paint()
+        self.assertEqual(self.rec(f"{S}.paper")["box"], paper)
+
+    def test_a_folded_zone_hides_its_rows_and_closes_the_gap(self):
+        w, P = self.wow, self.P
+        before = w.eval(f"{P}.sheet.content")
+        w.run(f"local z = {P}.zones[3] z:GetScript('OnClick')(z)")
+        self.assertTrue(w.eval(f"{P}.folded[3]"))
+        self.assertEqual(w.eval(f"{P}.sheet.content"), before - (22 + 3 * 27 + 4) + 26)
+        self.assertFalse(w.eval(f"{P}.rows[4]:IsShown()"), "only three rows left to show")
+        self.paint()
+        self.near(self.rec(f"{P}.zones[4].name")["baseline"], 268 + 26, "the next zone moves up")
+        self.assertEqual(w.eval(f"{P}.zones[3].tally:GetText()"), "3 slain", "a folded zone keeps its tally")
+        self.assertTrue(w.eval(f"{P}.zones[3].dia[1].fill:IsShown()"), "and its honours")
+        w.run(f"local z = {P}.zones[3] z:GetScript('OnClick')(z)")
+        self.assertEqual(w.eval(f"{P}.sheet.content"), before)
+
+    # -- the quiet filter -----------------------------------------------------
+    def quiet_list(self):
+        # newest first: a patrol (newest), the reference, a clash, a patrol, a skirmish
+        self.wow.run("""
+            local function C(day, kills, deaths)
+              local s = time({ year = 2026, month = 11, day = day, hour = 10 })
+              local kl, dl = {}, {}
+              for i = 1, kills do kl[i] = { z = 1448, t = s + i * 60, n = "Foe" .. i, c = "MAGE" } end
+              for i = 1, deaths do dl[i] = { z = 1448, t = s + 900 + i * 60 } end
+              return { start = s, stop = s + 3600, played = 3600, cur = 0, kills = kills, deaths = deaths,
+                zones = { [1448] = { k = kills, d = deaths } }, kl = kl, dl = dl, sightings = 3 }
+            end
+            WarpathDB.campaigns = { C(26, 0, 0), __H.ref, C(24, 1, 0), C(23, 0, 0), C(22, 5, 2) }
+            ns.Chronicle.Open(false, "campaigns")""")
+
+    def test_quiet_campaigns_hide_by_default_and_the_box_shows_them(self):
+        w, P = self.wow, self.P
+        self.quiet_list()
+        self.assertEqual(w.eval("#ns.Chron.view.list"), 3, "the newest (quiet) stays, two quiet ones hide")
+        self.assertEqual(w.eval("ns.Chron.view.quietN"), 2)
+        self.assertEqual(w.eval(f"{P}.quiet.label:GetText()"), "show 2 quiet")
+        self.assertEqual(w.eval(f"{P}.count:GetText()"), "campaign 3 of 3")
+        w.run(f"local b = {P}.earlier b:GetScript('OnClick')(b)")
+        self.assertEqual(w.eval("ns.Chron.view.list[ns.Chron.view.page] == __H.ref"), True)
+        w.run(f"local b = {P}.earlier b:GetScript('OnClick')(b)")
+        self.assertEqual(w.eval("ns.Chron.view.list[ns.Chron.view.page].kills"), 5, "Earlier steps over the quiet ones")
+        self.assertFalse(w.eval(f"{P}.earlier:IsEnabled()"))
+        w.run(f"local q = {P}.quiet q:GetScript('OnClick')(q)")
+        self.assertTrue(w.eval("ns.cfg.chronQuiet"), "remembered for the account")
+        self.assertEqual(w.eval("#ns.Chron.view.list"), 5)
+        self.assertEqual(w.eval("ns.Chron.view.list[ns.Chron.view.page].kills"), 5, "the open campaign stays open")
+        self.assertTrue(w.eval(f"{P}.quiet.check:IsShown()"))
+        w.run("ns.Chronicle.Hide() ns.Chronicle.Open(false, 'campaigns')")
+        self.assertEqual(w.eval("#ns.Chron.view.list"), 5, "still shown on the next opening")
+
+    def test_preview_still_works(self):
+        w = self.wow
+        w.run("ns.Chronicle.Open(true, 'campaigns')")
+        self.assertIsNone(w.H.errors)
+        self.assertTrue(w.eval(f"not {self.P}.share:IsEnabled()"))
+        self.assertFalse(w.eval(f"{self.P}.quiet:IsShown()"))
+        self.assertIn("SAMPLE PAGES", self.date_text())
+
+
+class CampaignsRealData(unittest.TestCase):
+    """Every campaign of every real character opens, renders and turns
+    without a Lua error (WARPATH_WTF). Nothing is written."""
+
+    def test_every_campaign_of_every_character_opens(self):
+        root = os.environ.get("WARPATH_WTF")
+        if not root:
+            self.skipTest("set WARPATH_WTF to open real characters' campaigns")
+        import book_render as B
+        account = Path(root) / "SavedVariables" / "Warpath.lua"
+        for path in sorted(Path(root).glob("*/*/SavedVariables/Warpath.lua")):
+            with self.subTest(character=path.parents[1].name):
+                wow, typ = B.boot(path, account if account.exists() else None, path.parents[1].name.split("-")[0],
+                                  fonts="repo")
+                wow.run("ns.cfg.chronQuiet = true ns.Chronicle.Open(false, 'campaigns')")
+                n = wow.eval("#ns.Chron.view.list")
+                self.assertGreaterEqual(n, 1)
+                for i in range(n):
+                    wow.run("local P = ns.ChronCampaigns.Frames() for _, z in ipairs(P.zones) do "
+                            "if z:IsShown() then z:GetScript('OnClick')(z) z:GetScript('OnClick')(z) end end "
+                            "P.sheet:SetScroll(9999)")
+                    B.render_book(wow, typ)
+                    self.assertIsNone(wow.H.errors, f"campaign {i + 1}")
+                    wow.run("local b = ns.ChronCampaigns.Frames().earlier b:GetScript('OnClick')(b)")
+                self.assertEqual(wow.eval("ns.Chron.view.page"), n)
 
 
 class RealData(unittest.TestCase):
