@@ -195,6 +195,9 @@ function Widget:GetFontObject() return self.__fontObj end
 function Widget:GetPoint(i) local p = self.__points[i or 1] if p then return unpack(p) end end
 function Widget:IsMouseOver() return false end
 function Widget:IsEnabled() return not self.__disabled end
+-- the click area past (negative: beyond) each edge, as the client keeps it
+function Widget:SetHitRectInsets(l, r, t, b) self.__hit = { l or 0, r or 0, t or 0, b or 0 } end
+function Widget:GetHitRectInsets() local h = self.__hit or { 0, 0, 0, 0 } return h[1], h[2], h[3], h[4] end
 function Widget:Enable()
     self.__disabled = false
     if self.__scripts.OnEnable then self.__scripts.OnEnable(self) end
@@ -686,7 +689,10 @@ end
 SlashCmdList = {}
 hash_SlashCmdList = {}
 StaticPopupDialogs = {}
-StaticPopup_Show = function() end
+H.popups = {}
+StaticPopup_Show = function(which, a, b)   -- recorded, for tests that something asks first
+    H.popups[#H.popups + 1] = { which = which, text1 = a, text2 = b }
+end
 Settings = nil      -- the modern Settings panel isn't in this client
 MenuUtil = nil      -- let Warpath fall back to UIDropDownMenu
 UIDropDownMenu_Initialize = function() end
