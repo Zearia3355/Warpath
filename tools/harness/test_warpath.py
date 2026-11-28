@@ -3477,6 +3477,16 @@ class GrudgesPage(unittest.TestCase):
         self.assertNotIn("Thornhelm-Ironjaw", {r[3] for r in self.log() if r[0] == "e"})
         self.assertEqual(w.eval("StaticPopupDialogs.WARPATH_GRUDGE_FORGIVE.text"), "Forgive %s?\nTheir name is struck off.")
 
+    def test_the_chosen_grudge_stays_chosen_when_the_list_resorts(self):
+        w = self.wow
+        w.run("ns.ChronGrudges.Choose(3)")
+        self.assertEqual(w.eval("ns.Chron.view.grudges[ns.Chron.view.pick].full"), "Elowen-Starfall")
+        # Vexa is sighted: she moves to the top, and Elowen to fourth
+        w.run("WarpathGlobal.kos['Vexa-Thorne'].seen = { t = time(), z = 1424, x = 0.5, y = 0.5 } ns.Chronicle.Refresh()")
+        self.assertEqual(self.keys()[0], "Vexa-Thorne")
+        self.assertEqual(w.eval("ns.Chron.view.grudges[ns.Chron.view.pick].full"), "Elowen-Starfall")
+        self.assertEqual(w.eval("ns.Chron.view.pick"), 4)
+
     def test_wheel_steps_a_row_and_a_line(self):
         w, P = self.wow, self.P
         w.run(f"local f = {P}.lsheet.frame f:GetScript('OnMouseWheel')(f, -1)")
