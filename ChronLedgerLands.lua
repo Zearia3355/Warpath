@@ -98,8 +98,9 @@ end
 local function ArtTex(i, blend)
     local t = P.art[i]
     if not t then
+        -- print layers carry no mask: on Forever MOD ignores one and a masked
+        -- ADD draws nothing (Book.WorldPrint lays a soft edge back instead)
         t = P.map:CreateTexture(nil, "ARTWORK", nil, 1)
-        t:AddMaskTexture(P.mask)
         P.art[i] = t
     end
     t:SetBlendMode(blend)
@@ -139,44 +140,8 @@ local function LayArt(cont)
     local pw, ph = lw * k, lh * k
     local x0, y0 = m.cx - pw / 2, m.top
     Book.Box(P.mask, x0, y0, x0 + pw, y0 + ph, P.L)
-    local i = 0
-    local files = C_Map.GetMapArtLayerTextures and C_Map.GetMapArtLayerTextures(cont, 1)
-    local layers = C_Map.GetMapArtLayers and C_Map.GetMapArtLayers(cont)
-    local L1 = layers and layers[1]
-    if files and L1 then
-        local tw, th = L1.tileWidth or 256, L1.tileHeight or 256
-        local W, H = L1.layerWidth or 1002, L1.layerHeight or 668
-        local cols = math.ceil(W / tw)
-        local cx0, cx1, cy0, cy1 = crop[1] * W, crop[2] * W, crop[3] * H, crop[4] * H
-        local sx, sy = pw / (cx1 - cx0), ph / (cy1 - cy0)
-        for n, file in ipairs(files) do
-            local c, r = (n - 1) % cols, math.floor((n - 1) / cols)
-            local lx0, ly0 = math.max(cx0, c * tw), math.max(cy0, r * th)
-            local lx1, ly1 = math.min(cx1, (c + 1) * tw), math.min(cy1, (r + 1) * th)
-            if lx1 > lx0 and ly1 > ly0 then
-                for pass = 1, 2 do
-                    i = i + 1
-                    local t = ArtTex(i, pass == 1 and "MOD" or "ADD")
-                    t:SetTexture(file)
-                    t:SetTexCoord((lx0 - c * tw) / tw, (lx1 - c * tw) / tw, (ly0 - r * th) / th, (ly1 - r * th) / th)
-                    t:SetDesaturated(true)
-                    local v = pass == 1 and PRINT_MOD or PRINT_ADDART
-                    t:SetVertexColor(v[1], v[2], v[3], 1)
-                    Book.Box(t, x0 + (lx0 - cx0) * sx, y0 + (ly0 - cy0) * sy, x0 + (lx1 - cx0) * sx, y0 + (ly1 - cy0) * sy, P.L)
-                end
-            end
-        end
-        i = i + 1
-        local t = ArtTex(i, "ADD")
-        t:SetColorTexture(PRINT_ADD[1], PRINT_ADD[2], PRINT_ADD[3], 1)
-        Book.Box(t, x0, y0, x0 + pw, y0 + ph, P.L)
-        -- lightened toward the page: an ADD of 40% of its tone, where the
-        -- MOD layers took that much away
-        i = i + 1
-        t = ArtTex(i, "ADD")
-        t:SetColorTexture(PAGE[1] * 0.4, PAGE[2] * 0.4, PAGE[3] * 0.4, 1)
-        Book.Box(t, x0, y0, x0 + pw, y0 + ph, P.L)
-    end
+    local i = Book.WorldPrint(ArtTex, 1, { crop[1], crop[3], crop[2], crop[4] }, x0, y0, pw, ph, P.L,
+        { map = cont, frac = true, lighten = 0.4 }) - 1
     for n = i + 1, #P.art do P.art[n]:Hide() end
     return { x0, y0, pw, ph, crop }
 end
