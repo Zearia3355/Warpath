@@ -2876,6 +2876,27 @@ class BookRender(unittest.TestCase):
         self.assertEqual(P(321, 31), (255, 255, 255), "and drops the corner")
         self.assertNotEqual(P(380, 10), (255, 0, 255), "a hidden frame draws nothing")
 
+    def test_a_scroll_child_moves_with_the_scroll_and_is_clipped(self):
+        # 3.8.5: the Campaigns sheet scrolls a real child frame
+        wow, B = self.wow, self.B
+        wow.run("""
+            local f = CreateFrame("Frame", nil, WarpathChronicle)
+            f:SetFrameLevel(200) f:SetSize(400, 300) f:SetPoint("TOPLEFT", 100, -200)
+            local bg = f:CreateTexture(nil, "BACKGROUND") bg:SetAllPoints() bg:SetColorTexture(1, 1, 1, 1)
+            local sf = CreateFrame("ScrollFrame", nil, f) sf:SetSize(100, 50) sf:SetPoint("TOPLEFT", 50, -50)
+            local c = CreateFrame("Frame", nil, sf) c:SetSize(100, 200) sf:SetScrollChild(c)
+            local a = c:CreateTexture(nil, "ARTWORK") a:SetSize(100, 40) a:SetPoint("TOPLEFT", 0, 0) a:SetColorTexture(1, 0, 0, 1)
+            local b = c:CreateTexture(nil, "ARTWORK") b:SetSize(100, 40) b:SetPoint("TOPLEFT", 0, -60) b:SetColorTexture(0, 0, 1, 1)
+            local g = c:CreateTexture(nil, "ARTWORK") g:SetSize(100, 40) g:SetPoint("TOPLEFT", 0, -150) g:SetColorTexture(0, 1, 0, 1)
+            sf:SetVerticalScroll(55)
+            __H.testFrame = f""")
+        img, _ = B.render_book(wow, self.typ)
+        wow.run("__H.testFrame:Hide()")
+        P = lambda ux, uy: img.getpixel((round(20.5 + (100 + ux) * 1.2), round(40.4 + (200 + uy) * 1.2)))
+        self.assertGreater(P(100, 60)[2], 200, "the blue piece scrolled up into the window")
+        self.assertEqual(P(100, 20), (255, 255, 255), "the red piece scrolled out above it is clipped")
+        self.assertEqual(P(100, 160), (255, 255, 255), "the green piece below the window is clipped")
+
     def test_every_real_character_renders_every_tab(self):
         root = os.environ.get("WARPATH_WTF")
         if not root:
@@ -3063,6 +3084,7 @@ class CampaignsPage(unittest.TestCase):
         self.assertEqual(w.eval(f"{self.P}.written.title[2]"), "to Dustwallow Marsh")
         self.assertTrue(self.date_text().startswith("WEDNESDAY, NOVEMBER 25  ·  A SKIRMISH"), self.date_text())
         self.assertEqual(w.eval(f"{self.P}.cap:GetText()"), "L")
+        self.assertEqual(w.eval(f"{self.P}.lines[1]:GetText()"), "ethality", "the cap's letter leaves the prose")
         # names are their own strings, in N2 with a black shadow
         found = w.eval(f"""(function() for _, fs in ipairs({self.P}.lines) do
             if fs:IsShown() and fs:GetText() == "Bluey" then local r, g, b = fs:GetTextColor()
