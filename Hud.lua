@@ -82,7 +82,7 @@ end
 ---------------------------------------------------------------------------
 -- The grudge button on the war table: one click holds a grudge against
 -- your target (or the player last offered in chat). Right-click opens
--- the ledger.
+-- the chronicle's Grudges tab.
 ---------------------------------------------------------------------------
 
 local gbtn
@@ -133,9 +133,9 @@ function ns.CreateGrudgeButton(hud)
         if action == "add" then
             ns.Dispatch("grudge")
         elseif action == "held" then
-            Print(short .. " is already in your ledger. Right-click the skull to open it.")
+            Print("you already hold a grudge against " .. short .. ". Right-click the skull to see your grudges.")
         else
-            Print("target a player to hold a grudge against them. Right-click the skull to open your ledger.")
+            Print("target a player to hold a grudge against them. Right-click the skull to see your grudges.")
         end
         GrudgeButtonRefresh()
     end)
@@ -145,12 +145,12 @@ function ns.CreateGrudgeButton(hud)
         if action == "add" then
             GameTooltip:AddLine("Hold a grudge against " .. short, 1, 0.3, 0.2)
         elseif action == "held" then
-            GameTooltip:AddLine(short .. " is in your ledger", 1, 0.3, 0.2)
+            GameTooltip:AddLine("You hold a grudge against " .. short, 1, 0.3, 0.2)
         else
             GameTooltip:AddLine("Grudges", 1, 0.82, 0)
             GameTooltip:AddLine("Target a player, then click to hold a grudge.", 1, 1, 1)
         end
-        GameTooltip:AddLine("Right-click: open your ledger", 0.8, 0.8, 0.8)
+        GameTooltip:AddLine("Right-click: open your grudges", 0.8, 0.8, 0.8)
         GameTooltip:Show()
     end)
     gbtn:SetScript("OnLeave", GameTooltip_Hide)

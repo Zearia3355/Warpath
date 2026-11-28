@@ -2357,7 +2357,7 @@ class Flights(unittest.TestCase):
         self.wow = Wow().login()
         self.wow.run("__H.taxi = false; UnitOnTaxi = function() return __H.taxi end")
         self.wow.run("ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
-        self.wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.runs = true")
+        self.wow.run("for k in pairs(ns.cfg.layers) do ns.cfg.layers[k] = false end ns.cfg.layers.flights = true")
 
     def fly(self, pts, dy=0.0):
         w = self.wow
@@ -2784,8 +2784,27 @@ class RealData(unittest.TestCase):
                 self.assertEqual(before, after)
 
 
+    def test_the_layer_split_copies_the_real_settings(self):
+        # 3.8.5: the new layers start as the old ones were on this account
+        if not self.account.exists():
+            self.skipTest("no account-wide saved data")
+        path = self.chars[0]
+        wow = Wow(saved=path, saved_global=self.account, player={"name": path.parents[1].name.split("-")[0]})
+        old = {k: wow.eval(f"WarpathGlobal.cfg and WarpathGlobal.cfg.layers and WarpathGlobal.cfg.layers.{k}")
+               for k in ("runs", "shared", "flights", "guildMarks")}
+        wow.login(settle=5)
+        if old["flights"] is None and old["runs"] is not None:
+            self.assertIs(wow.eval("ns.cfg.layers.flights"), old["runs"])
+            self.assertIs(wow.eval("ns.cfg.layers.spirits"), old["runs"])
+        if old["guildMarks"] is None and old["shared"] is not None:
+            self.assertIs(wow.eval("ns.cfg.layers.guildMarks"), old["shared"])
+            self.assertIs(wow.eval("ns.cfg.layers.guildSights"), old["shared"])
+        self.assertIs(wow.eval("ns.cfg.layers.runs"), old["runs"] if old["runs"] is not None else True)
+        self.assertIs(wow.eval("ns.cfg.layers.shared"), old["shared"], "the old key must stay for older builds")
+
+
 class SpiritHealers(unittest.TestCase):
-    """Spirit healers on the map (3.9), on the corpse runs layer.
+    """Spirit healers on the map (3.8.4), a layer of their own (3.8.5).
 
     A built-in list of vanilla graveyards with the faction each serves,
     corrected by what the account's characters see: dying learns where you'll
@@ -2845,8 +2864,11 @@ class SpiritHealers(unittest.TestCase):
         self.wow.run("__H.dead = true")
         self.assertEqual(self.at(*self.DEATHKNELL)[0][3], 1)
 
-    def test_only_with_the_corpse_runs_layer_on(self):
+    def test_only_with_the_spirit_healers_layer_on(self):
+        # their own layer from 3.8.5 (on the corpse runs layer before)
         self.wow.run("ns.cfg.layers.runs = false")
+        self.assertGreater(len(self.drawn()), 0, "the corpse runs layer still hides them")
+        self.wow.run("ns.cfg.layers.runs = true; ns.cfg.layers.spirits = false")
         self.assertEqual(self.drawn(), [])
 
     def test_not_on_a_continent(self):
@@ -2882,6 +2904,306 @@ class SpiritHealers(unittest.TestCase):
         self.die(0.30, 0.20)
         self.wow.run('SlashCmdList.WARPATH("debug spirits")')
         self.assertTrue(any("spirit healers:" in l for l in self.wow.chat))
+
+
+class LayerSplit(unittest.TestCase):
+    """3.8.5: corpse runs, flights and spirit healers are three layers (one
+    before), and guildmates' marks two, under pins and sightings (one,
+    "shared", before). Each layer hides only its own marks."""
+
+    def setUp(self):
+        from render import COLLECT
+        self.COLLECT = COLLECT
+        wow = self.wow = Wow().login()
+        wow.run("__H.taxi = false; UnitOnTaxi = function() return __H.taxi end")
+        wow.run("ns.cfg.share = true; ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448; __H.worldMaps = true")
+        # a leg flown on two days, so it's drawn
+        Flights.fly(self, Flights.PATH)
+        Flights.next_day(self)
+        Flights.fly(self, list(reversed(Flights.PATH)), dy=0.02)
+        wow.run("""
+            local z, now = ns.db.maps[1448], time()
+            z.runs[#z.runs + 1] = { 0.30, 0.30, 0.60, 0.30, k = "g", t = now - 60, e = now - 10, ts = { 0, 50 } }
+            z.marks[#z.marks + 1] = { 0.20, 0.20, now - 60, "kill" }
+            ns.recentSight[#ns.recentSight + 1] = { mapID = 1448, x = 0.70, y = 0.70, t = now - 30 }
+            ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')
+            ns.OnComm('WARPATH', '1|S|1448|0.80|0.20', 'GUILD', 'Bob Smith')""")
+        wow.advance(3)
+
+    def drawn(self):
+        """What's on the map, by kind: run, leg, spirit, kill, sight,
+        gkill (a guildmate's pin) and gsight (a guildmate's sighting)."""
+        self.wow.eval("ns.Redraw()")
+        got = set()
+        for p in self.wow.run(self.COLLECT).split("\n"):
+            f = p.split("\t")
+            if f[0] != "L" or float(f[5]) <= 0.02:
+                continue
+            rgb = tuple(round(float(v), 2) for v in f[2:5])
+            if rgb in ((0.55, 0.9, 1.0), (0.35, 0.75, 1.0)):
+                got.add("run")
+            elif rgb in ((0.25, 0.45, 1.0), (0.08, 0.05, 0.1)):
+                got.add("leg")
+        if int(self.wow.eval("#ns.Spirits.drawn")) > 0:
+            got.add("spirit")
+        kinds = self.wow.eval("""(function() local t = {}
+            for _, f in ipairs(WarpathOverlay.__children) do
+                if f.kind and f.tex and f:IsShown() then
+                    local k = f.kind
+                    if k == "sight" and f.d.from then k = "gsight" end
+                    t[#t + 1] = k
+                end
+            end return table.concat(t, ",") end)()""")
+        names = {"skill": "gkill", "sdeath": "gkill"}
+        for k in filter(None, kinds.split(",")):
+            got.add(names.get(k, k))
+        return got
+
+    ALL = {"run", "leg", "spirit", "kill", "sight", "gkill", "gsight"}
+
+    def test_everything_draws_with_every_layer_on(self):
+        self.assertEqual(self.drawn(), self.ALL)
+
+    def test_each_layer_hides_only_its_own_marks(self):
+        for key, gone in (("runs", {"run"}), ("flights", {"leg"}), ("spirits", {"spirit"}),
+                          ("guildMarks", {"gkill"}), ("guildSights", {"gsight"}),
+                          ("marks", {"kill", "gkill"}), ("sightings", {"sight", "gsight"})):
+            with self.subTest(layer=key):
+                self.wow.run(f"ns.cfg.layers.{key} = false")
+                self.assertEqual(self.drawn(), self.ALL - gone)
+                self.wow.run(f"ns.cfg.layers.{key} = true")
+
+    def test_the_map_buttons_menu_lists_every_layer(self):
+        keys = self.wow.eval("""(function() local t = {}
+            for _, it in ipairs(ns.LayerItems()) do t[#t + 1] = it.key or "" end
+            return table.concat(t, ",") end)()""").split(",")
+        for key in ("runs", "flights", "spirits", "guildMarks", "guildSights", "guildHaze"):
+            self.assertIn(key, keys)
+        self.assertNotIn("shared", keys)
+        self.wow.run("""for _, it in ipairs(ns.LayerItems()) do
+            if it.key == "flights" then it.func() end end""")
+        self.assertFalse(self.wow.eval("ns.cfg.layers.flights"))
+        self.assertTrue(self.wow.eval("ns.cfg.layers.runs"))
+
+    def test_the_layer_command_knows_the_new_layers(self):
+        self.wow.run('SlashCmdList.WARPATH("layer spirits off")')
+        self.assertFalse(self.wow.eval("ns.cfg.layers.spirits"))
+        self.assertTrue(self.wow.eval("ns.cfg.layers.runs"))
+        self.wow.run('SlashCmdList.WARPATH("layer guild off")')
+        self.assertFalse(self.wow.eval("ns.cfg.layers.guildMarks"))
+        self.assertFalse(self.wow.eval("ns.cfg.layers.guildSights"))
+
+    # --- the upgrade ------------------------------------------------------
+
+    def booted(self, layers):
+        wow = Wow()
+        wow.run(f'WarpathGlobal = {{ installed = "3.8.4", seenVersion = "3.8.4", cfg = {{ mapReset = "3.8", layers = {layers} }} }}')
+        return wow.login()
+
+    def test_the_upgrade_copies_the_old_layers(self):
+        wow = self.booted("{ runs = false, shared = false, marks = true, sightings = true }")
+        for key in ("runs", "flights", "spirits", "guildMarks", "guildSights", "shared"):
+            with self.subTest(layer=key):
+                self.assertIs(wow.eval(f"ns.cfg.layers.{key}"), False)
+        self.assertTrue(wow.eval("ns.cfg.layers.marks"))
+        wow = self.booted("{ runs = true, shared = true }")
+        for key in ("flights", "spirits", "guildMarks", "guildSights"):
+            self.assertIs(wow.eval(f"ns.cfg.layers.{key}"), True)
+
+    def test_the_upgrade_runs_once(self):
+        wow = self.booted("{ runs = false, shared = false }")
+        wow.run("ns.cfg.layers.flights = true; ns.cfg.layers.guildSights = true")
+        wow.login()
+        self.assertTrue(wow.eval("ns.cfg.layers.flights"))
+        self.assertTrue(wow.eval("ns.cfg.layers.guildSights"))
+        self.assertFalse(wow.eval("ns.cfg.layers.spirits"))
+
+    def test_a_new_install_has_every_layer_on(self):
+        wow = Wow().login()
+        for key in ("runs", "flights", "spirits", "guildMarks", "guildSights"):
+            self.assertIs(wow.eval(f"ns.cfg.layers.{key}"), True)
+
+
+class SharingOff(unittest.TestCase):
+    """3.8.5 (Joe: "Hide, keep the data"): with guild sharing off, no
+    guildmates' pins, sightings or haze are drawn and their deaths don't count
+    toward dangerous ground. Their saved data is kept and comes back."""
+
+    def setUp(self):
+        wow = self.wow = Wow().login()
+        wow.run("ns.cfg.share = true; ns.cfg.shown = true; WorldMapFrame.__shown = true; __H.mapShown = 1448")
+        wow.run("ns.OnComm('WARPATH', '1|K|1448|0.25|0.75', 'GUILD', 'Bob Smith')")
+        wow.run("ns.OnComm('WARPATH', '1|D|1448|0.60|0.60', 'GUILD', 'Bob Smith')")
+        wow.advance(3)
+
+    def saved(self):
+        return self.wow.eval("""(function() local z, n = ns.db.maps[1448], 0
+            for _, cells in pairs(z.guildBattle or {}) do for _ in pairs(cells) do n = n + 1 end end
+            for _, cells in pairs(z.guildDeaths or {}) do for _ in pairs(cells) do n = n + 1 end end
+            return #(z.gmarks or {}) .. "/" .. n end)()""")
+
+    def guild_pins(self):
+        self.wow.eval("ns.Redraw()")
+        return int(self.wow.eval("""(function() local n = 0
+            for _, f in ipairs(WarpathOverlay.__children) do
+                if (f.kind == "skill" or f.kind == "sdeath") and f:IsShown() then n = n + 1 end
+            end return n end)()"""))
+
+    def haze(self):
+        return lua_count(self.wow, "ns.BattleField(ns.db.maps[1448])")
+
+    def guild_deaths(self):
+        return lua_count(self.wow, "select(2, ns.DeathField(ns.db.maps[1448]))")
+
+    def test_off_hides_guildmates_marks_and_keeps_them(self):
+        before = self.saved()
+        self.assertEqual(self.guild_pins(), 2)
+        self.assertGreater(self.haze(), 0)
+        self.assertGreater(self.guild_deaths(), 0)
+        self.wow.run('SlashCmdList.WARPATH("share off")')
+        self.assertEqual(self.guild_pins(), 0)
+        self.assertEqual(self.haze(), 0, "guildmates' haze still drawn")
+        self.assertEqual(self.guild_deaths(), 0, "guildmates' deaths still count toward dangerous ground")
+        self.assertEqual(self.saved(), before, "sharing off changed the saved guild data")
+        self.wow.run('SlashCmdList.WARPATH("share on")')
+        self.assertEqual(self.guild_pins(), 2)
+        self.assertGreater(self.haze(), 0)
+        self.assertGreater(self.guild_deaths(), 0)
+
+    def test_off_hides_guildmates_sightings(self):
+        self.wow.run("ns.cfg.share = false")
+        self.wow.run("table.insert(ns.shared, { kind = 'S', mapID = 1448, x = 0.8, y = 0.2, t = time(), from = 'Bob', expire = time() + 120 })")
+        self.wow.eval("ns.Redraw()")
+        self.assertEqual(int(self.wow.eval("""(function() local n = 0
+            for _, f in ipairs(WarpathOverlay.__children) do
+                if f.kind == "sight" and f:IsShown() then n = n + 1 end
+            end return n end)()""")), 0)
+
+    def test_ground_warnings_leave_out_guild_deaths_while_off(self):
+        def chat(share):
+            wow = Wow().login()
+            wow.advance(10)
+            wow.run(f"""
+                ns.cfg.share = {str(share).lower()}
+                local mapID, x, y = ns.PlayerPos()
+                local z = ns.db.maps[mapID]
+                for i = 1, 3 do
+                    z.marks[#z.marks + 1] = {{ x, y, time() - i * 600, "death", pvp = true }}
+                    ns.AddBattle(mapID, x, y, ns.C.BATTLE_W.death)
+                    ns.AddDeathHeat(mapID, x, y, 1)
+                    ns.AddHeat(ns.GuildLayer(mapID, "guildDeaths", "Bob Smith"), ns.Cell(x, y, ns.C.SW, ns.C.SH), 1)
+                end
+                ns.Ground.Forget()
+                ns.Ground.Check()""")
+            return " ".join(wow.chat)
+        self.assertIn("Guildmates have died here", chat(True))
+        said = chat(False)
+        self.assertTrue(any(w in said for w in ("Dangerous", "Careful")), said)
+        self.assertNotIn("Guildmates have died here", said)
+
+
+class SettingsGreying(unittest.TestCase):
+    """3.8.5: each "kept for" row greys with its layer; the guildmates' rows
+    grey with guild sharing (and with their own layer)."""
+
+    def opened(self):
+        wow = Wow().login()
+        wow.run("ns.cfg.share = true")
+        wow.run('SlashCmdList.WARPATH("setup")')
+        wow.run('ns.ShowSetup(nil, "map")')
+        return wow
+
+    def row_on(self, wow, path):
+        # every refresh function bound to that path, called through the live greying
+        return wow.eval(f"""(function()
+            ns.Settings.Refresh()
+            return ns.Settings.Enabled({lua_str(path)}) end)()""")
+
+    def test_kept_for_rows_grey_with_their_layer(self):
+        wow = self.opened()
+        for layer, path in (("recent", "trailMin"), ("runs", "runHours"), ("flights", "flightHours")):
+            with self.subTest(layer=layer):
+                self.assertTrue(self.row_on(wow, path))
+                wow.run(f"ns.cfg.layers.{layer} = false")
+                self.assertFalse(self.row_on(wow, path))
+                wow.run(f"ns.cfg.layers.{layer} = true")
+
+    def test_guildmates_rows_grey_with_sharing(self):
+        wow = self.opened()
+        for path in ("guildHaze", "layers.guildMarks", "layers.guildSights"):
+            with self.subTest(row=path):
+                self.assertTrue(self.row_on(wow, path))
+                wow.run("ns.cfg.share = false")
+                self.assertFalse(self.row_on(wow, path))
+                wow.run("ns.cfg.share = true")
+
+    def test_greyed_rows_are_disabled_on_the_page(self):
+        wow = self.opened()
+        wow.run("ns.cfg.share = false; ns.Settings.Refresh()")
+        self.assertFalse(wow.eval(f"""(function() {SettingsTab.FIND}
+            return Find("with guildmates' sightings"):IsEnabled() end)()"""))
+        wow.run("ns.cfg.share = true; ns.Settings.Refresh()")
+        self.assertTrue(wow.eval(f"""(function() {SettingsTab.FIND}
+            return Find("with guildmates' sightings"):IsEnabled() end)()"""))
+
+
+class KillCards(unittest.TestCase):
+    """3.8.5: the kill captions can be drawn into any frame at any scale, for
+    the Settings tab's preview, by the same code that draws them on
+    screenshots."""
+
+    KILL = "{ name = 'Thrall', class = 'SHAMAN', zone = 'Felwood', times = 3, streak = 2, when = 1700000000 }"
+
+    def shape(self, wow, frame):
+        # every region the card is made of, in order: kind, font, points, text, colour
+        return wow.eval(f"""(function()
+            local f, t = {frame}, {{}}
+            local function pt(r)
+                local out = {{}}
+                for _, p in ipairs(r.__points or {{}}) do
+                    local bits = {{}}
+                    for i, v in ipairs(p) do
+                        if type(v) == "table" then
+                            v = v == f and "card" or ((f.tag == v and "tag") or (f.name == v and "name")
+                                or (f.crest == v and "crest") or (f.text == v and "text") or "other")
+                        end
+                        bits[i] = tostring(v)
+                    end
+                    out[#out + 1] = table.concat(bits, " ")
+                end
+                return table.concat(out, ";")
+            end
+            for _, r in ipairs(f.__children or {{}}) do
+                local c = r.__color or r.__textColor or {{}}
+                t[#t + 1] = table.concat({{ r.__kind, tostring(r.__template or ""), pt(r), tostring(r.__text or ""),
+                    tostring(c[1]), tostring(c[2]), tostring(c[3]) }}, "|")
+            end
+            t[#t + 1] = tostring(f:GetWidth()) .. "x" .. tostring(f:GetHeight())
+            return table.concat(t, "\\n") end)()""")
+
+    def test_a_preview_is_built_by_the_screenshots_code(self):
+        for kind, name in (("Text", "WarpathKillCardText"), ("Strip", "WarpathKillCardStrip")):
+            with self.subTest(card=kind):
+                wow = Wow().login()
+                wow.run(f"__shot = ns.KillCard.{kind}({self.KILL})")
+                wow.run(f"__host = CreateFrame('Frame', nil, UIParent) __prev = ns.KillCard.{kind}({self.KILL}, __host, 0.6)")
+                self.assertEqual(wow.eval(f"__shot == {name}"), True, "the screenshot's frame changed")
+                self.assertEqual(wow.eval("__prev:GetParent() == __host"), True)
+                self.assertEqual(wow.eval("__prev ~= __shot"), True, "the preview took the screenshot's frame")
+                self.assertAlmostEqual(float(wow.eval("__prev:GetScale()")), 0.6)
+                self.assertEqual(self.shape(wow, "__prev"), self.shape(wow, "__shot"))
+                self.assertIn("Thrall", self.shape(wow, "__prev"))
+
+    def test_the_preview_is_reused_and_the_screenshot_path_unchanged(self):
+        wow = Wow().login()
+        wow.run(f"__host = CreateFrame('Frame', nil, UIParent) __a = ns.KillCard.Text({self.KILL}, __host, 1)")
+        wow.run(f"__b = ns.KillCard.Text({self.KILL}, __host, 0.5)")
+        self.assertTrue(wow.eval("__a == __b"))
+        self.assertIsNone(wow.eval("WarpathKillCardText"), "a preview built the screenshot's frame")
+        wow.run('SlashCmdList.WARPATH("shot test")')
+        wow.advance(2)
+        self.assertIsNotNone(wow.eval("WarpathKillCardText"))
+        self.assertEqual(wow.eval("WarpathKillCardText:GetParent() == UIParent"), True)
 
 
 def lua_str(s):

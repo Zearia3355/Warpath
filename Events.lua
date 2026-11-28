@@ -130,6 +130,18 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
             if cfg.shown == nil and db.shown ~= nil then cfg.shown = db.shown end
             cfg.layers = cfg.layers or {}
             cfg.layers.heat = nil -- 3.6: the lingering haze became the battle haze
+            -- 3.8.5: corpse runs, flights and spirit healers became three
+            -- layers, and guildmates' marks two (pins, sightings). Each new
+            -- key starts as its old one was; the old keys stay as they are,
+            -- for an older build to read. Settings only.
+            local okSplit, errSplit = pcall(function()
+                local L = cfg.layers
+                for new, old in pairs({ flights = "runs", spirits = "runs",
+                        guildMarks = "shared", guildSights = "shared" }) do
+                    if L[new] == nil and L[old] ~= nil then L[new] = L[old] and true or false end
+                end
+            end)
+            if not okSplit then Print("couldn't split the map layers for 3.8.5: " .. tostring(errSplit)) end
             for _, name in ipairs(C.LAYERS) do
                 if cfg.layers[name] == nil then cfg.layers[name] = true end
             end

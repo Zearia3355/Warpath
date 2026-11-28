@@ -1,6 +1,6 @@
 -- Warpath: Grudge
--- Your ledger of grudges, shared by all your characters (gdb.kos, keyed by
--- Name-Realm). A grudge only ever leaves the ledger when you forgive it:
+-- Your grudges, shared by all your characters (gdb.kos, keyed by
+-- Name-Realm). A grudge only ever leaves the list when you forgive it:
 -- killing one counts it as settled and nothing more.
 local ADDON, ns = ...
 local C, S = ns.C, ns.S
@@ -83,7 +83,7 @@ end
 function Grudge.Add(full, class, how)
     local key, r = Find(full)
     if r then
-        Print(Short(key) .. " is already in your ledger of grudges.")
+        Print("you already hold a grudge against " .. Short(key) .. ".")
         return r
     end
     if type(class) ~= "string" then class = type(Foes.known[full]) == "string" and Foes.known[full] or nil end
@@ -108,7 +108,7 @@ function Grudge.Forgive(full)
     end
     gdb.kos[key] = nil
     live[key] = nil
-    Print("you forgive " .. Short(key) .. ". Their name is struck from your ledger.")
+    Print("you forgive " .. Short(key) .. ". Their name is struck off.")
     Grudge.Changed()
 end
 

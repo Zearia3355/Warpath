@@ -20,12 +20,15 @@
 --                deepening after an hour and fading slowly over the trail
 --                length, plus a line for your last 15 minutes (full for 5, then fading).
 --     runs       corpse runs (dashed ice blue), fading along their length
---                over 24 hours, and the flight legs you keep flying, etched
---                into the map (3.8).
+--                over 24 hours.
+--     flights    the flight legs you keep flying, etched into the map (3.8).
+--   spirits    spirit healers, on their own zone's map (3.8.4).
 --
 --   marks      skulls where you died, blades where you scored honorable kills.
+--   guildpins  guildmates' kills and deaths (shown with marks).
 --   sightings  where you have seen hostile players.
---   guild      sightings, kills and deaths sent by guildmates who run Warpath.
+--   guildsightings  guildmates' sightings (shown with sightings).
+--   Guildmates' marks and haze show only while guild sharing is on (3.8.5).
 --
 -- Things the game does not let an addon know, and what Warpath does instead:
 --   * What killed you. A death counts as PvP if you saw a hostile player in
@@ -172,13 +175,19 @@ local C = {
         Alliance = { r = 0.25, g = 0.55, b = 1.00, deep = { 0.10, 0.22, 0.72 }, cry = "For the Alliance!", crest = "Interface\\TargetingFrame\\UI-PVP-Alliance", foe = "Horde" },
         Neutral  = { r = 1.00, g = 0.82, b = 0.00, deep = { 0.70, 0.50, 0.00 }, cry = "Victory!",          crest = "Interface\\TargetingFrame\\UI-PVP-FFA",      foe = "Neutral" },
     },
-    -- Saved layer keys. "recent" and "shared" are typed as "trail" and "guild".
-    LAYERS = { "battle", "roads", "recent", "runs", "marks", "sightings", "shared" },
+    -- Saved layer keys, and how they're typed (/warpath layer). 3.8.5: corpse
+    -- runs, flights and spirit healers became three layers (one, "runs",
+    -- before), and guildmates' marks two, under pins and sightings (one,
+    -- "shared", before; still saved, untouched, for older builds to read).
+    LAYERS = { "battle", "roads", "recent", "runs", "flights", "spirits", "marks", "guildMarks",
+        "sightings", "guildSights" },
     LAYER_NAMES = { battle = "battle", roads = "roads", recent = "trail", runs = "runs",
-        marks = "marks", sightings = "sightings", shared = "guild" },
-    LAYER_LABELS = { battle = "Battle haze", roads = "Roads",
-        recent = "Today's trail", runs = "Corpse runs and flights", marks = "Kill and death pins",
-        sightings = "Enemy sightings", shared = "Guildmates' kills and deaths" },
+        flights = "flights", spirits = "spirits", marks = "marks", guildMarks = "guildpins",
+        sightings = "sightings", guildSights = "guildsightings" },
+    LAYER_LABELS = { battle = "Battle haze", roads = "Roads", recent = "Today's trail",
+        runs = "Corpse runs", flights = "Flights", spirits = "Spirit healers",
+        marks = "Kill and death pins", guildMarks = "Guildmates' kills and deaths",
+        sightings = "Enemy sightings", guildSights = "Guildmates' sightings" },
     -- 3.8.3: "announce" replaces quiet mode and the big-text switch;
     -- sharing is on for new installs (Joe), existing accounts keep theirs.
     CFG_DEFAULTS = { sound = true, hudShown = true, announce = true, share = true, guildChat = true, shown = true,
@@ -597,16 +606,18 @@ end
 local function BattleField(z, guild)
     local town = z.town or {}
     local raw = Own(z.battle, town)
-    if guild ~= false and cfg.guildHaze then GuildPart(z.guildBattle, raw, town) end
+    if guild ~= false and cfg.guildHaze and cfg.share then GuildPart(z.guildBattle, raw, town) end
     return Spread(raw)
 end
 
 -- Your deaths, and guildmates' deaths (half weight, capped like the haze), spread.
+-- With guild sharing off, theirs don't count (3.8.5, Joe: "No, ignore them");
+-- z.guildDeaths is kept and counts again once sharing is back on.
 local function DeathField(z)
     local town = z.town or {}
     local mine = Spread(Own(z.deaths, town))
     local graw = {}
-    GuildPart(z.guildDeaths, graw, town)
+    if cfg.share then GuildPart(z.guildDeaths, graw, town) end
     for c, v in pairs(graw) do graw[c] = v / C.GUILD_TOP * C.GROUND_GUILD end
     return mine, Spread(graw)
 end

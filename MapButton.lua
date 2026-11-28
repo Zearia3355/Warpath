@@ -83,20 +83,27 @@ local function Menu(owner, title, items)
     return true
 end
 
-local function LayerMenu(owner)
+-- Guildmates' layers sit under the layer they belong to, as in Settings
+-- (3.8.5); they show only while guild sharing is on.
+local SUB = { guildMarks = "    with guildmates' kills and deaths", guildSights = "    with guildmates' sightings" }
+local function LayerItems()
     local items = {}
     for _, key in ipairs(C.LAYERS) do
-        items[#items + 1] = { text = C.LAYER_LABELS[key],
+        items[#items + 1] = { text = SUB[key] or C.LAYER_LABELS[key], key = key,
             checked = function() return cfg.layers[key] end,
             func = function() SetLayer(key, not cfg.layers[key]) end }
     end
     items[#items + 1] = { text = "Show all history (faded pins too)",
         checked = function() return S.showAll end,
         func = function() S.showAll = not S.showAll S.dirty = true ns.Redraw() end }
-    table.insert(items, 2, { text = "Guildmates' battle haze",
+    table.insert(items, 2, { text = "    with guildmates' fighting", key = "guildHaze",
         checked = function() return cfg.guildHaze end,
         func = function() cfg.guildHaze = not cfg.guildHaze S.dirty = true ns.Redraw() end })
-    if not Menu(owner, "Warpath layers", items) then Print("layers: /warpath layer <name> [on|off]") end
+    return items
+end
+
+local function LayerMenu(owner)
+    if not Menu(owner, "Warpath layers", LayerItems()) then Print("layers: /warpath layer <name> [on|off]") end
 end
 
 local function Place()
@@ -259,3 +266,4 @@ ns.ZoneStanding = ZoneStanding
 ns.MapButtonRefresh = Refresh
 ns.SetMapShown = SetShown
 ns.Menu = Menu
+ns.LayerItems = LayerItems -- for tests: the map button's layer menu

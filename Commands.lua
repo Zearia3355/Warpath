@@ -25,9 +25,12 @@ end
 
 local function State(v) return v and "|cff40ff40on|r" or "|cffff4030off|r" end
 
--- Typed layer names to saved keys.
+-- Typed layer names to saved keys. "guild" switches both guildmates' layers
+-- (one layer before 3.8.5).
 local LAYER_KEYS = { battle = "battle", heat = "battle", haze = "battle", roads = "roads", trail = "recent", recent = "recent", runs = "runs",
-    marks = "marks", sightings = "sightings", guild = "shared", shared = "shared" }
+    flights = "flights", spirits = "spirits", healers = "spirits",
+    marks = "marks", pins = "marks", sightings = "sightings", guildpins = "guildMarks", guildsightings = "guildSights",
+    guild = { "guildMarks", "guildSights" }, shared = { "guildMarks", "guildSights" } }
 
 ---------------------------------------------------------------------------
 -- Handlers
@@ -91,10 +94,15 @@ function H.layer(arg)
         Print("layers: " .. table.concat(names, ", ") .. ". Usage: /warpath layer <name> [on|off]")
         return
     end
-    local v = OnOff(val, cfg.layers[key])
+    local keys = type(key) == "table" and key or { key }
+    local v = OnOff(val, cfg.layers[keys[1]])
     if v == nil then Print("usage: /warpath layer " .. name .. " [on|off]") return end
-    cfg.layers[key] = v
-    Print(C.LAYER_LABELS[key] .. ": " .. (v and "shown." or "hidden."))
+    local labels = {}
+    for i, k in ipairs(keys) do
+        cfg.layers[k] = v
+        labels[i] = C.LAYER_LABELS[k]
+    end
+    Print(table.concat(labels, " and ") .. ": " .. (v and "shown." or "hidden."))
     Redraw()
 end
 
@@ -154,7 +162,7 @@ function H.grudge(arg)
     local full, class = TargetPlayer()
     if full then
         if Grudge.Get(full) then
-            Print(Grudge.Short(full) .. " is already in your ledger. /warpath grudge forgive to strike them out.")
+            Print("you already hold a grudge against " .. Grudge.Short(full) .. ". /warpath grudge forgive to strike them off.")
         else
             Grudge.Add(full, class)
         end
@@ -244,7 +252,8 @@ function H.share(arg)
     cfg.share = v
     Print(cfg.share
         and "sharing ON. Guild and party members running Warpath get your enemy sightings, kills and PvP deaths (with the enemy's name), and you get theirs. Your trail is never sent."
-        or "sharing off.")
+        or "sharing off. Guildmates' marks are hidden from your map, not deleted.")
+    if ns.Ground then ns.Ground.Forget() end
     if not cfg.share then
         for i = #shared, 1, -1 do shared[i] = nil end
         for i = #outQ, 1, -1 do outQ[i] = nil end
@@ -519,7 +528,7 @@ local LIST = {
     { "chronicle", "chronicle [chat]",              "your campaigns (window, or chat)",   "Stats", true, H.chronicle },
     { nil,         "chronicle share [guild|party|say|whisper <name>]", "share a campaign", "Stats" },
     { "map",       "map [on|off]",                  "show / hide everything Warpath draws", "Map", true, H.map },
-    { "layer",     "layer <name> [on|off]",         "battle, roads, trail, runs, marks, sightings, guild", "Map", false, H.layer },
+    { "layer",     "layer <name> [on|off]",         "battle, roads, trail, runs, flights, spirits, marks, sightings, guild", "Map", false, H.layer },
     { "replay",    "replay [hours]",                "replay your recent march (up to 24)", "Map", false, H.replay },
     { "waypoint",  "waypoint death|kill",           "waypoint to your last death or kill", "Map", false, H.waypoint },
     { "table",     "table [on|off]",                "the war table",                      "Map", false, H.table },
@@ -529,8 +538,8 @@ local LIST = {
     { "trail",     "trail <15m-24h>",               "how long today's trail stays (default 12h)", "Map", false, H.trail },
     { nil,         "trail clear",                   "clear today's trail and lingering areas", "Map" },
     { "grudge",    "grudge [name]",                 "hold a grudge (default: your target)", "Grudges", true, H.grudge },
-    { nil,         "grudge forgive [name]",         "strike a grudge from your ledger",   "Grudges" },
-    { "grudges",   "grudges [chat]",                "your ledger of grudges (book, or chat)", "Grudges", false, H.grudges },
+    { nil,         "grudge forgive [name]",         "forgive a grudge and strike the name off", "Grudges" },
+    { "grudges",   "grudges [chat]",                "your grudges (book, or chat)",       "Grudges", false, H.grudges },
     { "shot",      "shot [on|off]",                 "take kill screenshots",              "Kill screenshots", false, H.shot },
     { nil,         "shot all|notable",              "every kill, or notable kills only",  "Kill screenshots" },
     { nil,         "shot caption text|strip|none",  "the caption in the picture",         "Kill screenshots" },
