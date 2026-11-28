@@ -3600,6 +3600,10 @@ class WarpathPage(unittest.TestCase):
         self.B = B
         self.wow, self.typ = B.boot(name="Lethality", fonts="repo", faction=faction)
         w = self.wow
+        # the notes these tests were written on: releases up to 3.8.4, so the
+        # counts hold whatever releases come after (3.8.5 added its own)
+        w.run("""for i = #ns.NewIn.List, 1, -1 do
+            if ns.NewIn.Older("3.8.4", ns.NewIn.List[i][1]) then table.remove(ns.NewIn.List, i) end end""")
         # what News knows: installed before (or not), the book closed
         w.run("if WarpathChronicle then WarpathChronicle:Hide() end")
         w.run("ns.gdb.installed = " + ("nil" if state == "first" else '"3.7.0"'))
@@ -3815,18 +3819,18 @@ class WarpathPage(unittest.TestCase):
     def test_the_three_states_read_as_the_spec(self):
         w = self.boot("update")
         v = w.eval("ns.VERSION")
-        self.assertEqual(self.kicker(), f"VERSION {v}  ·  TWO NEW RELEASES")
+        self.assertEqual(self.kicker(), f"VERSION {v.upper()}  ·  TWO NEW RELEASES")
         self.assertEqual(w.eval(f"{self.P}.welcome"), "Warpath was just updated, from {3.8.2} to {" + v + "}. What "
                          "changed is on the facing page, marked new. On the world map it draws Lethality's war in these marks.")
         self.assertEqual(w.eval(f"{self.P}.figs[2]:GetText()"), v)
         self.assertTrue(w.eval(f"{self.P}.figs[1].twin ~= nil"), "figures are faux bold")
         w = self.boot("first")
-        self.assertEqual(self.kicker(), f"VERSION {v}  ·  A NEW CHRONICLE")
+        self.assertEqual(self.kicker(), f"VERSION {v.upper()}  ·  A NEW CHRONICLE")
         self.assertRegex(w.eval(f"{self.P}.welcome"),
                          r"^Here begins the chronicle of Lethality, opened on the [a-z-]+ of [A-Z][a-z]+\. ")
         self.assertFalse(w.eval(f"{self.P}.figs[1] ~= nil and {self.P}.figs[1]:IsShown()"))
         w = self.boot("settled")
-        self.assertEqual(self.kicker(), f"VERSION {v}")
+        self.assertEqual(self.kicker(), f"VERSION {v.upper()}")
         self.assertEqual(w.eval(f"{self.P}.welcome"), "This is the chronicle of Lethality, kept by Warpath. On the world "
                          "map it draws the war as it is fought, in these marks.")
         self.assertEqual(w.eval(f"{self.P}.cap:GetText()"), "T")
