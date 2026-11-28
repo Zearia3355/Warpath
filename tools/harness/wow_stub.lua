@@ -716,7 +716,7 @@ RAID_CLASS_COLORS = setmetatable({
     DRUID = ClassCol(1, 0.49, 0.04), SHAMAN = ClassCol(0, 0.44, 0.87), PALADIN = ClassCol(0.96, 0.55, 0.73),
     PRIEST = ClassCol(1, 1, 1), HUNTER = ClassCol(0.67, 0.83, 0.45), WARLOCK = ClassCol(0.58, 0.51, 0.79),
 }, { __index = function() return ClassCol(1, 1, 1) end })
-LOCALIZED_CLASS_NAMES_MALE = setmetatable({}, { __index = function(_, k) return k end })
+LOCALIZED_CLASS_NAMES_MALE = setmetatable({}, { __index = function(_, k) return type(k) == "string" and (k:sub(1, 1) .. k:sub(2):lower()) or k end }) -- the client: "Rogue"
 FACTION_HORDE, FACTION_ALLIANCE = "Horde", "Alliance"
 STANDARD_TEXT_FONT = "Fonts\\FRIZQT__.TTF"
 UISpecialFrames = {}

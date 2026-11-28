@@ -1091,7 +1091,7 @@ def open_book(wow, tab="campaigns", page=None, section=None, preview=False):
             for _ in range(page - 1):
                 wow.run("local b = WarpathChronicle.news.earlier if b:IsEnabled() then b:GetScript('OnClick')(b) end")
         elif tab == "grudges":
-            wow.run(f"local r = WarpathChronicle.gr.rows[{int(page)}] if r and r:IsShown() then r:GetScript('OnClick')(r) end")
+            wow.run(f"ns.ChronGrudges.Choose({int(page)}, true)")
     return already
 
 
@@ -1133,6 +1133,13 @@ for _, c in ipairs(WarpathDB.campaigns) do
     c.kills, c.best = 21, 10
   end
 end"""
+
+
+# The Grudges design renders' made-up busy list (grudges/gdata.py BUSY),
+# saved as real grudges (so Waypoint and Forgive work, unlike the preview).
+DESIGN_GRUDGES = r"""
+WarpathGlobal.kos = {}
+for _, it in ipairs(ns.ChronGrudges.Samples(time())) do WarpathGlobal.kos[it.full] = it.r end"""
 
 
 def lua_str(s):

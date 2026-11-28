@@ -431,6 +431,8 @@ def main():
                          "to the widths the game measured (the probe); repo: EB Garamond for every face (tests)")
     ap.add_argument("--night", choices=["design"], help="--book campaigns: give Lethality's 25 November campaign the "
                     "design renders' made-up 21-kill night (type/overflow.py LONG), to compare the right page")
+    ap.add_argument("--grudges", choices=["design", "none"], help="--book grudges: the design's made-up busy "
+                    "list (grudges/gdata.py BUSY, ns.ChronGrudges.Samples) or no grudges at all, in place of the saved ones")
     ap.add_argument("--run", help="--book: Lua to run after opening, before the render (fold a zone, scroll...)")
     args = ap.parse_args()
     if args.book:
@@ -515,6 +517,8 @@ def book_main(ap, args):
     wow, typ = B.boot(saved, account, name, at, args.fonts, addon_dir)
     if args.night == "design":
         wow.run(B.DESIGN_NIGHT)
+    if args.grudges:
+        wow.run(B.DESIGN_GRUDGES if args.grudges == "design" else "WarpathGlobal.kos = {}")
     already = B.open_book(wow, args.book, args.page, args.section, args.preview)
     if args.run:
         wow.run(args.run)

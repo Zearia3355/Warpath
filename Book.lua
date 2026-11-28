@@ -477,8 +477,12 @@ function Band:Strip(i)
     return s
 end
 
-function Band:Set(x0, x1, y0, y1, roundTop, roundBot)
+-- alpha (optional): the band's strength, 0-1, over the band's own (Ledger:
+-- Book.Band's colour and strength) and the default 160/255 (the Grudges
+-- spec's is 150/255).
+function Band:Set(x0, x1, y0, y1, roundTop, roundBot, alpha)
     local r, g, b = RGB(self.col or BAND_COL)
+    local strength = alpha or self.a or BAND_A
     local rows = {}
     local h = y1 - y0
     local t0, t1 = y0, y1
@@ -491,7 +495,7 @@ function Band:Set(x0, x1, y0, y1, roundTop, roundBot)
         local s = self:Strip(i)
         for k = 1, #BAND_U - 1 do
             local xa, xb = x0 + (x1 - x0) * BAND_U[k], x0 + (x1 - x0) * BAND_U[k + 1]
-            local a = (self.a or BAND_A) * row[3]
+            local a = strength * row[3]
             s[k]:SetGradient("HORIZONTAL", CreateColor(r, g, b, a * BAND_V[k]), CreateColor(r, g, b, a * BAND_V[k + 1]))
             Book.Box(s[k], xa, row[1], xb, row[2], self.rel, self.ox, self.oy)
             s[k]:Show()
