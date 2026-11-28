@@ -4553,6 +4553,375 @@ class ArtTextures(unittest.TestCase):
         self.assertLessEqual(sum(sizes.values()), self.TOTAL_BUDGET)
 
 
+# A small war for the Ledger's pages (3.8.5), enough that every spread
+# draws: kills and PvP deaths in two Eastern Kingdoms zones and Felwood,
+# deaths to the wilds, a campaign, a guildmate's pins and the roster.
+LEDGER_SEED = r"""
+local function T(d, h, m) return time({ year = 2026, month = 11, day = d, hour = h, min = m }) end
+local db = WarpathDB
+db.kills, db.deaths, db.bestStreak, db.yards = 5, 3, 3, 52800
+db.victims = { ["Bainekx-Execute"] = 2, ["Isitin-Mytruck"] = 1, ["Felon-Keller"] = 1 }
+WarpathGlobal.killers = { ["Plains-Stomper"] = 2 }
+db.maps = db.maps or {}
+db.maps[1423] = { kills = 3, pdeaths = 1, bestStreak = 3, yards = 30000, sight = { [1] = 40 }, marks = {
+    { 0.5, 0.5, T(24, 22, 10), "kill", f = "Bainekx-Execute", n = "Bainekx", c = "PALADIN", lv = 60, gu = "Absurdity", ra = "Human", streak = 1 },
+    { 0.5, 0.5, T(24, 22, 11), "kill", f = "Bainekx-Execute", n = "Bainekx", c = "PALADIN", lv = 60, gu = "Absurdity", ra = "Human", mk = 2, streak = 2 },
+    { 0.5, 0.5, T(24, 22, 40), "kill", f = "Felon-Keller", n = "Felon", c = "WARRIOR", lv = 55, gu = "Hedge Knight", ra = "Dwarf", streak = 3, shot = 4 },
+    { 0.5, 0.5, T(24, 23, 5), "death", pvp = true, kf = "Plains-Stomper", kn = "Plains", kc = "DRUID", lv = 60 },
+    { 0.5, 0.5, T(25, 19, 5), "death" },
+  }, gmarks = { { kind = "K", from = "Plains Stomper", t = T(25, 18, 0) }, { kind = "D", from = "Plains Stomper", t = T(25, 18, 30) } } }
+db.maps[1431] = { kills = 1, pdeaths = 1, bestStreak = 1, yards = 10000, marks = {
+    { 0.5, 0.5, T(26, 21, 0), "kill", f = "Isitin-Mytruck", n = "Isitin", c = "MAGE", lv = 28, ra = "High Order Skyborne" },
+    { 0.5, 0.5, T(26, 21, 30), "death", pvp = true },
+  } }
+db.maps[1448] = { kills = 1, pdeaths = 1, yards = 12800, marks = {
+    { 0.5, 0.5, T(20, 9, 0), "kill" },
+    { 0.5, 0.5, T(20, 9, 30), "death", pvp = true, kf = "Plains-Stomper", kn = "Plains", kc = "DRUID" },
+    { 0.5, 0.5, T(21, 19, 30), "death" },
+  } }
+db.campaigns = { { start = T(24, 21, 0), stop = T(25, 1, 0), kills = 3, deaths = 1, played = 14400, yards = 30000,
+    sightings = 40, zones = {}, kl = {}, dl = {} } }
+__H.roster = { { "Plains Stomper", "Guild Master", 60, "DRUID", "John", "secret officer words" },
+    { "Lethality", "Officer", 60, "ROGUE", "Joe" } }
+"""
+
+
+class LedgerPages(unittest.TestCase):
+    """The Ledger tab's seven spreads (3.8.5, ChronLedger*.lua) against
+    docs/design/chronicle-ledger.md: each spread's geometry as built (render
+    px, laid out by the book renderer with EB Garamond for every face), the
+    footer, navigation and the account toggle, empty states, and the
+    figures drawn against Ledger.Stats."""
+
+    def setUp(self):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo")
+        self.wow.run(LEDGER_SEED)
+        self.wow.run("ns.ChronLedger.state.page = 1 ns.ChronLedger.state.account = false "
+                     "ns.ChronLedger.state.cont = nil ns.ChronLedger.state.land = nil ns.ChronLedger.state.month = nil")
+        self.wow.run("ns.Chronicle.Open(false, 'ledger')")
+
+    def page(self, n):
+        self.wow.run(f"ns.ChronLedger.state.page = {n} ns.Chron.Render()")
+        self.paint()
+
+    def paint(self):
+        self.img, self.painter = self.B.render_book(self.wow, self.typ)
+        self.recs = {}
+        for r in self.painter.records:
+            self.recs.setdefault(r["obj"]["__seq"], r)
+
+    def rec(self, lua):
+        seq = self.wow.eval(lua + ".__seq")
+        self.assertIn(seq, self.recs, f"{lua} not drawn")
+        return self.recs[seq]
+
+    def near(self, got, want, what, tol=1.2):
+        self.assertAlmostEqual(got, want, delta=tol, msg=f"{what}: {got:.2f} != {want}")
+
+    def texts(self):
+        return [r["text"] for r in self.painter.records if r["kind"] == "text"]
+
+    # -- the footer, navigation, the toggle -------------------------------------
+    def test_the_footer_lands_where_the_spec_says(self):
+        self.page(2)
+        F = "ns.ChronLedger.Frames()"
+        prev = self.rec(f"{F}.prev.label")
+        self.near(prev["baseline"], 692, "left arrow's name")
+        self.near(prev["box"][0], 106, "left arrow's name x")
+        self.assertEqual(self.wow.eval(f"{F}.prev.label:GetText()"), "The Tally")
+        nxt = self.rec(f"{F}.next.label")
+        self.near(nxt["box"][2], 990, "right arrow's name right edge")
+        self.assertEqual(self.wow.eval(f"{F}.next.label:GetText()"), "The Classes")
+        count = self.rec(f"{F}.count")
+        self.near((count["box"][0] + count["box"][2]) / 2, 801, "page N of 7 centred")
+        self.near(count["baseline"], 694, "page N of 7")
+        self.assertEqual(self.wow.eval(f"{F}.count:GetText()"), "page 2 of 7")
+        for lua, want in ((f"{F}.me.frame", (250, 675, 368, 701)), (f"{F}.all.frame", (372, 675, 490, 701))):
+            for got, w in zip(self.rec(lua)["box"], want):
+                self.near(got, w, lua)
+        self.assertNotIn("Share", self.texts())
+
+    def test_turning_pages_and_the_ends(self):
+        F = "ns.ChronLedger.Frames()"
+        ev = self.wow.eval
+        self.assertFalse(ev(f"{F}.prev:IsShown()"), "page 1 has no left arrow")
+        for n in range(2, 8):
+            self.wow.run(f"{F}.next:GetScript('OnClick')({F}.next)")
+            self.assertEqual(ev("ns.ChronLedger.state.page"), n)
+        self.assertFalse(ev(f"{F}.next:IsShown()"), "page 7 has no right arrow")
+        self.wow.run(f"{F}.prev:GetScript('OnClick')({F}.prev)")
+        self.assertEqual(ev("ns.ChronLedger.state.page"), 6)
+        # closing and opening again keeps the spread (memory only)
+        self.wow.run("ns.Chronicle.Hide() ns.Chronicle.Open(false, 'ledger')")
+        self.assertEqual(ev("ns.ChronLedger.state.page"), 6)
+        self.assertIsNone(self.wow.H.errors)
+
+    def test_the_account_toggle_and_the_guild_spread(self):
+        F = "ns.ChronLedger.Frames()"
+        ev, run = self.wow.eval, self.wow.run
+        self.assertTrue(ev(f"{F}.me.frame:IsEnabled()"), "this character lit")
+        self.assertFalse(ev(f"{F}.all.frame:IsEnabled()"), "all characters off")
+        self.assertTrue(ev(f"{F}.all.catch:IsShown()"), "but it can be clicked")
+        run(f"{F}.all.catch:GetScript('OnClick')({F}.all.catch)")
+        self.assertTrue(ev("ns.ChronLedger.state.account"))
+        self.assertTrue(ev(f"{F}.all.frame:IsEnabled()"))
+        self.assertFalse(ev(f"{F}.me.frame:IsEnabled()"))
+        # one character on the new version: the line at the top of each page
+        self.assertTrue(ev(f"{F}.only[1]:IsShown()"))
+        self.assertIn("Only Lethality has opened the chronicle since", ev(f"{F}.only[1]:GetText()"))
+        # the Guild spread: "All characters" disabled and inert; the page is this character's
+        self.page(7)
+        self.assertFalse(ev(f"{F}.all.catch:IsShown()"), "no click on the Guild spread")
+        self.assertEqual(ev(f"{F}.all.how"), "dead")
+        self.assertTrue(ev(f"{F}.me.frame:IsEnabled()"))
+        self.assertFalse(ev(f"{F}.only[1]:IsShown()"))
+        self.assertIn("Plains Stomper", self.texts())
+        # back on another spread, the account view returns
+        run(f"{F}.prev:GetScript('OnClick')({F}.prev)")
+        self.assertEqual(ev(f"{F}.all.how"), "on")
+        self.assertIsNone(self.wow.H.errors)
+
+    # -- each spread's geometry ---------------------------------------------------
+    def test_spread_1_geometry(self):
+        self.page(1)
+        P = "ns.ChronLedger.TALLY.P"
+        self.near(self.rec(f"{P}.kicker.caps.letters[1]")["baseline"], 104, "kicker")
+        self.near(self.rec(f"{P}.head.letters[1]")["baseline"], 140, "The Tally")
+        third = (510 - 82) / 3
+        for i in range(1, 4):
+            g = self.rec(f"{P}.great[{i}]")
+            self.near(g["baseline"], 214, f"great figure {i}")
+            self.near((g["box"][0] + g["box"][2]) / 2, 82 + third * (i - 1) + third / 2, f"great figure {i} centred", 1.5)
+            self.near(self.rec(f"{P}.caps[{i}].letters[1]")["baseline"], 234, "caption")
+        for i in range(1, 12):
+            lab = self.rec(f"{P}.rows[{i}].label")
+            self.near(lab["baseline"], 266 + 21 * (i - 1), f"tally row {i}")
+            self.near(lab["box"][0], 106, "tally label x")
+        self.near(self.rec(f"{P}.rows[1].value.twin")["box"][2], 486, "tally value right edge")
+        self.near(self.rec(f"{P}.multiSub.caps.letters[1]")["baseline"], 503, "Multi-kills")
+        self.near(self.rec(f"{P}.multi[1].fig.fig")["baseline"], 533, "multi-kill figures")
+        self.near(self.rec(f"{P}.streakSub.caps.letters[1]")["baseline"], 589, "Streaks")
+        r = self.rec(f"{P}.recs[1].label")
+        self.near(r["baseline"], 162, "first record")
+        self.near(r["box"][0], 600, "record label x")
+        self.near(self.rec(f"{P}.details[1]")["box"][0], 612, "record detail x")
+        self.near(self.rec(f"{P}.details[1]")["baseline"], 179, "record detail y")
+        self.near(self.rec(f"{P}.recs[2].label")["baseline"], 206, "records 44 apart")
+
+    def test_spread_2_geometry(self):
+        self.wow.H.now = self.wow.eval("time({ year = 2026, month = 11, day = 27, hour = 12 })")
+        self.page(2)
+        P = "ns.ChronLedger.HOURS.P"
+        step = (510 - 82 - 80) / 6
+        for i in range(1, 8):
+            part = "fig" if self.wow.eval(f"{P}.dayFigs[{i}].fig:IsShown()") else "dash"
+            f = self.rec(f"{P}.dayFigs[{i}].{part}")
+            self.near(f["baseline"], 532, "weekday figure")
+            self.near((f["box"][0] + f["box"][2]) / 2, 122 + step * (i - 1), f"weekday {i} centred", 1.5)
+        self.near(self.rec(f"{P}.title.letters[1]")["baseline"], 162, "month title")
+        # November 2026 starts on a Sunday: the 16th is the first cell of the fourth row
+        cell = self.rec(f"{P}.cells[16].day")
+        self.near(cell["box"][0], 586 + 5, "Monday's cell")
+        self.near(cell["baseline"], 202 + 3 * 62 + 15, "the 16th's row")
+        k = self.rec(f"{P}.cells[24].k")
+        self.near(k["baseline"], 202 + 4 * 62 + 44, "kills:deaths baseline")
+        self.assertTrue(self.wow.eval(f"{P}.cells[24].under:IsShown()"), "the bloodiest day underlined")
+        self.assertIn("The bloodiest night: Tuesday, November 24, three slain", self.texts())
+
+    def test_spread_3_geometry(self):
+        self.page(3)
+        P = "ns.ChronLedger.CLASSES.P3"
+        for side, x0 in (("L", 82), ("R", 586)):
+            for i in range(1, 11):
+                tile = self.rec(f"{P}.{side}.rows[{i}].tile.parts[2]")
+                self.near(tile["box"][0], x0 + 2, "tile x")
+                self.near(tile["box"][1], 170 + 42 * (i - 1) - 23, f"tile {i} top")
+                self.near(self.rec(f"{P}.{side}.rows[{i}].name")["box"][0], x0 + 42, "class name x")
+        self.assertEqual(self.wow.eval(f"{P}.L.rows[1].name:GetText()"), "Paladins")
+        bar = self.rec(f"{P}.L.rows[1].bar.body")
+        self.near(bar["box"][0], 82 + 190, "bar start")
+        self.near(bar["box"][2], 82 + 190 + (510 - 272 - 40), "the longest bar's end")
+
+    def test_spread_4_geometry(self):
+        self.page(4)
+        P = "ns.ChronLedger.LANDS.P"
+        ev = self.wow.eval
+        self.assertEqual(ev("ns.ChronLedger.state.cont"), 1414, "opens on the continent you're on (Felwood)")
+        self.wow.run(f"{P}.contBtns[2].frame:GetScript('OnClick')()")
+        self.paint()
+        self.assertEqual(ev("ns.ChronLedger.state.cont"), 1415)
+        self.assertEqual(ev("ns.ChronLedger.state.land"), 1423, "the bloodiest land of the continent")
+        for i, x in ((1, 144), (2, 298)):
+            box = self.rec(f"{P}.contBtns[{i}].frame")["box"]
+            self.near(box[0], x, "continent button x")
+            self.near(box[1], 140, "continent button top")
+        row = self.rec(f"{P}.rows[1].name")
+        self.near(row["baseline"], 146, "first land")
+        self.near(row["box"][0], 590, "land name x")
+        self.near(self.rec(f"{P}.title.letters[1]")["baseline"], 340, "land heading")
+        self.near(self.rec(f"{P}.figs[1]")["baseline"], 404, "land figures")
+        self.near(self.rec(f"{P}.reck[1].label")["baseline"], 460, "land rows")
+        self.near(self.rec(f"{P}.reck[1].label")["box"][0], 610, "land row x")
+        self.near(self.rec(f"{P}.topLabel")["baseline"], 614, "slain most here")
+        self.assertEqual(ev(f"{P}.topName.name:GetText()"), "Bainekx Execute")
+        # the mark sits at the land's rect centre on the continent, inside the picture
+        pic = [ev(f"{P}.pic[{i}]") for i in range(1, 5)]
+        self.near(pic[1], 166, "picture top")
+        self.assertLessEqual(pic[3], 500 + 0.01)
+        self.assertLessEqual(pic[2], 428 + 0.01)
+        self.near(pic[0] + pic[2] / 2, 296, "picture centred")
+        x, y = ev(f"{P}.placed[1].x"), ev(f"{P}.placed[1].y")
+        self.assertTrue(pic[0] < x < pic[0] + pic[2] and pic[1] < y < pic[1] + pic[3])
+        # exactly the rect's centre, carried through the landmass crop
+        land = ev(f"{P}.placed[1].id")
+        l, r, t, b = (ev(f"select({i}, C_Map.GetMapRectOnMap({land}, 1415))") for i in (1, 2, 3, 4))
+        crop = [ev(f"ns.ChronLedger.LANDS.crop[1415][{i}]") for i in range(1, 5)]
+        self.near(x, pic[0] + ((l + r) / 2 - crop[0]) / (crop[1] - crop[0]) * pic[2], "mark x", 0.01)
+        self.near(y, pic[1] + ((t + b) / 2 - crop[2]) / (crop[3] - crop[2]) * pic[3], "mark y", 0.01)
+        self.wow.run(f"{P}.rows[2]:GetScript('OnClick')({P}.rows[2])")
+        self.assertEqual(ev("ns.ChronLedger.state.land"), 1431, "a row chooses its land")
+
+    def test_spread_5_geometry(self):
+        self.page(5)
+        P = "ns.ChronLedger.CLASSES.P5"
+        self.near(self.rec(f"{P}.slain.sub.caps.letters[1]")["baseline"], 162, "Slain most")
+        n = self.rec(f"{P}.slain.rows[1].name.name")
+        self.near(n["baseline"], 210, "first foe")
+        self.near(n["box"][0], 114, "foe name x")
+        self.assertEqual(self.wow.eval(f"{P}.slain.rows[1].name.name:GetText()"), "Bainekx Execute")
+        self.near(self.rec(f"{P}.slain.rows[1].guild")["box"][0], 290, "guild x")
+        self.near(self.rec(f"{P}.slain.rows[1].last")["box"][2], 466, "date right edge")
+        self.near(self.rec(f"{P}.slain.rows[1].count.fig.twin")["box"][2], 510, "count right edge")
+        self.near(self.rec(f"{P}.struck.sub.caps.letters[1]")["baseline"], 210 + 3 * 26 + 22, "Struck down")
+        self.near(self.rec(f"{P}.secs[1].caps.letters[1]")["baseline"], 164, "Their levels")
+        self.near(self.rec(f"{P}.secs[1].caps.letters[1]")["box"][0], 598, "section title x")
+        self.near(self.rec(f"{P}.bars[1].label")["baseline"], 190, "first level row")
+        self.assertEqual(self.wow.eval(f"{P}.bars[1].label:GetText()"), "60")
+        self.wow.run(f"{P}.secs[1]:GetScript('OnClick')({P}.secs[1])")
+        self.paint()
+        self.near(self.rec(f"{P}.secs[2].caps.letters[1]")["baseline"], 164 + 26, "folding moves the next section up")
+
+    def test_spread_6_and_7_geometry(self):
+        self.page(6)
+        P = "ns.ChronLedger.WILDS.P6"
+        self.near(self.rec(f"{P}.fig")["baseline"], 200, "the wilds' figure")
+        self.assertEqual(self.wow.eval(f"{P}.fig:GetText()"), "2")
+        self.near(self.rec(f"{P}.sub.caps.letters[1]")["baseline"], 262, "What killed")
+        self.near(self.rec(f"{P}.causeRows[1].quiet")["baseline"], 316, "the first cause")
+        self.assertEqual(self.wow.eval(f"{P}.causeRows[1].quiet:GetText()"), "Not recorded")
+        self.near(self.rec(f"{P}.landRows[1].name")["baseline"], 186, "first wilds land")
+        self.assertIn("The wilds take Lethality most often at seven in the evening.", self.texts())
+        self.page(7)
+        P = "ns.ChronLedger.WILDS.P7"
+        self.near(self.rec(f"{P}.kicker.caps.letters[1]")["baseline"], 156, "the guild's kicker")
+        n = self.rec(f"{P}.rows[1].name.name")
+        self.near(n["baseline"], 216, "first guildmate")
+        self.near(n["box"][0], 114, "guildmate x")
+        self.near(self.rec(f"{P}.rows[2].name.name")["baseline"], 262, "46 apart")
+        me = [i for i in (1, 2) if self.wow.eval(f"{P}.rows[{i}].frame.e.me")]
+        self.assertEqual(len(me), 1)
+        self.assertTrue(self.wow.eval(f"{P}.rows[{me[0]}].you:IsShown()"))
+        texts = " ".join(self.texts())
+        self.assertIn("Guild Master", texts)
+        self.assertIn("John", texts)
+        self.assertNotIn("secret officer words", texts, "never the officer note")
+        self.near(self.rec(f"{P}.landRows[1].name")["baseline"], 186, "first guild land")
+
+    def test_the_geometry_tables_are_the_specs(self):
+        spec = (Path(__file__).resolve().parents[2] / "docs" / "design" / "chronicle-ledger.md").read_text(encoding="utf-8")
+        for needle in ("at (74, 676) and (995, 676)", "top-left at (250, 675) and (372, 675)", "(296, 104)",
+                       "Centre (296, 296), radius 108", "Cells are 61.6 × 62 from y 202", "42 apart from y 170",
+                       "(576, 104)–(1025, 300)", "(576, 146)–(1025, 668)", "(72, 276)–(518, 668)",
+                       "(576, 146)–(1025, 452)", "(72, 172)–(518, 664)", "(576, 146)–(1025, 430)"):
+            self.assertIn(needle, spec)
+        ev = self.wow.eval
+        rect = lambda path: [ev(f"ns.ChronLedger.{path}[{i}]") for i in range(1, 5)]
+        self.assertEqual([ev(f"ns.ChronLedger.G.toggle.{k}") for k in ("x", "y", "w", "h")], [250, 675, 118, 26])
+        self.assertEqual([ev(f"ns.ChronLedger.HOURS.wheel.{k}") for k in ("cx", "cy", "r")], [296, 296, 108])
+        self.assertEqual(rect("LANDS.list.sheet"), [576, 104, 1025, 300])
+        self.assertEqual(rect("CLASSES.who.sheet"), [576, 146, 1025, 668])
+        self.assertEqual(rect("WILDS.wilds.sheet"), [72, 276, 518, 668])
+        self.assertEqual(rect("WILDS.where.sheet"), [576, 146, 1025, 452])
+        self.assertEqual(rect("WILDS.guild.sheet"), [72, 172, 518, 664])
+        self.assertEqual(rect("WILDS.glands.sheet"), [576, 146, 1025, 430])
+
+    # -- empty states -------------------------------------------------------------
+    def test_a_fresh_character_gets_every_spread(self):
+        wow, _ = self.B.boot(name="Dabank", fonts="repo")
+        wow.run("__H.player.guild = nil")
+        wow.run("ns.ChronLedger.state.page = 1 ns.ChronLedger.state.account = false ns.Chronicle.Open(false, 'ledger')")
+        texts = {}
+        for n in range(1, 8):
+            wow.run(f"ns.ChronLedger.state.page = {n} ns.Chron.Render()")
+            img, painter = self.B.render_book(wow, self.typ)
+            texts[n] = " | ".join(r["text"] for r in painter.records if r["kind"] == "text")
+        self.assertIsNone(wow.H.errors)
+        self.assertIn("No records yet. The first blood will be written here.", texts[1])
+        self.assertIn("none", texts[1])
+        self.assertIn("Dabank has drawn no blood yet.", texts[2])
+        self.assertIn("None yet.", texts[5])
+        self.assertIn("Dabank rides with no guild.", texts[7])
+        for n in range(1, 8):
+            self.assertIn(f"page {n} of 7", texts[n])
+
+    def test_figures_match_ledger_stats(self):
+        ev = self.wow.eval
+        self.page(1)
+        self.wow.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        P = "ns.ChronLedger.TALLY.P"
+        self.assertEqual([ev(f"{P}.great[{i}]:GetText()") for i in (1, 2, 3)],
+                         [str(ev(f"__L.tally.{k}")) for k in ("kills", "deaths", "best")])
+        self.assertEqual(ev(f"{P}.rows[1].value:GetText()"), "%.2f" % (ev("__L.tally.kills") / ev("__L.tally.deaths")))
+        self.assertEqual(ev(f"{P}.rows[4].value:GetText()"), str(ev("__L.tally.wilds")))
+        self.assertEqual(ev(f"{P}.multi[1].fig.fig:GetText()"), str(ev("__L.multi[2]")))
+
+    def test_every_spread_for_every_real_character(self):
+        root = os.environ.get("WARPATH_WTF")
+        if not root:
+            self.skipTest("set WARPATH_WTF to open real characters' Ledgers")
+        account = Path(root) / "SavedVariables" / "Warpath.lua"
+        for path in sorted(Path(root).glob("*/*/SavedVariables/Warpath.lua")):
+            files = [p for p in (path, account) if p.exists()]
+            before = [hashlib.md5(p.read_bytes()).hexdigest() for p in files]
+            wow, typ = self.B.boot(path, account if account.exists() else None, path.parents[1].name.split("-")[0],
+                                   path.stat().st_mtime, fonts="repo")
+            for acct in ("false", "true"):
+                wow.run(f"ns.ChronLedger.state.account = {acct} ns.Chronicle.Open(false, 'ledger')")
+                for n in range(1, 8):
+                    with self.subTest(character=path.parents[1].name, page=n, account=acct):
+                        wow.run(f"ns.ChronLedger.state.page = {n} ns.Chron.Render()")
+                        self.B.render_book(wow, typ)
+                        self.assertIsNone(wow.H.errors)
+            self.assertEqual(before, [hashlib.md5(p.read_bytes()).hexdigest() for p in files])
+
+    def test_lethalitys_figures_from_the_snapshot(self):
+        root = ledger_snapshot()
+        if not root:
+            self.skipTest("no Ledger snapshot")
+        wow, typ = self.B.boot(root / "91" / "Lethality-Starunner" / "SavedVariables" / "Warpath.lua",
+                               root / "SavedVariables" / "Warpath.lua", "Lethality", fonts="repo")
+        wow.run("ns.ChronLedger.state.page = 1 ns.ChronLedger.state.account = false ns.Chronicle.Open(false, 'ledger')")
+        ev = wow.eval
+        P = "ns.ChronLedger.TALLY.P"
+        self.assertEqual([ev(f"{P}.great[{i}]:GetText()") for i in (1, 2, 3)], ["28", "27", "6"])
+        want = ["1.04", "16", "none", "34", "1,402.6", "1,696", "22", "none yet", "none yet", "none yet", "none yet"]
+        got = [ev(f"{P}.rows[{i}].value:IsShown() and {P}.rows[{i}].value:GetText() or {P}.rows[{i}].quiet:GetText()")
+               for i in range(1, 12)]
+        self.assertEqual(got, want)
+        fig = lambda p: ev(f"{p}.fig.fig:IsShown() and {p}.fig.fig:GetText() or '-'")
+        self.assertEqual([fig(f"{P}.multi[{i}]") for i in range(1, 5)], ["2", "1", "-", "-"])
+        self.assertEqual([fig(f"{P}.streaks[{i}]") for i in range(1, 6)], ["4", "3", "-", "-", "-"])
+        self.assertEqual(ev(f"{P}.recs[2].value:GetText()"), "8 slain")
+        wow.run("ns.ChronLedger.state.page = 3 ns.Chron.Render()")
+        Q = "ns.ChronLedger.CLASSES.P3"
+        self.assertEqual(ev(f"{Q}.L.rows[1].name:GetText()"), "Unknown")
+        self.assertEqual(ev(f"{Q}.L.rows[1].num.fig:GetText()"), "8")
+        self.assertEqual(ev(f"{Q}.R.rows[1].num.fig:GetText()"), "17")
+        self.assertIsNone(wow.H.errors)
+
+
 def lua_str(s):
     s = str(s)
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
