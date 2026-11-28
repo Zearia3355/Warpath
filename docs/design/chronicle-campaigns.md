@@ -186,3 +186,12 @@ The probe found `SetFont` returning false for EB Garamond and `GetStringWidth` m
 7. The quiet filter's key, threshold (patrol and clash) and the newest-always rule.
 8. Class icons `ClassIcon_<CLASS>`; "?" for unknown.
 9. The Ledger tab's page, until its phase, says in the left page's centre "The Ledger is being written." in Garamond Italic, faded, and nothing else.
+10. The prose is one string per word piece, each placed at the measured width of the words before it plus a space's, as the generator sets it (merged strings drifted up to 4 px at line ends against the design).
+11. The map print's flat ADD term is the fit plus 5% of the page, matched to the design render through the harness (sea and land within 4 levels of the design).
+12. The sheet's shadow is cut out from under the sheet (the design pastes the paper over the unshadowed page; with the shadow under a 30% sheet the paper read grey).
+13. One origin for both pages, the book's top-left at (20.5, 40.4): the canon's right-page origin (548.1) is 0.4 px left of where the book's page frame actually starts (548.5 = 20.5 + 440 × 1.2); converting every position from the book's own origin removes the difference.
+14. Map labels by rule: on the reference campaign only Winterspring's lands elsewhere than the hand placement (right of its cross, 22 px lower than the design's up-right).
+
+## Built (phase 2, 2026-11-28)
+
+`ChronCampaigns.lua` builds this page on `Book.lua`'s kit; `GEOMETRY` is this file's numbers. Side-by-side renders and the list of remaining differences are in the build report.
