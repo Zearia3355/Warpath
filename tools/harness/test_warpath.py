@@ -3095,8 +3095,17 @@ class SharingOff(unittest.TestCase):
                 end
                 ns.Ground.Forget()
                 ns.Ground.Check()""")
+            self.last = wow
             return " ".join(wow.chat)
         self.assertIn("Guildmates have died here", chat(True))
+        # turned off with a warning just given: Ground's cached fields go too
+        wow = self.last
+        wow.run('SlashCmdList.WARPATH("share off")')
+        n = len(wow.chat)
+        wow.run("if WarpathBigText then WarpathBigText:Hide() end ns.Ground.Reset() ns.Ground.Check()")
+        again = " ".join(wow.chat[n:])
+        self.assertTrue(any(w in again for w in ("Dangerous", "Careful")), again)
+        self.assertNotIn("Guildmates have died here", again, "sharing off kept the cached guild deaths")
         said = chat(False)
         self.assertTrue(any(w in said for w in ("Dangerous", "Careful")), said)
         self.assertNotIn("Guildmates have died here", said)
