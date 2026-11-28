@@ -30,6 +30,13 @@ FRAME = (18, 40, 1074, 736)             # 1056 x 696
 ART = (18, 40, 1080, 744)               # 1062 x 704, anchored at the frame's top left
 # the book's own drop shadow (drawn on the scene behind it, shipped separately as a 9-slice)
 DROP = dict(offset=(6, 10), grow=(0, 4), radius=16, blur=12, colour=(8, 3, 1), alpha=0.8)
+# The foot of the page stack and the bottom corners (Joe, 2026-11-28, from
+# 3.8.5-test2 in game): the pages lie over the bottom corner pieces ("all 7"),
+# the stack fans 75% as far at the foot (more leather below it), and the stack
+# casts a soft shadow on the gold it covers (S1). The top corners stay over
+# the pages, as settled.
+FOOT_FAN = 0.75
+STACK_SHADOW = dict(blur=2.5, dx=1.5, dy=2.5, alpha=0.6, colour=(40, 18, 4))
 
 
 def sc(box): return tuple(int(v * S) for v in box)
@@ -251,7 +258,7 @@ def deckle(size, box, seed, rough=5, jag=1.6):
 
 
 # ------------------------------------------------------------------ the page block
-def build_leaves(img, base, seed):
+def build_leaves(img, base, seed, union=None):
     big = img.size
     r = random.Random(seed)
     # the block under the top leaf, back to front: each leaf its own rippling outline, further out at
@@ -282,7 +289,7 @@ def build_leaves(img, base, seed):
             k = 0.75 + 0.45 * (y - y0) / (y1 - y0)
             pts.append((x1 + o * k + rrt(y), y))
         for x in range(int(x1), int(x0) - 1, -4):                  # foot
-            pts.append((x, y1 + o * fan(x) + rb(x)))
+            pts.append((x, y1 + (o * fan(x) + rb(x)) * FOOT_FAN))
         for y in range(int(y1), int(y0) - 1, -4):                  # fore-edge, left
             k = 0.75 + 0.45 * (y - y0) / (y1 - y0)
             pts.append((x0 - o * k - rl(y), y))
@@ -292,6 +299,8 @@ def build_leaves(img, base, seed):
         edge = ImageChops.subtract(mk, mk.filter(ImageFilter.MinFilter(3)))
         mk = ImageChops.subtract(mk, ImageChops.multiply(edge, ImageChops.invert(fray)))
         mk = mk.filter(ImageFilter.GaussianBlur(0.5 * S))
+        if union is not None:
+            union[0] = mk if union[0] is None else ImageChops.lighter(union[0], mk)
         shd = mk.filter(ImageFilter.GaussianBlur(1.8 * S)).point(lambda v: int(v * 0.72))
         img.paste(Image.new("RGB", big, (46, 20, 6)), (S, int(1.5 * S)), shd)
         tone = r.uniform(0.86, 0.97) * (1 - i * 0.035)
@@ -362,10 +371,28 @@ def build_book(background, shadow=True):
     lea = Image.composite(Image.new("RGB", (cw, ch), (12, 2, 0)), lea, bevel)
     big.paste(lea, (cx0, cy0), rrect_mask((cw, ch), (0, 0, cw - 1, ch - 1), 14 * S))
     pressed_rule(big, COVER, 8)
-    build_leaves(big, PAPER, SEED + 20)
-    for (x, y, sx, sy) in ((cx0, cy0, 1, 1), (cx1, cy0, -1, 1), (cx1, cy1, -1, -1), (cx0, cy1, 1, -1)):
+    # the bottom corners first: the page stack lies over them
+    bare = big.copy()
+    for (x, y, sx, sy) in ((cx1, cy1, -1, -1), (cx0, cy1, 1, -1)):
+        gold_corner(big, x, y, sx, sy, SEED + x + y)
+    gold = ImageChops.difference(big, bare).convert("L").point(lambda v: 255 if v > 6 else 0)
+    union = [None]
+    build_leaves(big, PAPER, SEED + 20, union)
+    stack_shadow(big, gold, union[0])
+    for (x, y, sx, sy) in ((cx0, cy0, 1, 1), (cx1, cy0, -1, 1)):
         gold_corner(big, x, y, sx, sy, SEED + x + y)
     return big.resize((W, H), Image.LANCZOS)
+
+
+def stack_shadow(img, gold, leaves):
+    """The page stack's soft shadow on the gold it lies over (S1)."""
+    if leaves is None:
+        return
+    k = STACK_SHADOW
+    cast = ImageChops.offset(leaves, int(k["dx"] * S), int(k["dy"] * S)).filter(ImageFilter.GaussianBlur(k["blur"] * S))
+    sh = ImageChops.multiply(ImageChops.multiply(cast, ImageChops.invert(leaves)), gold)
+    sh = sh.point(lambda v: int(v * k["alpha"]))
+    img.paste(Image.new("RGB", img.size, k["colour"]), (0, 0), sh)
 
 
 def unmatte(on_a, on_b, a, b):

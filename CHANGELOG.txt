@@ -12,7 +12,17 @@ The chronicle
   route map of where you went, and its deeds and losses on a sheet
   that folds by zone and scrolls. One spread per campaign.
 - Quiet nights (patrols with no fighting) can be hidden.
-- A new Ledger tab is on its way: your whole war in figures.
+- A new Ledger tab: your whole war in figures, over seven spreads.
+  The tally and your records, the hours and the calendar of your
+  fights, the classes you slew and that slew you, your lands, your
+  foes of note, deaths to the wilds, and your guild's war. Switch
+  between this character and all your characters.
+- Grudges: one list and one log of every encounter with every grudge,
+  newest first, with the chosen grudge's account beside it.
+- The Warpath page (this one) shows a key to the map's marks, and
+  What's New scrolls on one page instead of turning pages.
+- Settings: easier to read, with smaller sub-settings under their
+  switch, and a live preview of your kill captions.
 
 On the map
 - Corpse runs, flights and spirit healers are now three map layers,
@@ -25,6 +35,8 @@ On the map
   are hidden from your map, and their deaths no longer count toward
   dangerous-ground warnings. Nothing is deleted: turn sharing back on
   and they're back.
+- Fixed a rare hang while drawing dashed lines on the map (corpse
+  runs used the same code).
 
 Settings
 - Each length (trail, corpse runs, flights) sits under its layer and

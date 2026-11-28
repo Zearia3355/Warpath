@@ -2,6 +2,8 @@
 
 These scripts draw the textures in `Art/book/`. Nothing here ships, since `.pkgmeta` and `tools/install.ps1` both leave `tools/` out. The textures they write do ship.
 
+
+**2026-11-28 change (Joe):** the bottom corner pieces are drawn before the page stack, so the pages lie over them; the stack's foot fans 75% as far (`FOOT_FAN`), and the stack casts a soft shadow on the gold (`STACK_SHADOW`, `stack_shadow()`). The top corners are still drawn last, over the pages.
 ## Licence
 
 Every pixel is drawn by these scripts: noise, polygons, blurs and gradients in Pillow. No screenshot, Blizzard art or outside image is read. The scripts and the textures are the addon's own work, under its MIT licence (`LICENSE`).

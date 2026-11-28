@@ -17,6 +17,7 @@ All of it is under `tools/out/design/`, which git ignores. Each folder has its o
 - **Cover:** deep crimson leather, scuffed, with a blind-tooled double rule. No stitching, no ribbon, no headbands; Joe rejected all three.
 - **Corners:** antique gold L-pieces with pyramid studs, lit from the top left.
 - **Page stack:** 7 rippled, frayed leaves under the top leaf, fanning toward the outer corners.
+- **Bottom corners under the pages** (Joe, 2026-11-28, after seeing 3.8.5-test2 in game): the page stack lies over the two bottom corner pieces; the top corners stay over the pages ("the top corners look fine already, its just the bottom ones"). From renders: all seven leaves over the metal (B), with the stack's foot fanned 75% as far as before so more leather shows below it ("the margin on the bottom between the edges of the book cover and the pages needs to be increased"), and a soft shadow from the stack on the gold (S1, "S1 soft"). In `tools/art/book.py`: `FOOT_FAN`, `STACK_SHADOW`, `stack_shadow()`.
 - **Parchment:** `parchment()` in `refine.py`. Base (228,180,106), with grain at five scales, fibres, flecks, a faint crumple and warm patches.
 - **Burn:** an even falloff from the deckled edge, amber further in, brown at the rim. No blotches.
 - **Kept from the game:** the tabs, title plate, close button, Share button, page-turn arrows and icons.
