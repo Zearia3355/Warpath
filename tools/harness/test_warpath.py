@@ -5901,6 +5901,9 @@ db.maps[1448] = { kills = 1, pdeaths = 1, yards = 12800, marks = {
     { 0.5, 0.5, T(20, 9, 30), "death", pvp = true, kf = "Plains-Stomper", kn = "Plains", kc = "DRUID" },
     { 0.5, 0.5, T(21, 19, 30), "death" },
   } }
+-- Mount Hyjal's mark sits by Felwood's on Kalimdor, as in Lethality's data
+db.maps[2482] = { kills = 0, pdeaths = 2, marks = {
+    { 0.5, 0.5, T(23, 9, 0), "death", pvp = true }, { 0.5, 0.5, T(23, 9, 30), "death", pvp = true } } }
 db.campaigns = { { start = T(24, 21, 0), stop = T(25, 1, 0), kills = 3, deaths = 1, played = 14400, yards = 30000,
     sightings = 40, zones = {}, kl = {}, dl = {} } }
 __H.roster = { { "Plains Stomper", "Guild Master", 60, "DRUID", "John", "secret officer words" },
@@ -5991,14 +5994,14 @@ class LedgerPages(unittest.TestCase):
         self.assertTrue(ev(f"{F}.all.frame:IsEnabled()"))
         self.assertFalse(ev(f"{F}.me.frame:IsEnabled()"))
         # one character on the new version: the line at the top of each page
-        self.assertTrue(ev(f"{F}.only[1]:IsShown()"))
-        self.assertIn("Only Lethality has opened the chronicle since", ev(f"{F}.only[1]:GetText()"))
+        self.assertTrue(ev(f"{F}.only:IsShown()"))
+        self.assertIn("Only Lethality has opened the chronicle since", ev(f"{F}.only:GetText()"))
         # the Guild spread: "All characters" disabled and inert; the page is this character's
         self.page(7)
         self.assertFalse(ev(f"{F}.all.catch:IsShown()"), "no click on the Guild spread")
         self.assertEqual(ev(f"{F}.all.how"), "dead")
         self.assertTrue(ev(f"{F}.me.frame:IsEnabled()"))
-        self.assertFalse(ev(f"{F}.only[1]:IsShown()"))
+        self.assertFalse(ev(f"{F}.only:IsShown()"))
         self.assertIn("Plains Stomper", self.texts())
         # back on another spread, the account view returns
         run(f"{F}.prev:GetScript('OnClick')({F}.prev)")
@@ -6099,7 +6102,7 @@ class LedgerPages(unittest.TestCase):
         # exactly the rect's centre, carried through the landmass crop
         land = ev(f"{P}.placed[1].id")
         l, r, t, b = (ev(f"select({i}, C_Map.GetMapRectOnMap({land}, 1415))") for i in (1, 2, 3, 4))
-        crop = [ev(f"ns.ChronLedger.LANDS.crop[1415][{i}]") for i in range(1, 5)]
+        crop = [ev(f"ns.ChronLedger.LANDS.Crop(1415)[{i}]") for i in range(1, 5)]
         self.near(x, pic[0] + ((l + r) / 2 - crop[0]) / (crop[1] - crop[0]) * pic[2], "mark x", 0.01)
         self.near(y, pic[1] + ((t + b) / 2 - crop[2]) / (crop[3] - crop[2]) * pic[3], "mark y", 0.01)
         self.wow.run(f"{P}.rows[2]:GetScript('OnClick')({P}.rows[2])")
@@ -6168,6 +6171,112 @@ class LedgerPages(unittest.TestCase):
         self.assertEqual(rect("WILDS.where.sheet"), [576, 146, 1025, 452])
         self.assertEqual(rect("WILDS.guild.sheet"), [72, 172, 518, 664])
         self.assertEqual(rect("WILDS.glands.sheet"), [576, 146, 1025, 430])
+
+    # -- 3.8.5-test4, from Joe's screenshots ---------------------------------------
+    @staticmethod
+    def overlap(a, b):
+        return min(a[2], b[2]) - max(a[0], b[0]) > 0.5 and min(a[3], b[3]) - max(a[1], b[1]) > 0.5
+
+    def test_the_only_line_clears_everything_on_every_spread(self):
+        F = "ns.ChronLedger.Frames()"
+        self.wow.run("ns.ChronLedger.state.account = true")
+        for n in range(1, 7):
+            with self.subTest(page=n):
+                self.page(n)
+                only = self.rec(f"{F}.only")
+                self.assertIn("Only Lethality has opened", only["text"])
+                self.assertGreater(only["top"], 140, "clear of the page's top edge and the kicker")
+                self.assertLess(only["box"][3], 672, "clear of the footer")
+                for r in self.painter.records:
+                    if r["kind"] == "text" and r is not only and r["text"].strip():
+                        self.assertFalse(self.overlap(only["box"], r["box"]), f"runs into {r['text']!r}")
+
+    def test_column_heads_stay_apart_in_the_games_faces(self):
+        wow, typ = self.B.boot(name="Lethality", fonts="game")
+        wow.run(LEDGER_SEED)
+        wow.run("ns.ChronLedger.state.page = 1 ns.ChronLedger.state.account = false ns.Chronicle.Open(false, 'ledger')")
+        pairs = {4: [("ns.ChronLedger.LANDS.P.heads[1]", "ns.ChronLedger.LANDS.P.heads[2]")],
+                 5: [("ns.ChronLedger.CLASSES.P5.slain.heads[3]", "ns.ChronLedger.CLASSES.P5.slain.heads[4]"),
+                     ("ns.ChronLedger.CLASSES.P5.struck.heads[3]", "ns.ChronLedger.CLASSES.P5.struck.heads[4]")],
+                 7: [("ns.ChronLedger.WILDS.P7.heads[1]", "ns.ChronLedger.WILDS.P7.heads[2]"),
+                     ("ns.ChronLedger.WILDS.P7.landHeads[1]", "ns.ChronLedger.WILDS.P7.landHeads[2]")]}
+        for n, ps in pairs.items():
+            wow.run(f"ns.ChronLedger.state.page = {n} ns.Chron.Render()")
+            self.B.render_book(wow, typ)
+            for a, b in ps:
+                with self.subTest(page=n, head=b):
+                    # a Caps' width runs from its x0; the first ends before the second starts
+                    end1 = wow.eval(f"{a}.x0 + {a}.width")
+                    self.assertLessEqual(end1, wow.eval(f"{b}.x0") - 6)
+        self.assertIsNone(wow.H.errors)
+
+    def test_struck_down_is_this_characters_own_deaths_with_dates(self):
+        # an alt: the account's killers (its main's) aren't its own
+        self.wow.run("WarpathGlobal.killers['Someone-Else'] = 9")
+        self.wow.run("ns.ChronLedger.Invalidate()")
+        self.page(5)
+        P = "ns.ChronLedger.CLASSES.P5.struck"
+        ev = self.wow.eval
+        self.assertEqual(ev(f"{P}.rows[1].name.name:GetText()"), "Plains Stomper")
+        self.assertFalse(ev(f"{P}.rows[2].name.name:IsShown()"), "nobody this character never died to")
+        self.assertEqual(ev(f"{P}.rows[1].count.fig:GetText()"), "2", "two of this character's deaths")
+        self.assertEqual(ev(f"{P}.rows[1].last:GetText()"), "Nov 24", "the date of the latest")
+        self.assertEqual(ev(f"{P}.rows[1].tile.icon:GetTexture()"), "Interface\\Icons\\ClassIcon_DRUID")
+
+    def test_an_empty_who_they_were_says_none_yet_in_each_section(self):
+        wow, typ = self.B.boot(name="Derelect", fonts="repo")
+        wow.run("ns.ChronLedger.state.page = 5 ns.ChronLedger.state.account = false ns.ChronLedger.state.whoFolded = nil "
+                "ns.Chronicle.Open(false, 'ledger')")
+        img, painter = self.B.render_book(wow, typ)
+        nones = [r for r in painter.records if r["kind"] == "text" and r["text"] == "None yet." and r["box"][0] > 560]
+        self.assertEqual(len(nones), 3)
+        self.assertIsNone(wow.H.errors)
+
+    def test_hour_strips_draw_their_bars_at_the_specs_strength(self):
+        # a second hour of wilds deaths: two bars, the busiest deep, the other plain
+        self.wow.run("table.insert(WarpathDB.maps[1431].marks, { 0.5, 0.5, time({ year = 2026, month = 11, day = 26,"
+                     " hour = 8, min = 0 }), 'death' }) ns.ChronLedger.Invalidate()")
+        self.page(6)
+        ev = self.wow.eval
+        bars = "ns.ChronLedger.WILDS.P6.strip.bars"
+        shown = [h for h in range(24) if ev(f"{bars}[{h}].bar:IsShown()")]
+        self.assertEqual(len(shown), 2)
+        alphas = sorted(round(ev(f"{bars}[{h}].bar.__color[4] * {bars}[{h}].bar:GetAlpha()"), 2) for h in shown)
+        self.assertEqual(alphas, [0.72, 0.95])
+
+    def test_my_lands_map_clears_the_key_and_its_labels_clear_everything(self):
+        self.page(4)
+        P = "ns.ChronLedger.LANDS.P"
+        ev = self.wow.eval
+        for cont in (1414, 1415):
+            with self.subTest(continent=cont):
+                self.wow.run(f"ns.ChronLedger.state.cont = {cont} ns.ChronLedger.state.land = nil ns.Chron.Render()")
+                pic = [ev(f"{P}.pic[{i}]") for i in range(1, 5)]
+                self.assertLessEqual(pic[1] + pic[3], 664 - 20, "the map ends clear of the key's line")
+                labels = [[ev(f"{P}.labelBoxes[{i}][{k}]") for k in range(1, 5)] for i in range(1, ev(f"#{P}.labelBoxes") + 1)]
+                marks = [[ev(f"{P}.markBoxes[{i}][{k}]") for k in range(1, 5)] for i in range(1, ev(f"#{P}.markBoxes") + 1)]
+                self.assertTrue(labels)
+                # each land's figures clear every other land's cross
+                n = ev(f"{P}.crosses")
+                for i in range(n):
+                    for j in range(n):
+                        if i != j:
+                            self.assertFalse(self.overlap(marks[n + i], marks[j]), f"figures {i + 1} on cross {j + 1}")
+                for i, b in enumerate(labels):
+                    self.assertGreaterEqual(b[0], pic[0])
+                    self.assertLessEqual(b[2], pic[0] + pic[2])
+                    self.assertGreaterEqual(b[1], pic[1])
+                    self.assertLessEqual(b[3], pic[1] + pic[3])
+                    for o in marks + labels[:i]:
+                        self.assertFalse(self.overlap(b, o), f"label {b} runs into {o}")
+                # the crop holds every zone the client places on the continent
+                crop = [ev(f"ns.ChronLedger.LANDS.Crop({cont})[{k}]") for k in range(1, 5)]
+                for z in ev(f"(function() local t = {{}} for _, id in ipairs(ns.ChronLedger.LANDS.zones[{cont}]) do "
+                            f"local l, r = C_Map.GetMapRectOnMap(id, {cont}) if l and r and r > l then t[#t+1] = id end end "
+                            f"return table.concat(t, ',') end)()").split(","):
+                    if z:
+                        l, r, t, b = (ev(f"select({k}, C_Map.GetMapRectOnMap({z}, {cont}))") for k in (1, 2, 3, 4))
+                        self.assertTrue(crop[0] <= l and r <= crop[1] and crop[2] <= t and b <= crop[3], z)
 
     # -- empty states -------------------------------------------------------------
     def test_a_fresh_character_gets_every_spread(self):

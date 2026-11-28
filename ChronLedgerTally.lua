@@ -272,7 +272,8 @@ local function LayRecords(ctx)
     local g = G.rec
     local need = 0
     for _, e in ipairs(list) do need = need + (e[3] and g.step or g.plain) end
-    local k = math.min(1, (g.bottom - g.y) / math.max(1, need - g.step + g.dy + 4))
+    local bottom = g.bottom - (ctx.only and 28 or 0)   -- room for the line under the records
+    local k = math.min(1, (bottom - g.y) / math.max(1, need - g.step + g.dy + 4))
     local y = g.y
     for i = 1, #P.recs do
         local e = list[i]
@@ -306,4 +307,4 @@ local function Render(F, ctx)
     LayRecords(ctx)
 end
 
-LG.spreads[1] = { Build = Build, Render = Render }
+LG.spreads[1] = { Build = Build, Render = Render, only = { 801, 664 } }

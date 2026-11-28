@@ -14,11 +14,23 @@ ns.OnBind(function() db, myFull = ns.db, ns.myFull end)
 
 local G = {
     buttons = { y = 140, w = 150, h = 26, gap = 4, conts = { { 1414, "Kalimdor" }, { 1415, "Eastern Kingdoms" } } },
-    map = { maxw = 428, maxh = 500, top = 166, cx = 296 },
-    -- the landmass on each continent's map (its layer's fractions: left,
-    -- right, top, bottom), the design's crops (geo.py CROPS) carried through
-    -- the continents' fitted rects (Claude's call: check in game)
+    -- the picture ends 20 px above the key's baseline (3.8.5-test4: the
+    -- spec's 500 px ran the map over the key)
+    map = { maxw = 428, maxh = 478, top = 166, cx = 296 },
+    -- the landmass: the client's own rects of the continent's zones on it,
+    -- added together, with a margin (a share of the larger side); the crop
+    -- read off the design's world map cut the Eastern Kingdoms' west coast
+    -- in game (3.8.5-test4). crop: the fallback when no zone answers.
+    margin = 0.03,
+    zones = {
+        [1414] = { 1411, 1412, 1413, 1438, 1439, 1440, 1441, 1442, 1443, 1444, 1445, 1446, 1447, 1448, 1449, 1450,
+                   1451, 1452, 1454, 1456, 1457 },
+        [1415] = { 1416, 1417, 1418, 1419, 1420, 1421, 1422, 1423, 1424, 1425, 1426, 1427, 1428, 1429, 1430, 1431,
+                   1432, 1433, 1434, 1435, 1436, 1437, 1453, 1455, 1458 },
+    },
     crop = { [1414] = { 0.3365, 0.6804, 0.1307, 0.9791 }, [1415] = { 0.3872, 0.7006, 0.0464, 0.9853 } },
+    -- labels stay this far inside the picture's edge
+    inset = 4,
     mark = { col = { 150, 26, 14 }, w = 3, kpx = 16, dpx = 15, label = { 58, 32, 10 }, labelPx = 15, ring = 7 },
     key = 664,
     list = { sheet = { 576, 104, 1025, 300 }, win = { 578, 108, 1023, 296 }, cord = { 1016, 114, 290 },
@@ -97,9 +109,30 @@ local function ArtTex(i, blend)
     return t
 end
 
+-- The landmass on the continent's map: every zone's rect on it, added
+-- together (with the lands fought in, Mount Hyjal among them), plus a margin.
+local function Crop(cont)
+    local l, r, t, b = math.huge, -math.huge, math.huge, -math.huge
+    local ids = {}
+    for _, id in ipairs(G.zones[cont] or {}) do ids[#ids + 1] = id end
+    local c = P.s and P.s.continents[cont]
+    for _, id in ipairs(c and c.lands or {}) do ids[#ids + 1] = id end
+    for _, id in ipairs(ids) do
+        local ok, zl, zr, zt, zb = pcall(C_Map.GetMapRectOnMap, id, cont)
+        if ok and zl and zr and zt and zb and zr - zl > 0 and zb - zt > 0 then
+            l, r, t, b = math.min(l, zl), math.max(r, zr), math.min(t, zt), math.max(b, zb)
+        end
+    end
+    if r <= l then return G.crop[cont] end
+    local m = G.margin * math.max(r - l, (b - t) * 668 / 1002)
+    local my = m * 1002 / 668
+    return { math.max(0, l - m), math.min(1, r + m), math.max(0, t - my), math.min(1, b + my) }
+end
+LG.LANDS.Crop = Crop
+
 -- The continent's tiles cut to the landmass; returns the picture's rect.
 local function LayArt(cont)
-    local crop = G.crop[cont]
+    local crop = Crop(cont)
     local m = G.map
     local lw, lh = 1002 * (crop[2] - crop[1]), 668 * (crop[4] - crop[3])
     local k = math.min(m.maxw / lw, m.maxh / lh)
@@ -178,11 +211,36 @@ local function Mark(i)
     return m
 end
 
-local function Free(box, taken)
-    for _, t in ipairs(taken) do
-        if not (box[3] < t[1] or box[1] > t[3] or box[4] < t[2] or box[2] > t[4]) then return false end
+local function Overlap(a, b)
+    local w = math.min(a[3], b[3]) - math.max(a[1], b[1])
+    local h = math.min(a[4], b[4]) - math.max(a[2], b[2])
+    return (w > 0 and h > 0) and w * h or 0
+end
+
+-- A label's place near its mark (Claude's call on the order): below, above,
+-- left, right of its figures, the four corners, then further below and
+-- above; slid sideways to stay inside the picture; the first that touches
+-- no mark, no figures and no other label, else the one that overlaps least.
+local function PlaceLabel(p, w, taken, pic)
+    local h, x, y, r = 14, p.x, p.y, p.r
+    local tries = { { x - w / 2, y + r + 4 }, { x - w / 2, y - r - 18 }, { x - r - 6 - w, y - 8 }, { p.right + 6, y - 8 },
+        { x - w - 2, y + r + 2 }, { x + 2, y + r + 2 }, { x - w - 2, y - r - 16 }, { x + 2, y - r - 16 },
+        { x - w / 2, y + r + 18 }, { x - w / 2, y - r - 32 } }
+    local inset = G.inset
+    local x0, x1 = pic[1] + inset, pic[1] + pic[3] - inset
+    local y0, y1 = pic[2] + inset, pic[2] + pic[4] - inset
+    local best, bestCost
+    for _, t in ipairs(tries) do
+        local bx = math.max(x0, math.min(x1 - w, t[1]))
+        local box = { bx, t[2], bx + w, t[2] + h }
+        if box[2] >= y0 and box[4] <= y1 then
+            local cost = 0
+            for _, o in ipairs(taken) do cost = cost + Overlap(box, o) end
+            if cost == 0 then return box end
+            if not bestCost or cost < bestCost then best, bestCost = box, cost end
+        end
     end
-    return true
+    return best or { math.max(x0, math.min(x1 - w, x - w / 2)), y + r + 4, math.max(x0, math.min(x1 - w, x - w / 2)) + w, y + r + 18 }
 end
 
 local function LayMarks(cont, pic)
@@ -202,41 +260,60 @@ local function LayMarks(cont, pic)
         end
     end
     for n = si, #P.strokes do P.strokes[n]:Hide() end
-    -- labels: below the mark, or above, left or right, whichever is free
-    -- (lround3.py lands_map)
-    local taken = {}
-    for _, p in ipairs(placed) do taken[#taken + 1] = { p.x - p.r - 4, p.y - p.r - 4, p.x + p.r + 60, p.y + p.r + 4 } end
+    -- every cross (and the chosen land's ring) is taken first; then each
+    -- land's figures go right of its cross, or left when that's taken; then
+    -- the labels
+    local taken, marks = {}, {}
     local ring = false
-    for n, p in ipairs(placed) do
-        local m = Mark(n)
-        Set(m.k, tostring(p.l.kills))
-        Put(m.k, p.x + p.r + 5, p.y - 2, "l")
-        LG.Show(m.k, true)
-        Set(m.d, " \194\183 " .. p.l.deaths)
-        Put(m.d, p.x + p.r + 6 + Wpx(m.k), p.y - 2, "l")
-        m.d:Show()
-        local name = ns.MapName(p.id) or "?"
-        Set(m.label, name)
-        local w = Book.Measure("gari", G.mark.labelPx, name)
-        local box
-        for _, try in ipairs({ { p.x - w / 2, p.y + p.r + 4 }, { p.x - w / 2, p.y - p.r - 22 },
-                { p.x - w - p.r - 6, p.y - 8 }, { p.x + p.r + 40, p.y - 8 } }) do
-            box = { try[1], try[2], try[1] + w, try[2] + 14 }
-            if Free(box, taken) then break end
-        end
-        taken[#taken + 1] = box
-        Put(m.label, box[1], box[2] + 12, "l")
-        m.label:Show()
-        m.hot.land, m.hotLabel.land = p.id, p.id
-        Book.Box(m.hot, p.x - p.r - 3, p.y - p.r - 3, p.x + p.r + 40, p.y + p.r + 3)
-        Book.Box(m.hotLabel, box[1], box[2], box[3], box[4])
-        m.hot:Show()
-        m.hotLabel:Show()
+    for _, p in ipairs(placed) do
+        local rr = p.id == state.land and p.r + G.mark.ring + 1 or p.r + 2
+        marks[#marks + 1] = { p.x - rr, p.y - rr, p.x + rr, p.y + rr }
         if p.id == state.land then
             P.ring:Set(p.x, p.y, p.r + G.mark.ring, RUBRIC, 1, 2, P.L)
             ring = true
         end
     end
+    for n, p in ipairs(placed) do
+        local m = Mark(n)
+        local ks, ds = tostring(p.l.kills), " \194\183 " .. p.l.deaths
+        local kw = Book.Measure("garb", G.mark.kpx, ks) + 1
+        local fw = 6 + kw + Book.Measure("garb", G.mark.dpx, ds)
+        local fx = p.x + p.r + 5
+        local box = { fx - 1, p.y - 15, fx + fw + 1, p.y + 3 }
+        local clear = true
+        for _, o in ipairs(marks) do if Overlap(box, o) > 0 then clear = false end end
+        if not clear then
+            fx = p.x - p.r - 5 - fw
+            box = { fx - 1, p.y - 15, fx + fw + 1, p.y + 3 }
+        end
+        Set(m.k, ks)
+        Put(m.k, fx, p.y - 2, "l")
+        LG.Show(m.k, true)
+        Set(m.d, ds)
+        Put(m.d, fx + 1 + kw, p.y - 2, "l")
+        m.d:Show()
+        p.right = math.max(p.x + p.r, box[3])
+        p.fig = box
+        marks[#marks + 1] = box
+    end
+    for _, b in ipairs(marks) do taken[#taken + 1] = b end
+    local labels = {}
+    for n, p in ipairs(placed) do
+        local m = Mark(n)
+        local name = ns.MapName(p.id) or "?"
+        Set(m.label, name)
+        local box = PlaceLabel(p, Book.Measure("gari", G.mark.labelPx, name), taken, pic)
+        taken[#taken + 1] = box
+        labels[n] = box
+        Put(m.label, box[1], box[2] + 12, "l")
+        m.label:Show()
+        m.hot.land, m.hotLabel.land = p.id, p.id
+        Book.Box(m.hot, p.x - p.r - 3, p.y - p.r - 3, p.right, p.y + p.r + 3)
+        Book.Box(m.hotLabel, box[1], box[2], box[3], box[4])
+        m.hot:Show()
+        m.hotLabel:Show()
+    end
+    P.markBoxes, P.labelBoxes, P.crosses = marks, labels, #placed   -- the first #placed are the crosses
     for n = #placed + 1, #P.marks do
         local m = P.marks[n]
         LG.Show(m.k, false) m.d:Hide() m.label:Hide() m.hot:Hide() m.hotLabel:Hide()
@@ -301,8 +378,7 @@ local function LayList(cont)
     local s, sheet = P.s, P.sheet
     local ch, ox, oy = sheet.child, g.win[1], g.win[2]
     sheet:Clear()
-    P.heads[1]:Set("KILLS", g.kills, g.heads, "r", ch, ox, oy)
-    P.heads[2]:Set("DEATHS", g.deaths, g.heads, "r", ch, ox, oy)
+    LG.HeadPair(P.heads[1], "KILLS", g.kills, P.heads[2], "DEATHS", g.deaths, g.heads, ch, ox, oy)
     local c = s.continents[cont]
     local y = g.first
     local lands = c and c.lands or {}
@@ -447,4 +523,4 @@ local function Render(F, ctx)
     LayLand(ctx)
 end
 
-LG.spreads[4] = { Build = Build, Render = Render }
+LG.spreads[4] = { Build = Build, Render = Render, only = { 801, 652 } }

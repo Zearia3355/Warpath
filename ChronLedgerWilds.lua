@@ -68,8 +68,8 @@ function Strip:Set(hours)
             local bx = self.x0 + h * step
             Book.Box(b.bar, math.floor(bx + 2), self.base - hh + 1, math.floor(bx + step - 2), self.base + 1)
             local deep = h == busiest
-            b.bar:SetColorTexture(Book.RGB(deep and LG.DEEP or RUBRIC))
-            b.bar:SetAlpha(deep and 0.95 / 0.72 or 1)
+            local r, g, bl = Book.RGB(deep and LG.DEEP or RUBRIC)
+            b.bar:SetColorTexture(r, g, bl, deep and 0.95 or 0.72)
             if deep then
                 Book.Box(self.top, math.floor(bx + 2), self.base - hh, math.floor(bx + step - 2), self.base - hh + 1)
                 Set(self.fig, tostring(v))
@@ -248,7 +248,7 @@ local function Render6(F, ctx)
     end
 end
 
-LG.spreads[6] = { Build = Build6, Render = Render6 }
+LG.spreads[6] = { Build = Build6, Render = Render6, only = { 801, 664 } }
 
 ---------------------------------------------------------------------------
 -- Spread 7: The Guild's War | The Guild's Lands (this character only)
@@ -292,13 +292,11 @@ local function Build7(F)
     P7.sheet = Book.Sheet(IL, g.sheet, g.win, g.cord)
     local ch = P7.sheet.child
     local o = { ch, g.win[1], g.win[2] }
-    LG.Head(ch, 10, RUBRIC):Set("SLAIN", g.slain, g.head, "r", o[1], o[2], o[3])
-    LG.Head(ch, 10, FADED):Set("FALLEN", g.fallen, g.head, "r", o[1], o[2], o[3])
+    P7.heads = { LG.Head(ch, 10, RUBRIC), LG.Head(ch, 10, FADED) }
     P7.rows = {}
     P7.lands = Book.Sheet(IR, gl.sheet, gl.win, gl.cord)
     local lc = P7.lands.child
-    LG.Head(lc, 10, RUBRIC):Set("SLAIN", gl.slain, gl.head, "r", lc, gl.win[1], gl.win[2])
-    LG.Head(lc, 10, FADED):Set("FALLEN", gl.fallen, gl.head, "r", lc, gl.win[1], gl.win[2])
+    P7.landHeads = { LG.Head(lc, 10, RUBRIC), LG.Head(lc, 10, FADED) }
     P7.landRows = {}
     P7.noWord = Str(lc, "gari", 16, FADED)
     Set(P7.noWord, "No word from the guild yet.")
@@ -390,6 +388,10 @@ local function Render7(F, ctx)
     local g, gl = G.guild, G.glands
     local since = guild.first and ("  \194\183  since " .. LG.Day(guild.first, "short")) or ""
     P7.kicker:Set("As it reached " .. ctx.who .. since, CX, g.kicker, 28)
+    -- the heads are laid out at each draw, with the faces as they measure now
+    LG.HeadPair(P7.heads[1], "SLAIN", g.slain, P7.heads[2], "FALLEN", g.fallen, g.head, P7.sheet.child, g.win[1], g.win[2])
+    LG.HeadPair(P7.landHeads[1], "SLAIN", gl.slain, P7.landHeads[2], "FALLEN", gl.fallen, gl.head,
+        P7.lands.child, gl.win[1], gl.win[2])
     LayMates(guild)
     LayGuildLands(guild)
     P7.strip:Set(guild.hours or {})

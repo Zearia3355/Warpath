@@ -145,7 +145,7 @@ local function Render3(F, ctx)
     P3.R.foot:Set(SlewLine(ctx, rows, (s.slew or {}).unknown or 0), RCX, y + g.foot, RR - R0 - 30, g.footLh)
 end
 
-LG.spreads[3] = { Build = Build3, Render = Render3 }
+LG.spreads[3] = { Build = Build3, Render = Render3, only = { 801, 664 } }
 
 ---------------------------------------------------------------------------
 -- Spread 5, left: Foes of Note
@@ -179,8 +179,9 @@ local function LayBlock(b, y, title, list, col, head)
     local g = G.foes
     b.sub:Set(title, L0, y, LR)
     y = y + g.heads
-    local heads = { { "FOE", g.name, "l" }, { "GUILD", g.guild, "l" }, { "LAST", g.last, "r" }, { head, g.count, "r" } }
-    for i, h in ipairs(heads) do b.heads[i]:Set(h[1], h[2], y, h[3]) end
+    b.heads[1]:Set("FOE", g.name, y, "l")
+    b.heads[2]:Set("GUILD", g.guild, y, "l")
+    LG.HeadPair(b.heads[3], "LAST", g.last, b.heads[4], head, g.count, y)
     y = y + g.rows
     b.none:SetShown(#list == 0)
     if #list == 0 then Put(b.none, g.name, y, "l") end
@@ -265,7 +266,9 @@ local function LayBars(k, y, rows, extra, labw, nonePlain)
     for _, r in ipairs(rows) do maxn = math.max(maxn, r[2]) end
     local span = w.x1 - x0 - labw - 34
     local function Place(r, f) Book.Box(f, w.x0, y - 18, w.x1, y + 6, ch, ox, oy) P5.sheet:Add(f, y - 18 - oy, y + 6 - oy) end
-    if #rows == 0 and not extra then
+    local any = extra and extra[2] > 0
+    for _, row in ipairs(rows) do if row[2] > 0 then any = true end end
+    if not any then
         k = k + 1
         local r = BarRow(k)
         r.label:Hide() r.bar:Hide() r.num:Hide() r.faded:Hide()
@@ -365,4 +368,4 @@ local function Render5(F, ctx)
     LayWho(ctx)
 end
 
-LG.spreads[5] = { Build = Build5, Render = Render5 }
+LG.spreads[5] = { Build = Build5, Render = Render5, only = { 296, 640 } }
