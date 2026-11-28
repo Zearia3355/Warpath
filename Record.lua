@@ -446,24 +446,27 @@ local function CardTop()
     return -math.floor(UIParent:GetHeight() * 0.165)
 end
 
-local function ShowTextCard(k)
-    local f = cardText
-    if not f then
-        f = CreateFrame("Frame", "WarpathKillCardText", UIParent)
-        f:SetFrameStrata("FULLSCREEN_DIALOG")
-        f:SetSize(600, 60)
-        f.tag = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        f.tag:SetPoint("TOP", 0, 0)
-        f.name = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-        f.name:SetPoint("TOP", f.tag, "BOTTOM", 0, -2)
-        f.info = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-        f.info:SetPoint("TOP", f.name, "BOTTOM", 0, -2)
-        for _, fs in ipairs({ f.tag, f.name, f.info }) do
-            fs:SetShadowOffset(1, -1)
-            fs:SetShadowColor(0, 0, 0, 1)
-        end
-        cardText = f
+-- The two captions. Each is built and filled by one function, used both for
+-- the screenshot (a named frame over the whole screen, placed under the top
+-- edge) and for a preview: ShowTextCard(k, parent, scale) builds its own copy
+-- inside parent, at that scale, anchored to parent's top, and leaves the
+-- screenshot's frame alone (3.8.5; the Settings tab's caption preview).
+local function BuildTextCard(f)
+    f:SetSize(600, 60)
+    f.tag = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.tag:SetPoint("TOP", 0, 0)
+    f.name = f:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    f.name:SetPoint("TOP", f.tag, "BOTTOM", 0, -2)
+    f.info = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    f.info:SetPoint("TOP", f.name, "BOTTOM", 0, -2)
+    for _, fs in ipairs({ f.tag, f.name, f.info }) do
+        fs:SetShadowOffset(1, -1)
+        fs:SetShadowColor(0, 0, 0, 1)
     end
+    return f
+end
+
+local function FillTextCard(f, k)
     local tag, r, g, b = CardTag(k, true)
     if k.streak and k.streak >= 2 then tag = tag .. DOT .. TIMES .. k.streak end
     f.tag:SetText(tag)
@@ -473,39 +476,33 @@ local function ShowTextCard(k)
     local bits = CardDetails(k)
     bits[#bits + 1] = date("%b %d, %H:%M", k.when)
     f.info:SetText(table.concat(bits, DOT))
-    f:ClearAllPoints()
-    f:SetPoint("TOP", UIParent, "TOP", 0, CardTop())
-    f:Show()
+end
+
+local function BuildStripCard(f)
+    f:SetHeight(30)
+    f.bg = f:CreateTexture(nil, "BACKGROUND")
+    f.bg:SetAllPoints()
+    f.bg:SetColorTexture(0.06, 0.04, 0.03, 0.72)
+    f.top = f:CreateTexture(nil, "BORDER")
+    f.top:SetPoint("TOPLEFT")
+    f.top:SetPoint("TOPRIGHT")
+    f.top:SetHeight(1)
+    f.bottom = f:CreateTexture(nil, "BORDER")
+    f.bottom:SetPoint("BOTTOMLEFT")
+    f.bottom:SetPoint("BOTTOMRIGHT")
+    f.bottom:SetHeight(1)
+    f.crest = f:CreateTexture(nil, "ARTWORK")
+    f.crest:SetSize(20, 20)
+    f.crest:SetPoint("LEFT", 8, 0)
+    f.crest:SetTexCoord(0, 0.62, 0, 0.62)
+    f.tag = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    f.tag:SetPoint("LEFT", f.crest, "RIGHT", 6, 0)
+    f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    f.text:SetPoint("LEFT", f.tag, "RIGHT", 8, 0)
     return f
 end
 
-local function ShowStripCard(k)
-    local f = cardStrip
-    if not f then
-        f = CreateFrame("Frame", "WarpathKillCardStrip", UIParent)
-        f:SetFrameStrata("FULLSCREEN_DIALOG")
-        f:SetHeight(30)
-        f.bg = f:CreateTexture(nil, "BACKGROUND")
-        f.bg:SetAllPoints()
-        f.bg:SetColorTexture(0.06, 0.04, 0.03, 0.72)
-        f.top = f:CreateTexture(nil, "BORDER")
-        f.top:SetPoint("TOPLEFT")
-        f.top:SetPoint("TOPRIGHT")
-        f.top:SetHeight(1)
-        f.bottom = f:CreateTexture(nil, "BORDER")
-        f.bottom:SetPoint("BOTTOMLEFT")
-        f.bottom:SetPoint("BOTTOMRIGHT")
-        f.bottom:SetHeight(1)
-        f.crest = f:CreateTexture(nil, "ARTWORK")
-        f.crest:SetSize(20, 20)
-        f.crest:SetPoint("LEFT", 8, 0)
-        f.crest:SetTexCoord(0, 0.62, 0, 0.62)
-        f.tag = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        f.tag:SetPoint("LEFT", f.crest, "RIGHT", 6, 0)
-        f.text = f:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-        f.text:SetPoint("LEFT", f.tag, "RIGHT", 8, 0)
-        cardStrip = f
-    end
+local function FillStripCard(f, k)
     local tag, r, g, b = CardTag(k, false)
     f.crest:SetTexture(faction.crest)
     f.tag:SetText(tag)
@@ -519,11 +516,49 @@ local function ShowStripCard(k)
     parts[#parts + 1] = "|cffa8987a" .. date("%b %d, %H:%M", k.when) .. "|r"
     f.text:SetText(table.concat(parts, "  |cff6e5e44\194\183|r  "))
     f:SetWidth(8 + 20 + 6 + f.tag:GetStringWidth() + 8 + f.text:GetStringWidth() + 14)
-    f:ClearAllPoints()
-    f:SetPoint("TOP", UIParent, "TOP", 0, CardTop())
+end
+
+local CARDS = {
+    text = { build = BuildTextCard, fill = FillTextCard, name = "WarpathKillCardText" },
+    strip = { build = BuildStripCard, fill = FillStripCard, name = "WarpathKillCardStrip" },
+}
+local shown = {} -- kind -> the screenshot's frame, built on first use
+
+-- kind: "text" or "strip". parent: nil for the screenshot, else where a
+-- preview goes (one per parent and kind, reused), drawn at scale.
+local function ShowCard(kind, k, parent, scale)
+    local spec = CARDS[kind]
+    local f
+    if parent then
+        parent.warpathCards = parent.warpathCards or {}
+        f = parent.warpathCards[kind]
+        if not f then
+            f = spec.build(CreateFrame("Frame", nil, parent))
+            parent.warpathCards[kind] = f
+        end
+        f:SetScale(scale or 1)
+        spec.fill(f, k)
+        f:ClearAllPoints()
+        f:SetPoint("TOP", parent, "TOP", 0, 0)
+    else
+        f = shown[kind]
+        if not f then
+            f = spec.build(CreateFrame("Frame", spec.name, UIParent))
+            f:SetFrameStrata("FULLSCREEN_DIALOG")
+            shown[kind] = f
+            if kind == "text" then cardText = f else cardStrip = f end
+        end
+        spec.fill(f, k)
+        f:ClearAllPoints()
+        f:SetPoint("TOP", UIParent, "TOP", 0, CardTop())
+    end
     f:Show()
     return f
 end
+
+local function ShowTextCard(k, parent, scale) return ShowCard("text", k, parent, scale) end
+local function ShowStripCard(k, parent, scale) return ShowCard("strip", k, parent, scale) end
+ns.KillCard = { Text = ShowTextCard, Strip = ShowStripCard }
 
 -- The bottom edge of the kill caption showing now, as an offset from the
 -- top of the screen (the overlay's lane sits under it), or nil.

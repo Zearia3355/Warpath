@@ -95,7 +95,7 @@ for i, m in ipairs(C.TRAIL_MIN_CHOICES) do TRAIL[i] = { m, m < 60 and (m .. "m")
 ---------------------------------------------------------------------------
 
 local SECTIONS = {
-    { "alerts",  "Alerts",         "What happens when you kill, die, or return to old ground" },
+    { "alerts",  "Alerts",         "What happens when you kill, die, or walk where you've fought" },
     { "map",     "Map",            "What the world map shows, and for how long" },
     { "guild",   "Guild",          "Your war shared with guildmates, and theirs with you" },
     { "shots",   "Screenshots",    "Kill screenshots and their captions" },
@@ -136,7 +136,10 @@ local function GroundChanged()
     if ns.Ground then ns.Ground.Forget() end
 end
 
+-- Off hides guildmates' marks and stops their deaths counting toward
+-- dangerous ground (3.8.5); their saved data is kept for when it's back on.
 local function ShareChanged()
+    if ns.Ground then ns.Ground.Forget() end
     if cfg.share then return end
     for i = #ns.shared, 1, -1 do ns.shared[i] = nil end
     for i = #ns.outQ, 1, -1 do ns.outQ[i] = nil end
@@ -144,51 +147,63 @@ end
 
 local function On(path) return function() return Path(cfg, path) and true or false end end
 
--- Kinds: topic, note, check, pair (two checks on a row), radios, layers,
--- icons. when: the row is greyed out unless it's true. after: runs on a change.
-local LAYER_HINT = { battle = "where fighting happened", roads = "the ways you travel most",
-    sightings = "the last few minutes" }
+-- Kinds: topic, note, check, pair (two checks on a row), radios, layer (a
+-- compact check with an inline hint), icons. when: the row is greyed out
+-- unless it's true. after: runs on a change. indent: a sub-setting.
+local function Both(a, b) return function() return a() and b() end end
+local Shared = On("share")
 local SPEC = {
     alerts = {
         { "topic", "Your kills and deaths" },
-        { "check", "announce", "Announce on screen", "A line at the top of the screen for each kill, and big text for multi-kills and streaks. Off: they go to chat instead." },
-        { "radios", "overlaySize", "Big text", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } }, indent = 24, when = On("announce") },
-        { "check", "selfChat", "Also in chat", "One line for each kill or death, worded as your guild sees it." },
+        { "check", "announce", "Announce on screen", "Banners at the top of the screen for kills and grudge sightings; big text for multi-kills, streaks and ground warnings." },
+        { "radios", "overlaySize", "Big text size", { { "small", "Small" }, { "medium", "Medium" }, { "large", "Large" } }, indent = 24, lw = 90, when = On("announce") },
+        { "check", "selfChat", "Kills and deaths in chat", "One line each, worded as your guild sees it. With this and Announce on screen both off, a kill still gets a short line." },
         { "topic", "Sound" },
         { "check", "sound", "Play sounds", "For kills, dangerous or contested ground, grudge sightings, and this book's pages." },
         { "topic", "Ground you've fought on" },
-        { "note", "When you walk where you've fought before, Warpath says what it's been for you: your hunting ground, contested, or dangerous." },
+        { "note", "When you walk where you've fought before, Warpath says what it's been for you: your hunting ground, contested, or dangerous. On screen needs Announce on screen; without it, the warning goes to chat." },
         { "pair", { "groundScreen", "On screen" }, { "groundChat", "In chat" }, after = GroundChanged },
-        { "radios", "groundAfter", "After", { { 1, "1 fight" }, { 2, "2 fights" }, { 3, "3 fights" } }, indent = 24,
+        { "radios", "groundAfter", "Warn after", { { 1, "1 fight" }, { 2, "2 fights" }, { 3, "3 fights" } }, indent = 24,
             after = GroundChanged, when = function() return cfg.groundScreen or cfg.groundChat end },
     },
+    -- 3.8.5: corpse runs, flights and spirit healers are layers of their
+    -- own; each length sits under its layer; guildmates' rows sit under the
+    -- layer they belong to and grey while sharing (or that layer) is off.
     map = {
         { "check", "shown", "Show Warpath on the world map", "Same as the crossed swords on the map. Warpath keeps recording either way." },
         { "topic", "Layers" },
-        { "layers" },
+        { "layer", "layers.battle", nil, "where fighting happened" },
+        { "layer", "guildHaze", "with guildmates' fighting", indent = 24, when = Both(Shared, On("layers.battle")) },
+        { "layer", "layers.roads", nil, "the ways you travel most" },
+        { "layer", "layers.recent" },
+        { "radios", "trailMin", "kept for", TRAIL, indent = 24, lw = 62, gap = 7, step = 22, when = On("layers.recent") },
+        { "layer", "layers.runs" },
+        { "radios", "runHours", "kept for", HOURS, indent = 24, lw = 62, step = 22, when = On("layers.runs") },
+        { "layer", "layers.flights", nil, "the legs you fly most" },
+        { "radios", "flightHours", "kept for", HOURS, indent = 24, lw = 62, step = 22, when = On("layers.flights") },
+        { "layer", "layers.spirits", nil, "on their own zone's map" },
+        { "layer", "layers.marks" },
+        { "layer", "layers.guildMarks", "with guildmates' kills and deaths", indent = 24, when = Both(Shared, On("layers.marks")) },
+        { "layer", "layers.sightings", nil, "the last 15 minutes" },
+        { "layer", "layers.guildSights", "with guildmates' sightings", indent = 24, when = Both(Shared, On("layers.sightings")) },
         { "icons" },
-        { "topic", "Keep on the map for" },
-        { "radios", "trailMin", "Today's trail", TRAIL, lw = 86, gap = 7 },
-        { "radios", "runHours", "Corpse runs", HOURS, lw = 86 },
-        { "radios", "flightHours", "Recent flights", HOURS, lw = 86 },
     },
     guild = {
-        { "check", "share", "Guild sharing", "Works both ways: guildmates' kills, deaths and enemy sightings on your map, and yours on theirs. Only between guildmates who have it on. Never your trail.", after = ShareChanged },
-        { "check", "shareHistory", "Share my battle history", "Your battle haze, sent at login, so guildmates' maps show where you've fought.", indent = 24, when = On("share") },
-        { "check", "guildChat", "Guildmates' kills and deaths in chat", "One line each. Their pins stay on the map either way.", indent = 24, when = On("share") },
+        { "check", "share", "Guild sharing", "Works both ways: guildmates' kills, deaths and enemy sightings on your map, and yours on theirs. Only between guildmates who have it on. Never your trail. Off: theirs are hidden from your map, not deleted.", after = ShareChanged },
+        { "check", "shareHistory", "Share my battle haze", "Sent to guildmates at login and when they ask, so their maps show where you've fought.", indent = 24, when = Shared },
+        { "check", "guildChat", "Guildmates' kills and deaths in chat", "One line each. Their pins stay on the map either way.", indent = 24, when = Shared },
     },
     shots = {
-        { "check", "shot.on", "Screenshot my kills", "Saved to the game's Screenshots folder." },
+        { "check", "shot.on", "Screenshot my kills", "Saved to the game's Screenshots folder, one picture per burst of kills. /warpath shot test takes a test picture." },
         { "radios", "shot.mode", "Which kills", { { "all", "Every kill" }, { "notable", "Notable only" } }, lw = 70, indent = 24, when = On("shot.on") },
-        { "note", "Notable: a first kill of a player, grudges, avenged deaths, streaks of 3, 5 and every 10, and anyone you've killed 5 or more times.", indent = 24 },
+        { "note", "Notable: a first kill of a player, grudges, avenged deaths, multi-kills and feats, streaks of 3, 5 and every 10, and anyone you've killed 5 or more times.", indent = 24 },
         { "radios", "shot.card", "Caption", { { "text", "Floating text" }, { "strip", "Caption strip" }, { "none", "None" } }, lw = 70, indent = 24, when = On("shot.on") },
-        { "note", "/warpath shot test takes a test picture." },
     },
     zones = {
         { "topic", "Entering a zone" },
-        { "check", "zoneChat", "A line in chat with my history there", "Kills, deaths, miles, sightings, best streak and rank." },
+        { "check", "zoneChat", "A line in chat with my history there", "Kills, deaths, miles, sightings, avenged deaths, best streak, and how it ranks among your zones." },
         { "check", "zoneText", "A line under the zone's name" },
-        { "topic", "On screen" },
+        { "topic", "Panels and buttons" },
         { "check", "hudShown", "War table", "A small panel: enemies seen lately, dangerous ground nearby, and the skull for making a grudge." },
         { "check", "minimap", "Minimap button", "Click opens this book; right-click opens Settings." },
         { "topic", "This book" },
@@ -198,16 +213,16 @@ local SPEC = {
     },
     grudges = {
         { "topic", "When I see a grudge" },
-        { "check", "grudge.alert", "Announce it, with a sound" },
+        { "check", "grudge.alert", "Announce it, with a sound", "A banner and a sound. Follows Announce on screen and Play sounds on the Alerts tab." },
         { "radios", "grudge.again", "Again after", { { 1, "1 min" }, { 5, "5 min" }, { 15, "15 min" } }, indent = 24, when = On("grudge.alert") },
         { "check", "grudge.map", "Show where on the map", "Their crest and name, for 15 minutes." },
         { "check", "grudge.plates", "Skull on their nameplate and target frame" },
         { "topic", "Making grudges" },
-        { "note", "When the same player keeps killing me:", ink = true },
+        { "note", "When one player has killed my characters:", ink = true },
         { "radios", "grudge.auto", nil, { { "off", "Do nothing" }, { "offer", "Offer a grudge" }, { "add", "Add one" } } },
         { "radios", "grudge.after", "after", { { 2, "2 deaths" }, { 3, "3 deaths" }, { 5, "5 deaths" } }, lw = 40,
             when = function() return cfg.grudge.auto ~= "off" end },
-        { "note", "Killing a grudge settles it. A name leaves your ledger only when you forgive it, on the Grudges tab." },
+        { "note", "Killing a grudge settles it. A name is struck off only when you forgive it, on the Grudges tab." },
     },
 }
 
@@ -390,24 +405,17 @@ local function IconSize(panel, item, x, y)
     return 32
 end
 
-local function Layers(panel, item, x, y)
-    local h = 0
-    for _, key in ipairs(C.LAYERS) do
-        local cb = MakeCheck(panel, x, y + h, C.LAYER_LABELS[key])
-        if LAYER_HINT[key] then
-            local hint = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
-            hint:SetPoint("LEFT", cb.label, "RIGHT", 6, 0)
-            hint:SetText(LAYER_HINT[key])
-        end
-        Bind(item, cb, "layers." .. key)
-        h = h + 22
-        -- guildmates' fighting is part of the one haze, not a layer of its own
-        if key == "battle" then
-            Bind(item, MakeCheck(panel, x + 24, y + h, "with guildmates' fighting"), "guildHaze")
-            h = h + 22
-        end
+-- A layer: a compact check, its hint inline after the label.
+local function LayerRow(panel, item, spec, x, y)
+    local key = spec[2]:match("^layers%.(.+)$")
+    local cb = MakeCheck(panel, x, y, spec[3] or C.LAYER_LABELS[key or ""] or spec[2])
+    if spec[4] then
+        cb.hint = K.Font(panel, QuestFontNormalSmall, GameFontNormalSmall, K.FADED)
+        cb.hint:SetPoint("LEFT", cb.label, "RIGHT", 6, 0)
+        cb.hint:SetText(spec[4])
     end
-    return h + 6
+    Bind(item, cb, spec[2], spec.after)
+    return 22
 end
 
 local function Row(panel, spec, y)
@@ -436,9 +444,10 @@ local function Row(panel, spec, y)
     elseif kind == "radios" then
         local g
         g, h = MakeRadios(panel, x, y, spec[3], spec[4], spec.lw, spec.gap)
+        h = spec.step or h -- step: a sub-row's tighter advance (the layers' "kept for")
         Bind(item, g, spec[2], spec.after)
-    elseif kind == "layers" then
-        h = Layers(panel, item, x, y)
+    elseif kind == "layer" then
+        h = LayerRow(panel, item, spec, x, y)
     else
         h = IconSize(panel, item, x, y)
     end
@@ -577,7 +586,15 @@ end
 ns.Settings = { Build = Build, Render = function() P.Render() end, Refresh = function() P.Refresh() end,
     Restore = function() P.Restore() end, Sections = SECTIONS,
     Open = function(key) if SPEC[key] then P.section = key end end,
-    Bottom = function(key) return P.panels[key] and P.panels[key].bottom end }
+    Bottom = function(key) return P.panels[key] and P.panels[key].bottom end,
+    -- for tests: whether the open section's row bound to path is live (not greyed)
+    Enabled = function(path)
+        for _, item in ipairs(P.items[P.section] or {}) do
+            for _, p in ipairs(item.paths or {}) do
+                if p == path then return not item.spec.when or (item.spec.when() and true or false) end
+            end
+        end
+    end }
 
 -- Once per account per release (every release since 3.8.1; before, only
 -- feature releases), never in combat or a battleground: the chronicle on

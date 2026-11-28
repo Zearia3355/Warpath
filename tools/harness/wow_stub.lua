@@ -136,7 +136,9 @@ function Widget:SetHeight(h) self.__h = h end
 function Widget:GetWidth() return self.__w end
 function Widget:GetHeight() return self.__h end
 function Widget:GetSize() return self.__w, self.__h end
-function Widget:GetScale() return 1 end
+-- kept apart from render.py's __scale, so renders don't change
+function Widget:SetScale(s) self.__setScale = s end
+function Widget:GetScale() return self.__setScale or 1 end
 function Widget:GetEffectiveScale() return 1 end
 function Widget:GetFrameLevel() return self.__level or 1 end
 function Widget:SetFrameLevel(l) self.__level = l end

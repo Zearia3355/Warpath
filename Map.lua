@@ -237,7 +237,7 @@ end
 
 -- Pins don't take clicks (3.7.9): hovering shows the tooltip, and clicks fall
 -- through to the map (zoom in / out). Waypoints are set from the chronicle,
--- the grudge ledger or /warpath waypoint.
+-- the Grudges tab or /warpath waypoint.
 
 local PIN_LEVEL = { sight = 1, mob = 2, kill = 3, death = 3, skill = 4, sdeath = 4, many = 5, grudge = 6 }
 
@@ -2108,8 +2108,10 @@ end
 -- Corpse runs (dashed ice blue with a soft glow), fading along their length
 -- over their lifetime; the flight legs you keep flying underneath. Today's
 -- flights are no longer drawn on their own (3.8): they're in the legs.
+-- Each has its own layer (3.8.5): cfg.layers.runs and cfg.layers.flights.
 local function DrawRuns(D, scene)
     local w, h, now = D.w, D.h, D.now
+    local runs, flights = cfg.layers.runs, cfg.layers.flights
     -- on a continent or the world, its own legs (recorded while the game
     -- placed you on the continent map) are drawn the continent way too
     local info = scene.viewed and C_Map.GetMapInfo(scene.viewed)
@@ -2119,10 +2121,10 @@ local function DrawRuns(D, scene)
         local p, z = e.p, e.z
         local thin = p.far and w * 0.0011 or w * 0.0020
         local sx, sy, ox, oy = p.sx * w, p.sy * h, p.ox * w, p.oy * h
-        if z.air and ns.Flights then
+        if flights and z.air and ns.Flights then
             if p.far or wide then DrawLegsFar(D, z, sx, sy, ox, oy, queue) else DrawLegs(D, z, p.far, sx, sy, ox, oy) end
         end
-        for ri = #z.runs, 1, -1 do -- newest first
+        for ri = runs and #z.runs or 0, 1, -1 do -- newest first
             local s = z.runs[ri]
             local look, life = RUN_LOOK[s.k], RunSeconds(s.k)
             local n = #s / 2
@@ -2361,14 +2363,19 @@ local function DrawMarks(D, scene, from, upTo)
             if p then Pin("grudge", g, p, g.x, g.y, foe.crest, base * 1.3, 1, 1, 1, 1 - 0.5 * (now - g.t) / C.GRUDGE_SEEN) end
         end
     end
-    if L.shared then
+    -- Guildmates' marks: each under its own layer (3.8.5), and only while
+    -- guild sharing is on. Off, they're hidden, not deleted (Joe).
+    local guild = cfg.share
+    if guild and L.sightings and L.guildSights then
         for _, s in ipairs(shared) do
             local p = Proj(scene, s.mapID)
             if p and s.expire >= now and s.kind == "S" then
                 Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 0.85 - 0.45 * math.min(1, (now - s.t) / C.SIGHT_LIVE))
             end
         end
-        -- guildmates' kills and deaths: full for 2 hours, then fading over 3 days
+    end
+    -- guildmates' kills and deaths: full for 2 hours, then fading over 3 days
+    if guild and L.marks and L.guildMarks then
         for _, e in ipairs(scene.zones) do
             for _, g in ipairs(e.z.gmarks or {}) do
                 local f = ns.GuildFade(g, now)
@@ -2467,12 +2474,12 @@ local function Draw(scene, limit)
         from = scene.since
     else
         if L.roads then DrawGround(D, scene) end
-        if L.runs then DrawRuns(D, scene) end
+        if L.runs or L.flights then DrawRuns(D, scene) end
         if L.recent then DrawToday(D, scene) end
     end
     DrawMarks(D, scene, from, upTo)
-    -- spirit healers, on the corpse runs layer (3.9); zone maps only
-    ns.Spirits.Draw(overlay, (not limit and L.runs) and scene.viewed or nil, MapScale())
+    -- spirit healers, a layer of their own (3.8.5); zone maps only
+    ns.Spirits.Draw(overlay, (not limit and L.spirits) and scene.viewed or nil, MapScale())
     if ns.ZoneStanding then ns.ZoneStanding(D.standing) end
 
     for i = D.nl + 1, #lines do lines[i]:Hide() end
