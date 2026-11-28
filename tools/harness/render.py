@@ -429,6 +429,9 @@ def main():
     bk.add_argument("--fonts", default="standin", choices=("standin", "game", "repo"),
                     help="standin: the design renders' faces at their sizes (default); game: the same faces sized "
                          "to the widths the game measured (the probe); repo: EB Garamond for every face (tests)")
+    ap.add_argument("--night", choices=["design"], help="--book campaigns: give Lethality's 25 November campaign the "
+                    "design renders' made-up 21-kill night (type/overflow.py LONG), to compare the right page")
+    ap.add_argument("--run", help="--book: Lua to run after opening, before the render (fold a zone, scroll...)")
     args = ap.parse_args()
     if args.book:
         return book_main(ap, args)
@@ -510,7 +513,11 @@ def book_main(ap, args):
         ap.error("--origin is shot, canon or x,y")
     addon_dir = addon_from_ref(args.ref[0]) if args.ref and args.ref[0] != "work" else REPO
     wow, typ = B.boot(saved, account, name, at, args.fonts, addon_dir)
+    if args.night == "design":
+        wow.run(B.DESIGN_NIGHT)
     already = B.open_book(wow, args.book, args.page, args.section, args.preview)
+    if args.run:
+        wow.run(args.run)
     img, painter = B.render_book(wow, typ, origin)
     what = args.book + (f" {args.section}" if args.section else "") + (f" p{args.page}" if args.page else "")
     label = f"code: {what}  -  {args.char or 'fresh character'}  -  {args.ref[0] if args.ref else 'working copy'}"

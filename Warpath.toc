@@ -32,7 +32,11 @@ Map.lua
 MapButton.lua
 Minimap.lua
 Hud.lua
+Book.lua
 Chronicle.lua
+ChronCampaigns.lua
+ChronGrudges.lua
+ChronWarpath.lua
 Options.lua
 Commands.lua
 Events.lua
