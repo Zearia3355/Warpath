@@ -316,10 +316,7 @@ end
 local function QueryFit(tile, x, y, size, class)
     if class then return end
     local px = math.floor(size * 0.7)
-    if tile.q.bpx ~= px then
-        tile.q:SetFont(Book.FACES.morph, px / 1.2, "")
-        tile.q.bpx = px
-    end
+    if tile.q.bpx ~= px then Book.Face(tile.q, "morph", px) end
     Book.Shadow(tile.q, { 40, 6, 4 })
     Put(tile.q, x + size / 2, y + size * 0.8, "m", tile.rel, tile.ox, tile.oy)
 end
@@ -425,7 +422,7 @@ local function BuildNote(E)
     Book.Box(box, G.RCX - n.w / 2, n.y - 20, G.RCX + n.w / 2, n.rule)
     box:SetAutoFocus(false)
     box:SetMaxLetters(120)
-    box:SetFont(Book.FACES.gari, 18 / 1.2, "")
+    Book.Face(box, "gari", 18)        -- a game font first; Garamond once it loads
     box:SetTextColor(Book.RGB(INK))
     box:SetJustifyH("CENTER")
     box:Hide()
