@@ -45,21 +45,10 @@ local G = {
 }
 Page.GEOMETRY = G
 
--- The drop cap's stem (the right edge of the letter's upper half) and foot
--- as shares of its width, measured on the design's face (type.py stem()):
--- lines 1-2 tuck to the stem, line 3 clears the foot.
-local STEM = { A = 0.758, B = 0.887, C = 0.966, D = 0.955, E = 0.917, F = 0.933, G = 0.881, H = 0.970, I = 0.903,
-    J = 0.935, K = 0.952, L = 0.583, M = 0.975, N = 0.970, O = 0.940, P = 0.959, Q = 0.940, R = 0.842, S = 0.878,
-    T = 0.981, U = 0.984, V = 0.984, W = 1, X = 0.981, Y = 1, Z = 0.943 }
+-- The drop cap's stem and foot: Book.STEM.
+local STEM = Book.STEM
 
--- The map print (spec, "The route map"): the world map's art, desaturated,
--- MOD-blended, plus an ADD layer of the art and one of a flat colour, so the
--- page comes out as page x (a + b x grey) per channel, the straight line
--- nearest the design's sepia ramp (fitted on Joe's world map, land kept at
--- or under the paper's tone).
-local PRINT_MOD = { 0.89, 1, 1 }
-local PRINT_ADDART = { 0, 0.158, 0.141 }
-local PRINT_ADD = { 0.398, 0.133, 0.021 }   -- the fit plus 5% of the page, matched to the design render
+-- The map print: Book.WorldPrint.
 -- The design's crop of the world map layer (1002 x 668 px).
 local CROP = { 58.2, 144.9, 855.2, 530.7 }
 -- Ink on the map, already multiplied by the page's tone under it
@@ -474,39 +463,7 @@ local function LayMap(camp, top)
     Book.Box(m.mask, x0, y0, x0 + w, y0 + h, P.L)
     local i = 1
     -- the art: the world map's tiles, cropped to the design's window
-    local files = C_Map.GetMapArtLayerTextures and C_Map.GetMapArtLayerTextures(947, 1)
-    local layers = C_Map.GetMapArtLayers and C_Map.GetMapArtLayers(947)
-    local L1 = layers and layers[1]
-    if files and L1 then
-        local tw, th = L1.tileWidth or 256, L1.tileHeight or 256
-        local cols = math.ceil((L1.layerWidth or 1002) / tw)
-        local sx, sy = w / (CROP[3] - CROP[1]), h / (CROP[4] - CROP[2])
-        for k, file in ipairs(files) do
-            local c, r = (k - 1) % cols, math.floor((k - 1) / cols)
-            local lx0, ly0 = math.max(CROP[1], c * tw), math.max(CROP[2], r * th)
-            local lx1, ly1 = math.min(CROP[3], (c + 1) * tw), math.min(CROP[4], (r + 1) * th)
-            if lx1 > lx0 and ly1 > ly0 then
-                for pass = 1, 2 do
-                    local add = pass == 2
-                    if not add or PRINT_ADDART[2] + PRINT_ADDART[3] + PRINT_ADDART[1] > 0 then
-                        local t = MapTex(i, add and "ADD" or "MOD")
-                        i = i + 1
-                        t:SetTexture(file)
-                        t:SetTexCoord((lx0 - c * tw) / tw, (lx1 - c * tw) / tw, (ly0 - r * th) / th, (ly1 - r * th) / th)
-                        t:SetDesaturated(true)
-                        local v = add and PRINT_ADDART or PRINT_MOD
-                        t:SetVertexColor(v[1], v[2], v[3], 1)
-                        Book.Box(t, x0 + (lx0 - CROP[1]) * sx, y0 + (ly0 - CROP[2]) * sy,
-                            x0 + (lx1 - CROP[1]) * sx, y0 + (ly1 - CROP[2]) * sy, P.L)
-                    end
-                end
-            end
-        end
-        local t = MapTex(i, "ADD")
-        i = i + 1
-        t:SetColorTexture(PRINT_ADD[1], PRINT_ADD[2], PRINT_ADD[3], 1)
-        Book.Box(t, x0, y0, x0 + w, y0 + h, P.L)
-    end
+    i = Book.WorldPrint(MapTex, i, CROP, x0, y0, w, h, P.L)
 
     -- the route: a dashed red road, bowed, 20 dashes a leg
     local pts = Route(camp)

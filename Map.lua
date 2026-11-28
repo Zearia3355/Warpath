@@ -43,6 +43,13 @@ local function Gild(g)
     return Lerp(a[1], b[1], t), Lerp(a[2], b[2], t), Lerp(a[3], b[3], t)
 end
 
+-- How the marks look, shared with the chronicle's map key (3.8.5,
+-- ChronWarpath.lua) so the key can't drift from the map. The line pieces
+-- draw through put(sub, blend, thick, r, g, b, a, x1, y1, x2, y2), which
+-- returns false once out of budget; the map's put is PutLine on the overlay.
+local Look = {}
+ns.MapLook = Look
+
 ---------------------------------------------------------------------------
 -- Scene
 ---------------------------------------------------------------------------
@@ -119,6 +126,15 @@ local function PutLine(i, sub, blend, thick, r, g, b, a, x1, y1, x2, y2)
     l:SetEndPoint("TOPLEFT", overlay, x2, y2)
     l:Show()
     return l
+end
+
+-- The draw state's put (see Look): the next pooled line. Budgets are the
+-- callers' (each layer counts its own).
+local function MapPut(D)
+    return function(sub, blend, thick, r, g, b, a, x1, y1, x2, y2)
+        D.nl = D.nl + 1
+        return PutLine(D.nl, sub, blend, thick, r, g, b, a, x1, y1, x2, y2)
+    end
 end
 
 local function GetDot(i)
@@ -246,6 +262,22 @@ local PIN_LEVEL = { sight = 1, mob = 2, kill = 3, death = 3, skill = 4, sdeath =
 -- (Leatrix Maps) or zooming in no longer blows them up. Times the icon size
 -- setting (25% to 200%). Lines, footsteps and the haze still scale with the map.
 local PIN_PX = 18
+
+-- Look.Pin: a pin's texture and colour (your own marks: a kill, a death; an
+-- enemy seen is the foe's crest), as DrawMarks pins them. fac: whose side.
+function Look.PinCoords(kind)
+    if kind == "sight" or kind == "grudge" then return 0, 0.62, 0, 0.62 end
+    if kind == "mob" then return 0.5, 0.75, 0.25, 0.5 end -- the cross on the raid-marker sheet
+    return 0, 1, 0, 1
+end
+function Look.Pin(kind, fac)
+    if kind == "kill" then return C.TEX_BLADES, 1, 1, 1 end
+    if kind == "death" then return C.TEX_SKULL, 1, 1, 1 end
+    if kind == "sight" then
+        local foeOf = C.FACTION[(fac or faction).foe] or C.FACTION.Neutral
+        return foeOf.crest, 1, 1, 1
+    end
+end
 local activePins = 0
 local function MapScale()
     local k = overlay and overlay:GetEffectiveScale() / UIParent:GetEffectiveScale() or 1
@@ -399,11 +431,16 @@ end
 -- drawn with normal blending (never additive, so it can't wash to white),
 -- deepening from a faint rust to dark red as fights pile up. Strength comes
 -- from ns.BattleField, which spreads each fight over the cells around it.
+-- t: 0 (the faintest drawn) to 1 (full); a soft C.TEX_DOT of this colour.
+function Look.Haze(t)
+    return Lerp(0.62, 0.42, t), Lerp(0.20, 0.03, t), Lerp(0.09, 0.02, t),
+        C.BATTLE_ALPHA[1] + (C.BATTLE_ALPHA[2] - C.BATTLE_ALPHA[1]) * t
+end
+
 local function DrawHaze(D, scene)
     if not cfg.layers.battle then return end
     local w, h = D.w, D.h
     local span = C.BATTLE_FULL - C.BATTLE_MIN
-    local a0, a1 = C.BATTLE_ALPHA[1], C.BATTLE_ALPHA[2]
     for _, e in ipairs(scene.zones) do
         local z, p = e.z, e.p
         local cell = p.sx * w / C.SW
@@ -414,8 +451,9 @@ local function DrawHaze(D, scene)
                 D.nd = D.nd + 1
                 local d = GetDot(D.nd)
                 local x, y = CellXY(c, C.SW, C.SH)
-                d:SetVertexColor(Lerp(0.62, 0.42, t), Lerp(0.20, 0.03, t), Lerp(0.09, 0.02, t))
-                d:SetAlpha(a0 + (a1 - a0) * t)
+                local r, g, b, a = Look.Haze(t)
+                d:SetVertexColor(r, g, b)
+                d:SetAlpha(a)
                 local size = math.max(6, cell * (2.8 + 1.4 * t))
                 d:SetSize(size, size)
                 At(d, p, x, y, w, h)
@@ -444,7 +482,7 @@ end
 -- Tier 1 is complete at 12 (about two and a half weeks of daily use at the
 -- default gold threshold), tier 2 at 16.4 (about four and a half weeks). worn is the share of the
 -- band past full gold (9.6 to 20).
-local function Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
+local function Gilt(put, g, wear, worn, alpha, thin, x1, y1, x2, y2, fac)
     local core = thin * (1.1 + 1.9 * wear)
     local k = C.GILT_RELIEF
     local bodyT, lightT = Smooth((g - 0.55) / 0.45), Smooth(g / 0.6)
@@ -459,48 +497,45 @@ local function Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
     if nx * -1 + ny * 1 < 0 then nx, ny = -nx, -ny end -- towards the light (y grows upwards here)
     local off = core * 0.22
     local t1, t2 = Clamp((worn - 0.184) / 0.05), Clamp((worn - 0.605) / 0.05)
-    local deep = faction.deep or { faction.r * 0.7, faction.g * 0.7, faction.b * 0.7 }
+    fac = fac or faction
+    local deep = fac.deep or { fac.r * 0.7, fac.g * 0.7, fac.b * 0.7 }
     -- the edge: iron, then bronze
     local er, eg, eb = Lerp(0.15, 0.24, g), Lerp(0.14, 0.15, g), Lerp(0.13, 0.05, g)
-    D.nl = D.nl + 1
-    PutLine(D.nl, 0, "BLEND", core + thin * 0.9, er, eg, eb, 0.9 * alpha, x1, y1, x2, y2)
-    D.nl = D.nl + 1
-    PutLine(D.nl, 1, "BLEND", core, cr, cg, cb, alpha, x1, y1, x2, y2)
+    put(0, "BLEND", core + thin * 0.9, er, eg, eb, 0.9 * alpha, x1, y1, x2, y2)
+    put(1, "BLEND", core, cr, cg, cb, alpha, x1, y1, x2, y2)
     -- the shade; at tier 2 it takes your faction's colour
     local dark = 1 - 0.6 * k
     local sr, sg, sb = cr * dark, cg * dark * 0.92, cb * dark * 0.8
     sr, sg, sb = Lerp(sr, deep[1], t2), Lerp(sg, deep[2], t2), Lerp(sb, deep[3], t2)
-    D.nl = D.nl + 1
-    PutLine(D.nl, 2, "BLEND", core * (0.3 + 0.15 * k), sr, sg, sb, alpha,
+    put(2, "BLEND", core * (0.3 + 0.15 * k), sr, sg, sb, alpha,
         x1 - nx * off, y1 - ny * off, x2 - nx * off, y2 - ny * off)
-    D.nl = D.nl + 1
-    local stripe = PutLine(D.nl, 3, "BLEND", core * (0.25 + 0.12 * k), hr, hg, hb, alpha,
+    local stripe = put(3, "BLEND", core * (0.25 + 0.12 * k), hr, hg, hb, alpha,
         x1 + nx * off, y1 + ny * off, x2 + nx * off, y2 + ny * off)
     -- the streak down the middle
     local streak = core * 0.2 * t1
     if streak > 0 then
-        D.nl = D.nl + 1
-        PutLine(D.nl, 4, "BLEND", streak, deep[1], deep[2], deep[3], alpha, x1, y1, x2, y2)
+        put(4, "BLEND", streak, deep[1], deep[2], deep[3], alpha, x1, y1, x2, y2)
     end
     return stripe, hr, hg, hb
 end
 
-local function RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
-    if C.ROAD_STYLE == "gilt" then return Gilt(D, g, wear, worn, alpha, thin, x1, y1, x2, y2) end
+-- One stretch of road (Look.Road): put, then the road's gild g, wear and
+-- worn (0-1), alpha, the line unit thin and its ends; fac: whose colours
+-- (default yours). Returns the stripe the shimmer animates, if any.
+local function RoadSegment(put, g, wear, worn, alpha, thin, x1, y1, x2, y2, fac)
+    if C.ROAD_STYLE == "gilt" then return Gilt(put, g, wear, worn, alpha, thin, x1, y1, x2, y2, fac) end
     local core = thin * (1.1 + 1.9 * wear)
     local casing = core + thin * 1.5
     local cr, cg, cb = Gild(g)
-    D.nl = D.nl + 1
-    PutLine(D.nl, 0, "BLEND", casing, Lerp(0.08, 0.30, worn), Lerp(0.05, 0.19, worn), Lerp(0.02, 0.07, worn),
+    put(0, "BLEND", casing, Lerp(0.08, 0.30, worn), Lerp(0.05, 0.19, worn), Lerp(0.02, 0.07, worn),
         0.85 * alpha, x1, y1, x2, y2)
-    D.nl = D.nl + 1
-    PutLine(D.nl, 1, "BLEND", core, cr, cg, cb, alpha, x1, y1, x2, y2)
+    put(1, "BLEND", core, cr, cg, cb, alpha, x1, y1, x2, y2)
     if g >= 1 then
-        D.nl = D.nl + 1
         local r, gg, b = Lerp(0.97, 1.00, worn), Lerp(0.80, 0.90, worn), Lerp(0.34, 0.46, worn)
-        return PutLine(D.nl, 2, "BLEND", core * 0.42, r, gg, b, 1, x1, y1, x2, y2), r, gg, b
+        return put(2, "BLEND", core * 0.42, r, gg, b, 1, x1, y1, x2, y2), r, gg, b
     end
 end
+Look.Road = RoadSegment
 
 -- Roads as chains (3.7.12): runs of stretches from one junction or end to
 -- the next, so a road is drawn as one line with its corners eased, not as
@@ -995,7 +1030,7 @@ local function DrawGround(D, scene)
                     if joinB then x2, y2 = x2 + dx * e, y2 + dy * e end
                 end
             end
-            local stripe, r, gg, bb = RoadSegment(D, g, wear, worn, alpha, thin, x1, y1, x2, y2)
+            local stripe, r, gg, bb = RoadSegment(D.put, g, wear, worn, alpha, thin, x1, y1, x2, y2)
             if stripe and worn > 0.05 and shine then
                 shimmer[#shimmer + 1] = { l = stripe, u = (ax + bx) * 0.5 + (ay + by) * 0.3,
                     worn = worn, r = r, g = gg, b = bb }
@@ -1103,14 +1138,17 @@ end
 -- to an earthy dusk and shrink to dots, which on marsh art drawn in that
 -- same red-brown ink couldn't be followed. It now stays crimson, long
 -- dashes, and fades less; the casing (TRAIL_CASE) keeps it off the map ink.
-local function TrailLook(age, life)
-    local g, d = TrailG(age, life), faction.deep
+-- fac: whose colours (default yours; the chronicle's key passes its own).
+local function TrailLook(age, life, fac)
+    fac = fac or faction
+    local g, d = TrailG(age, life), fac.deep
     local t = math.min(1, g / 0.55)
-    local r, gg, b = Lerp(faction.r, d[1], t), Lerp(faction.g, d[2], t), Lerp(faction.b, d[3], t)
+    local r, gg, b = Lerp(fac.r, d[1], t), Lerp(fac.g, d[2], t), Lerp(fac.b, d[3], t)
     local tail = 1 - Smooth((age - life * 0.75) / (life * 0.25))
     local fill = 0.85 - 0.20 * Smooth((g - 0.27) / 0.12)
     return r, gg, b, (0.95 - 0.15 * g) * tail, 1 - 0.1 * g, fill
 end
+Look.Trail = TrailLook
 
 -- Each zone's areas as drawn now, the clips they put on the trail, and
 -- their visits in time order (for holding links). Kept on the scene entry.
@@ -1228,8 +1266,13 @@ end
 -- Trail dashes (count) sit on a dark casing, a layer below every dash's
 -- colour, so they read over any map art (3.8.3, Joe's pick: 1.7 x the
 -- width). The casing isn't counted against DASH_BUDGET, only LINE_BUDGET.
+-- Look.Case: the casing's width, colour and alpha under a dash of thick, a.
+function Look.Case(thick, a) return thick * C.TRAIL_CASE, 0.10, 0.04, 0.03, a * 0.75 end
 local function Ink(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
-    if count then InkOnce(D, p, clips, sub - 1, thick * C.TRAIL_CASE, 0.10, 0.04, 0.03, a * 0.75, x1, y1, x2, y2) end
+    if count then
+        local ct, cr, cg, cb, ca = Look.Case(thick, a)
+        InkOnce(D, p, clips, sub - 1, ct, cr, cg, cb, ca, x1, y1, x2, y2)
+    end
     InkOnce(D, p, clips, sub, thick, r, g, b, a, x1, y1, x2, y2, count)
 end
 
@@ -1444,6 +1487,9 @@ local PERIOD = 4                                       -- in dash slots
 local SHAFT0 = ARROW_SHAFT * (1 + 0.85)                -- a fresh arrow's shaft, in slots
 local GAP0 = (PERIOD - 2 * 0.85 - SHAFT0) / 3          -- the even gap
 local MARKS = { PERIOD - SHAFT0 / 2, GAP0 * 2 + 0.85 * 1.5, GAP0 + 0.85 / 2 } -- centres: arrow, dash, dash
+-- The trail's rhythm, in dash slots, for the chronicle's key: a fresh dash,
+-- the even gap, a fresh arrow's shaft, and its head per slot of fill.
+Look.RHYTHM = { dash = 0.85, gap = GAP0, shaft = SHAFT0, head = ARROW_HEAD, period = PERIOD }
 local GROW = (2 + ARROW_SHAFT) / 3                    -- each gap's share as marks shorten
 local SHRINK = { 0.5, 2 * GROW - 1, GROW }           -- share lost at each mark's back (arrow fallback: even)
 
@@ -1465,17 +1511,21 @@ local function ArrowSpan(s, d, tip, slot, fill)
 end
 
 local HEAD_WINGS = { 2.6, -2.6 }
+-- Look.Wing: wing i's (1, 2) offset from an arrow's tip, for a head of
+-- `size` px on a line `thick` px wide pointing along the unit (ux, uy).
+function Look.Wing(i, ux, uy, size, thick)
+    local wing = math.max(size, thick * 1.6)
+    local c, sn = math.cos(HEAD_WINGS[i]), math.sin(HEAD_WINGS[i])
+    return (ux * c - uy * sn) * wing, (ux * sn + uy * c) * wing
+end
 local function ArrowHead(D, p, clips, thick, r, g, b, a, px, py, qx, qy, size)
     local sx, sy = p.sx * D.w, p.sy * D.h
     local dx, dy = (qx - px) * sx, (qy - py) * sy
     local len = math.sqrt(dx * dx + dy * dy)
     if len == 0 then return end
-    local ux, uy = dx / len, dy / len
-    local wing = math.max(size, thick * 1.6)
-    for _, sg in ipairs(HEAD_WINGS) do
-        local c, sn = math.cos(sg), math.sin(sg)
-        Ink(D, p, clips, 6, thick, r, g, b, a, qx, qy,
-            qx + (ux * c - uy * sn) * wing / sx, qy + (ux * sn + uy * c) * wing / sy, true)
+    for i = 1, #HEAD_WINGS do
+        local wx, wy = Look.Wing(i, dx / len, dy / len, size, thick)
+        Ink(D, p, clips, 6, thick, r, g, b, a, qx, qy, qx + wx / sx, qy + wy / sy, true)
     end
 end
 
@@ -1694,6 +1744,15 @@ end
 -- Past areas' outlines are drawn like the trail (3.8.3, Joe's pick C): the
 -- trail's own dash, one per slot, on the same dark casing. The period never
 -- changes with age, so each dash keeps its place and only shortens.
+-- Look.Cased: one dash of an outline, on its casing when cased.
+function Look.Cased(put, thick, r, g, b, a, cased, x1, y1, x2, y2)
+    if cased then
+        local ct, cr, cg, cb, ca = Look.Case(thick, a)
+        put(5, "BLEND", ct, cr, cg, cb, ca, x1, y1, x2, y2)
+    end
+    return put(6, "BLEND", thick, r, g, b, a, x1, y1, x2, y2)
+end
+
 local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap, cased)
     local pos = 0
     for i = 1, #poly / 2 - 1 do
@@ -1707,12 +1766,7 @@ local function DrawOutline(D, p, poly, thick, r, g, b, a, dash, gap, cased)
                 local f0, f1 = u / L, v / L
                 local px0, py0 = (p.ox + (x1 + (x2 - x1) * f0) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f0) * p.sy) * D.h
                 local px1, py1 = (p.ox + (x1 + (x2 - x1) * f1) * p.sx) * D.w, -(p.oy + (y1 + (y2 - y1) * f1) * p.sy) * D.h
-                if cased then
-                    D.nl = D.nl + 1
-                    PutLine(D.nl, 5, "BLEND", thick * C.TRAIL_CASE, 0.10, 0.04, 0.03, a * 0.75, px0, py0, px1, py1)
-                end
-                D.nl = D.nl + 1
-                PutLine(D.nl, 6, "BLEND", thick, r, g, b, a, px0, py0, px1, py1)
+                Look.Cased(D.put, thick, r, g, b, a, cased, px0, py0, px1, py1)
                 u = v
             else
                 u = u + math.max(dash + gap - ph, 1e-7)
@@ -1766,8 +1820,9 @@ local function DrawToday(D, scene)
     SetTail(D, scene)
 end
 
--- Dashes from (x1,y1) to (x2,y2), continuing the pattern from phase.
-local function Dashes(D, sub, thick, r, g, b, a, dash, gap, phase, x1, y1, x2, y2)
+-- Dashes from (x1,y1) to (x2,y2), continuing the pattern from phase
+-- (Look.Dashes: through put, until it returns false).
+function Look.Dashes(put, sub, thick, r, g, b, a, dash, gap, phase, x1, y1, x2, y2)
     local dx, dy = x2 - x1, y2 - y1
     local len = math.sqrt(dx * dx + dy * dy)
     if len < 0.01 then return phase end
@@ -1778,16 +1833,25 @@ local function Dashes(D, sub, thick, r, g, b, a, dash, gap, phase, x1, y1, x2, y
         local inPat = (phase + pos) % period
         if inPat < dash then
             local stop = math.min(len, pos + (dash - inPat))
-            if D.nrun >= C.RUN_BUDGET then return phase + len end
-            D.nrun, D.nl = D.nrun + 1, D.nl + 1
-            PutLine(D.nl, sub, "BLEND", thick, r, g, b, a,
-                x1 + ux * pos, y1 + uy * pos, x1 + ux * stop, y1 + uy * stop)
+            if put(sub, "BLEND", thick, r, g, b, a, x1 + ux * pos, y1 + uy * pos, x1 + ux * stop, y1 + uy * stop) == false then
+                return phase + len
+            end
             pos = stop
         else
             pos = pos + (period - inPat)
         end
     end
     return phase + len
+end
+
+-- Corpse runs' dashes: counted against RUN_BUDGET.
+local function Dashes(D, sub, thick, r, g, b, a, dash, gap, phase, x1, y1, x2, y2)
+    D.runPut = D.runPut or function(...)
+        if D.nrun >= C.RUN_BUDGET then return false end
+        D.nrun = D.nrun + 1
+        return D.put(...)
+    end
+    return Look.Dashes(D.runPut, sub, thick, r, g, b, a, dash, gap, phase, x1, y1, x2, y2)
 end
 
 local RUN_LOOK = {
@@ -1816,6 +1880,16 @@ local AIR_LOOK = {
     { t0 = 3.2, t1 = 4.4, a0 = 0.75, a1 = 0.95, r = 0.08, g = 0.05, b = 0.10 },
     { t0 = 1.4, t1 = 2.2, a0 = 0.95, a1 = 1.00, r = 0.25, g = 0.45, b = 1.00 },
 }
+Look.AIR = AIR_LOOK
+-- Look.Air: one dash of a flight leg, the casing then the colour over it;
+-- u: how well flown (0-1), vis: its fade, thin: the line unit in px.
+function Look.Air(put, thin, u, vis, x1, y1, x2, y2)
+    for pi, P in ipairs(AIR_LOOK) do
+        put(pi - 3, "BLEND", thin * (P.t0 + (P.t1 - P.t0) * u), P.r, P.g, P.b, (P.a0 + (P.a1 - P.a0) * u) * vis,
+            x1, y1, x2, y2)
+    end
+end
+
 local function DrawLegs(D, z, far, sx, sy, ox, oy)
     local Strength, lo, look = ns.Flights.Strength, C.AIR_SHOW - C.AIR_FADE, AIR_LOOK
     local thin = D.w * (far and look.far or look.zone)
@@ -1862,12 +1936,8 @@ local function DrawLegs(D, z, far, sx, sy, ox, oy)
                         local inPat = (at[a] + pos) % period
                         if inPat < look.dash then
                             local stop = math.min(len, pos + look.dash - inPat)
-                            for pi, P in ipairs(look) do -- casing, then the colour over it
-                                D.nair, D.nl = D.nair + 1, D.nl + 1
-                                PutLine(D.nl, pi - 3, "BLEND", thin * (P.t0 + (P.t1 - P.t0) * u),
-                                    P.r, P.g, P.b, (P.a0 + (P.a1 - P.a0) * u) * vis,
-                                    x1 + ux * pos, y1 + uy * pos, x1 + ux * stop, y1 + uy * stop)
-                            end
+                            D.nair = D.nair + np
+                            Look.Air(D.put, thin, u, vis, x1 + ux * pos, y1 + uy * pos, x1 + ux * stop, y1 + uy * stop)
                             pos = stop
                         else
                             pos = pos + period - inPat
@@ -2096,11 +2166,8 @@ local function FlushAir(D, queue)
             local key = gx * 65536 + gy
             seen[key] = seen[key] or {}
             table.insert(seen[key], { L = k.L, X = X, Y = Y, ux = k.ux, uy = k.uy, x1 = k.x1, y1 = k.y1, x2 = k.x2, y2 = k.y2, edge = k.edge })
-            for pi, P in ipairs(AIR_LOOK) do -- casing, then the colour over it
-                D.nair, D.nl = D.nair + 1, D.nl + 1
-                PutLine(D.nl, pi - 3, "BLEND", k.thin * (P.t0 + (P.t1 - P.t0) * k.u),
-                    P.r, P.g, P.b, (P.a0 + (P.a1 - P.a0) * k.u) * k.vis, k.x1, k.y1, k.x2, k.y2)
-            end
+            D.nair = D.nair + #AIR_LOOK
+            Look.Air(D.put, k.thin, k.u, k.vis, k.x1, k.y1, k.x2, k.y2)
         end
     end
 end
@@ -2305,9 +2372,7 @@ local function DrawMarks(D, scene, from, upTo)
         local f = GetPin(D.np)
         f.kind, f.d, f.mapID = kind, d, p.mapID
         f.tex:SetTexture(tex)
-        if kind == "sight" or kind == "grudge" then f.tex:SetTexCoord(0, 0.62, 0, 0.62)
-        elseif kind == "mob" then f.tex:SetTexCoord(0.5, 0.75, 0.25, 0.5) -- the cross on the raid-marker sheet
-        else f.tex:SetTexCoord(0, 1, 0, 1) end
+        f.tex:SetTexCoord(Look.PinCoords(kind))
         f.tex:SetDesaturated(kind == "mob")
         f.px = size * 100 / (cfg.iconScale or 100) -- at 100%, for RescalePins
         if kind == "grudge" then
@@ -2336,13 +2401,13 @@ local function DrawMarks(D, scene, from, upTo)
                 local f = D.replay and 1 or ns.MarkFade(m, now)
                 if f >= 0.03 and m[3] >= from and m[3] <= upTo then
                     if m[4] == "kill" then
-                        Pin("kill", m, e.p, m[1], m[2], C.TEX_BLADES, base, 1, 1, 1, f)
+                        Pin("kill", m, e.p, m[1], m[2], (Look.Pin("kill")), base, 1, 1, 1, f)
                     elseif not m.pvp then -- mobs and falls: a small grey cross, not a skull (3.7.5)
                         Pin("mob", m, e.p, m[1], m[2], C.TEX_RAID, base * 0.7, 0.72, 0.72, 0.72, f)
                     elseif m.av then
                         Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base, 1, 0.82, 0.2, f)
                     else
-                        Pin("death", m, e.p, m[1], m[2], C.TEX_SKULL, base, 1, 1, 1, f)
+                        Pin("death", m, e.p, m[1], m[2], (Look.Pin("death")), base, 1, 1, 1, f)
                     end
                 end
             end
@@ -2353,7 +2418,7 @@ local function DrawMarks(D, scene, from, upTo)
         for _, s in ipairs(recentSight) do
             local p = Proj(scene, s.mapID)
             if p and now - s.t <= C.SIGHT_LIVE then
-                Pin("sight", s, p, s.x, s.y, foe.crest, base * 1.3, 1, 1, 1, 1 - 0.6 * (now - s.t) / C.SIGHT_LIVE)
+                Pin("sight", s, p, s.x, s.y, (Look.Pin("sight")), base * 1.3, 1, 1, 1, 1 - 0.6 * (now - s.t) / C.SIGHT_LIVE)
             end
         end
     end
@@ -2461,6 +2526,7 @@ local EMPTY = { proj = {}, zones = {} }
 local function Draw(scene, limit)
     local D = { w = overlay:GetWidth(), h = overlay:GetHeight(), now = time(), replay = limit and true,
         nl = 0, nd = 0, ng = 0, np = 0, nb = 0, ns = 0, nr = 0, ngl = 0, nrun = 0, ndash = 0, ntag = 0, nair = 0 }
+    D.put = MapPut(D)
     local L = cfg.layers
     tail.stroke, tail.p, tail.clips = nil, nil, nil
     for i = #shimmer, 1, -1 do shimmer[i] = nil end

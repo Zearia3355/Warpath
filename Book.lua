@@ -425,8 +425,10 @@ local BAND_COL, BAND_A = { 222, 150, 44 }, 160 / 255
 local Band = {}
 Band.__index = Band
 
-function Book.Band(parent, rel, ox, oy)
-    return setmetatable({ parent = parent, rel = rel, ox = ox, oy = oy, strips = {}, n = 0 }, Band)
+-- alpha: the band's strength (default the deeds' 160/255; the Warpath
+-- tab's "read before" divider is 150).
+function Book.Band(parent, rel, ox, oy, alpha)
+    return setmetatable({ parent = parent, rel = rel, ox = ox, oy = oy, strips = {}, n = 0, alpha = alpha }, Band)
 end
 
 function Band:Strip(i)
@@ -456,7 +458,7 @@ function Band:Set(x0, x1, y0, y1, roundTop, roundBot)
         local s = self:Strip(i)
         for k = 1, #BAND_U - 1 do
             local xa, xb = x0 + (x1 - x0) * BAND_U[k], x0 + (x1 - x0) * BAND_U[k + 1]
-            local a = BAND_A * row[3]
+            local a = (self.alpha or BAND_A) * row[3]
             s[k]:SetGradient("HORIZONTAL", CreateColor(r, g, b, a * BAND_V[k]), CreateColor(r, g, b, a * BAND_V[k + 1]))
             Book.Box(s[k], xa, row[1], xb, row[2], self.rel, self.ox, self.oy)
             s[k]:Show()
@@ -727,6 +729,93 @@ function Book.Settle(relayout)
     end
     C_Timer.After(0, Check)
 end
+
+---------------------------------------------------------------------------
+-- A lozenge (a diamond taller than wide: the What's New notes' mark, 8 x 10)
+-- from 1 px rows, as the chevron is built; :Move(cx, cy), :SetShown,
+-- :Color.
+---------------------------------------------------------------------------
+
+local Lozenge = {}
+Lozenge.__index = Lozenge
+
+function Book.Lozenge(parent, w, h, col, layer, rel, ox, oy)
+    local z = setmetatable({ rows = {}, w = w, h = h, rel = rel, ox = ox, oy = oy }, Lozenge)
+    for i = 1, h do z.rows[i] = Book.Solid(parent, layer or "ARTWORK", col or Book.RUBRIC, 1) end
+    return z
+end
+
+function Lozenge:Move(cx, cy)
+    local h, w = self.h, self.w
+    for k = 0, h - 1 do
+        local yc = k + 0.5 - h / 2               -- the row's centre, from the middle
+        local hw = w / 2 * (1 - math.abs(yc) / (h / 2))
+        Book.Box(self.rows[k + 1], cx - hw, cy - h / 2 + k, cx + hw, cy - h / 2 + k + 1, self.rel, self.ox, self.oy)
+    end
+    self.x, self.y = cx, cy
+end
+
+function Lozenge:SetShown(on) for _, t in ipairs(self.rows) do t:SetShown(on) end end
+function Lozenge:Color(col)
+    local r, g, b = RGB(col)
+    for _, t in ipairs(self.rows) do t:SetColorTexture(r, g, b, 1) end
+end
+
+---------------------------------------------------------------------------
+-- The world map printed in sepia (the Campaigns route map, the Warpath
+-- tab's picture): the World map's (947) art tiles, desaturated and
+-- MOD-blended, plus an ADD layer of the art and one of a flat colour, so the
+-- page comes out as page x (a + b x grey) per channel, the straight line
+-- nearest the design's sepia ramp (fitted on Joe's world map, land kept at
+-- or under the paper's tone).
+---------------------------------------------------------------------------
+
+local PRINT_MOD = { 0.89, 1, 1 }
+local PRINT_ADDART = { 0, 0.158, 0.141 }
+local PRINT_ADD = { 0.398, 0.133, 0.021 }   -- the fit plus 5% of the page, matched to the design render
+
+-- get(i, blend): the i-th texture of the caller's pool, shown, blend set.
+-- crop: {x0, y0, x1, y1} of the map's layer (1002 x 668 px); drawn over
+-- render px (x0, y0, w, h) of rel. Returns the next free index.
+function Book.WorldPrint(get, i, crop, x0, y0, w, h, rel)
+    local files = C_Map.GetMapArtLayerTextures and C_Map.GetMapArtLayerTextures(947, 1)
+    local layers = C_Map.GetMapArtLayers and C_Map.GetMapArtLayers(947)
+    local L1 = layers and layers[1]
+    if not (files and L1) then return i end
+    local tw, th = L1.tileWidth or 256, L1.tileHeight or 256
+    local cols = math.ceil((L1.layerWidth or 1002) / tw)
+    local sx, sy = w / (crop[3] - crop[1]), h / (crop[4] - crop[2])
+    for k, file in ipairs(files) do
+        local c, r = (k - 1) % cols, math.floor((k - 1) / cols)
+        local lx0, ly0 = math.max(crop[1], c * tw), math.max(crop[2], r * th)
+        local lx1, ly1 = math.min(crop[3], (c + 1) * tw), math.min(crop[4], (r + 1) * th)
+        if lx1 > lx0 and ly1 > ly0 then
+            for pass = 1, 2 do
+                local add = pass == 2
+                local t = get(i, add and "ADD" or "MOD")
+                i = i + 1
+                t:SetTexture(file)
+                t:SetTexCoord((lx0 - c * tw) / tw, (lx1 - c * tw) / tw, (ly0 - r * th) / th, (ly1 - r * th) / th)
+                t:SetDesaturated(true)
+                local v = add and PRINT_ADDART or PRINT_MOD
+                t:SetVertexColor(v[1], v[2], v[3], 1)
+                Book.Box(t, x0 + (lx0 - crop[1]) * sx, y0 + (ly0 - crop[2]) * sy,
+                    x0 + (lx1 - crop[1]) * sx, y0 + (ly1 - crop[2]) * sy, rel)
+            end
+        end
+    end
+    local t = get(i, "ADD")
+    t:SetColorTexture(PRINT_ADD[1], PRINT_ADD[2], PRINT_ADD[3], 1)
+    Book.Box(t, x0, y0, x0 + w, y0 + h, rel)
+    return i + 1
+end
+
+-- The sunk initial's stem (the right edge of the letter's upper half) and
+-- foot as shares of its width, measured on the design's face (type.py
+-- stem()): lines 1-2 tuck to the stem, line 3 clears the foot.
+Book.STEM = { A = 0.758, B = 0.887, C = 0.966, D = 0.955, E = 0.917, F = 0.933, G = 0.881, H = 0.970, I = 0.903,
+    J = 0.935, K = 0.952, L = 0.583, M = 0.975, N = 0.970, O = 0.940, P = 0.959, Q = 0.940, R = 0.842, S = 0.878,
+    T = 0.981, U = 0.984, V = 0.984, W = 1, X = 0.981, Y = 1, Z = 0.943 }
 
 ---------------------------------------------------------------------------
 -- Words
