@@ -45,6 +45,15 @@ All of it is under `tools/out/design/`, which git ignores. Each folder has its o
 - Rubric (122,31,15)
 - Gilt (214,168,82)
 
+## Where the book sits in a render (measured 2026-11-27)
+
+Every page spec gives positions in render pixels on the 1092 × 748 design canvas. The book renderer (`render.py --book`) measured the game's own frame against Joe's screenshot, which the design renders pasted their tabs, plate and buttons from: the book's top-left is at **(20.5, 40.4)**, and 1 UI unit is 1.2 px. So:
+
+- left page: x = (render x − 42.1) / 1.2, right page: x = (render x − 548.1) / 1.2, both: y = (render y − 62) / 1.2, from each page's top-left (the pages sit `PAD` = 18 units inside the book);
+- sizes divide by 1.2.
+
+The first guess, (44, 66) and (550, 66), was 2 px right and 4 px low; the specs now use the measured values. The book art (`Art/book/book.tga`) was cut with the frame at (18, 40), so in game it's anchored 2.1 units left and 0.3 units up of the book's top-left; then the art, the game's controls and the text all land where the designs show them.
+
 ## Joe's standing rules for these designs
 
 - **One spread per campaign.** On Campaigns, overflow scrolls inside a sheet and never turns the page. Joe, 2026-11-27: "The 2-page limitation really just applied to the campaign tab." Other pages may use several spreads with page arrows; the Ledger does (see `chronicle-ledger.md`).

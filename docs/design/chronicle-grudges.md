@@ -38,9 +38,9 @@ All are in `tools/out/design/grudges/`. Each has an `_ingame` version at 1.175×
 
 The units are the canon's. Positions are in **render px** on the book art (1092×748), at about 1.2 render px per game unit:
 
-- Left page: game x = (render x − 44) / 1.2.
-- Right page: game x = (render x − 550) / 1.2.
-- Both pages: game y = (render y − 66) / 1.2.
+- Left page: game x = (render x − 42.1) / 1.2.
+- Right page: game x = (render x − 548.1) / 1.2.
+- Both pages: game y = (render y − 62) / 1.2.
 
 Text columns:
 - Left page: L0 = 82 to LR = 510, centre CX = 296.

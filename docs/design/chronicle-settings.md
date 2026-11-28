@@ -41,8 +41,8 @@ Positions are in **render px** on the book art (1092×748), like the rest of the
 
 | Page | Game x from the page's left edge | Game y from the page's top |
 |---|---|---|
-| Left | (render x − 44) / 1.2 | (render y − 66) / 1.2 |
-| Right | (render x − 550) / 1.2 | (render y − 66) / 1.2 |
+| Left | (render x − 42.1) / 1.2 | (render y − 62) / 1.2 |
+| Right | (render x − 548.1) / 1.2 | (render y − 62) / 1.2 |
 
 Font sizes convert the same way. Text columns: left page L0 = 82 to LR = 510 (centre CX = 296); right page R0 = 586 to RR = 1017 (centre RCX = 801). Every y below is a text baseline.
 
