@@ -228,7 +228,7 @@ local function Popups()
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
     }
     StaticPopupDialogs.WARPATH_GRUDGE_FORGIVE = {
-        text = "Forgive %s?\nTheir name is struck from your ledger.",
+        text = "Forgive %s?\nTheir name is struck off.",
         button1 = "Forgive", button2 = CANCEL or "Cancel",
         OnAccept = function(_, full) if full then Grudge.Forgive(full) end end,
         timeout = 0, whileDead = true, hideOnEscape = true, preferredIndex = 3,
