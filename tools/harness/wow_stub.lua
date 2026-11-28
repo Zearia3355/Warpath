@@ -335,7 +335,8 @@ function Widget:SetMinMaxValues(a, b) self.__min, self.__max = a, b end
 function Widget:SetTexture(t) self.__texture = t end
 function Widget:GetTexture() return self.__texture end
 function Widget:SetColorTexture(r, g, b, a) self.__color = { r, g, b, a or 1 } self.__texture = "color" end
-function Widget:SetVertexColor(r, g, b, a) self.__vertex = { r, g, b, a or 1 } end
+-- SetVertexColor and SetGradient both set the vertex colours: the later wins.
+function Widget:SetVertexColor(r, g, b, a) self.__vertex = { r, g, b, a or 1 } self.__gradient = nil end
 function Widget:GetVertexColor() local v = self.__vertex or { 1, 1, 1, 1 } return unpack(v) end
 function Widget:SetTexCoord(...) self.__texcoord = { ... } end
 function Widget:SetStartPoint(rel, frame, x, y) self.__start = { x or 0, y or 0 } end
@@ -351,6 +352,7 @@ function Widget:SetAtlas(name) self.__texture = "atlas:" .. tostring(name) end
 -- SetGradient(orientation, minColor, maxColor) with CreateColor objects: the
 -- probe found this works on Forever (SetGradientAlpha doesn't exist).
 function Widget:SetGradient(orient, a, b)
+    self.__vertex = nil
     self.__gradient = { orient, { a.r, a.g, a.b, a.a or 1 }, { b.r, b.g, b.b, b.a or 1 } }
 end
 function Widget:AddMaskTexture(m)
@@ -367,6 +369,7 @@ function Widget:GetScrollChild() return self.__scrollChild end
 function Widget:SetVerticalScroll(v) self.__vscroll = v end
 function Widget:GetVerticalScroll() return self.__vscroll or 0 end
 function Widget:GetNumMaskTextures() return #(self.__masks or {}) end
+function Widget:GetMaskTexture(i) return (self.__masks or {})[i] end
 -- BackdropTemplate
 function Widget:SetBackdrop(t) self.__backdrop = t end
 function Widget:GetBackdrop() return self.__backdrop end

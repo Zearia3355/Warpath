@@ -3169,6 +3169,51 @@ class CampaignsPage(unittest.TestCase):
         self.assertIn("SAMPLE PAGES", self.date_text())
 
 
+class WorldPrint(unittest.TestCase):
+    """The sepia map print (Book.WorldPrint), drawn by the client's rules as
+    Joe's 3.8.5-test4 screenshots showed them: a mask can't soften MOD, and an
+    ADD texture behind a mask draws nothing. test4's print came out dark
+    olive and hard-edged on every page; these pin the fix."""
+
+    def setUp(self):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo")
+        self.wow.run(REF_CAMPAIGN)
+        self.wow.run("ns.Chronicle.Open(false, 'campaigns')")
+        self.img, self.painter = B.render_book(self.wow, self.typ)
+        self.prints = [r for r in self.painter.records if r["kind"] == "texture"
+                       and (r["path"].startswith("worldmap:") or (r["obj"]["__blend"] == "ADD" and r["path"] == "color"))]
+
+    def test_no_layer_of_the_print_is_masked(self):
+        self.assertGreater(len(self.prints), 12)
+        for r in self.prints:
+            self.assertEqual(self.B.lua_list(r["obj"]["__masks"]), [], r["path"])
+
+    def test_the_mod_layer_is_drawn_before_the_adds(self):
+        mods = [r["obj"]["__sub"] for r in self.prints if r["obj"]["__blend"] == "MOD"]
+        adds = [r["obj"]["__sub"] for r in self.prints if r["obj"]["__blend"] == "ADD"]
+        self.assertTrue(mods and adds)
+        self.assertLess(max(mods), min(adds))
+
+    def test_it_prints_sepia_with_a_soft_edge(self):
+        if not self.B.WORLD_PNG.exists():
+            self.skipTest("no world map screenshot to stand in for the client's art")
+        rect = self.wow.eval("ns.ChronCampaigns.Frames().mapRect[1]"), self.wow.eval("ns.ChronCampaigns.Frames().mapRect[2]")
+        def avg(x0, y0, x1, y1):
+            px = list(self.img.crop((x0, y0, x1, y1)).get_flattened_data())
+            return [sum(p[i] for p in px) / len(px) for i in range(3)]
+        x, y = rect
+        mid = avg(x + 120, y + 60, x + 260, y + 120)
+        # the design's print there: about (200, 132, 61); test4 drew (155, 115, 55)
+        self.assertGreater(mid[0], 185, f"the print is dark: {mid}")
+        self.assertGreater(mid[0] - mid[2], 110, "and sepia, not grey")
+        page = avg(x - 30, y + 60, x - 10, y + 120)
+        edge = avg(x + 1, y + 60, x + 4, y + 120)
+        for got, want in zip(edge, page):
+            self.assertAlmostEqual(got, want, delta=12, msg=f"the picture's edge fades into the page: {edge} vs {page}")
+
+
 class CampaignsRealData(unittest.TestCase):
     """Every campaign of every real character opens, renders and turns
     without a Lua error (WARPATH_WTF). Nothing is written."""

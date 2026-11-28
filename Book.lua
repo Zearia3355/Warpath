@@ -805,27 +805,97 @@ end
 
 ---------------------------------------------------------------------------
 -- The world map printed in sepia (the Campaigns route map, the Warpath
--- tab's picture): the World map's (947) art tiles, desaturated and
--- MOD-blended, plus an ADD layer of the art and one of a flat colour, so the
--- page comes out as page x (a + b x grey) per channel, the straight line
--- nearest the design's sepia ramp (fitted on Joe's world map, land kept at
--- or under the paper's tone).
+-- tab's picture, My Lands): a map's art tiles, desaturated and MOD-blended,
+-- plus an ADD layer of the art and one of a flat colour, so the page comes
+-- out as page x (a + b x grey) per channel, the straight line nearest the
+-- design's sepia ramp (fitted on Joe's world map, land kept at or under the
+-- paper's tone).
+--
+-- 3.8.5-test4 printed dark olive with hard edges on every page: in game a
+-- mask only changes alpha, which MOD blending ignores (so the MOD layer was
+-- never softened), and the ADD layers drew nothing through the mask (Joe's
+-- screenshots fit page x the MOD layer alone, channel for channel). So the
+-- print's layers carry no mask, are drawn in a fixed order (MOD, then the
+-- ADDs), and the soft edge is made the other way round: the book's own
+-- parchment is laid back over the picture's border, fading in from the
+-- edge (BLEND with SetGradient, both proven on Forever).
 ---------------------------------------------------------------------------
 
 local PRINT_MOD = { 0.89, 1, 1 }
 local PRINT_ADDART = { 0, 0.158, 0.141 }
 local PRINT_ADD = { 0.398, 0.133, 0.021 }   -- the fit plus 5% of the page, matched to the design render
+Book.PAGE_TONE = { 226 / 255, 161 / 255, 78 / 255 }   -- the parchment under the pictures, averaged
+-- The soft edge: how much parchment is laid back at a distance from the
+-- picture's edge, (px, alpha) pairs, the design mask's blurred rounded rect
+-- (inset 14 across and 12 down, blur 10) as straight pieces.
+local EDGE_X = { { 0, 1 }, { 14, 0.5 }, { 34, 0 } }
+local EDGE_Y = { { 0, 1 }, { 12, 0.5 }, { 32, 0 } }
+-- Sublevels in the caller's layer: the print under, the edge over.
+local SUB_MOD, SUB_ADD, SUB_EDGE = -4, -3, 6
 
--- get(i, blend): the i-th texture of the caller's pool, shown, blend set.
--- crop: {x0, y0, x1, y1} of the map's layer (1002 x 668 px); drawn over
--- render px (x0, y0, w, h) of rel. Returns the next free index.
-function Book.WorldPrint(get, i, crop, x0, y0, w, h, rel)
-    local files = C_Map.GetMapArtLayerTextures and C_Map.GetMapArtLayerTextures(947, 1)
-    local layers = C_Map.GetMapArtLayers and C_Map.GetMapArtLayers(947)
+-- The parchment under render px [x0,x1) x [y0,y1): the book art's own
+-- pixels there (book.tga's main piece, the art's top-left at 18, 40).
+function Book.Parchment(t, x0, y0, x1, y1)
+    t:SetTexture(ART .. "book")
+    t:SetTexCoord((x0 - 18) / 1024, (x1 - 18) / 1024, (y0 - 40) / 1024, (y1 - 40) / 1024)
+end
+
+-- A texture from the caller's pool, unmasked, at a sublevel of its layer.
+local function PrintTex(get, i, blend, sub)
+    local t = get(i, blend)
+    for k = (t.GetNumMaskTextures and t:GetNumMaskTextures() or 0), 1, -1 do
+        t:RemoveMaskTexture(t:GetMaskTexture(k))
+    end
+    t:SetDrawLayer((t:GetDrawLayer()), sub)
+    t:SetBlendMode(blend)
+    return t
+end
+
+-- The border laid back in parchment: two pieces a side, each fading in
+-- from the edge (rel's coordinates; ox, oy its top-left in render px).
+local function Edges(get, i, x0, y0, w, h, rel)
+    local x1, y1 = x0 + w, y0 + h
+    for side = 1, 4 do
+        local prof = (side <= 2) and EDGE_X or EDGE_Y
+        for k = 1, #prof - 1 do
+            local d0, a0, d1, a1 = prof[k][1], prof[k][2], prof[k + 1][1], prof[k + 1][2]
+            local t = PrintTex(get, i, "BLEND", SUB_EDGE)
+            i = i + 1
+            local bx0, by0, bx1, by1, orient, lo, hi
+            if side == 1 then bx0, bx1, by0, by1, orient, lo, hi = x0 + d0, x0 + d1, y0, y1, "HORIZONTAL", a0, a1
+            elseif side == 2 then bx0, bx1, by0, by1, orient, lo, hi = x1 - d1, x1 - d0, y0, y1, "HORIZONTAL", a1, a0
+            elseif side == 3 then bx0, bx1, by0, by1, orient, lo, hi = x0, x1, y0 + d0, y0 + d1, "VERTICAL", a1, a0
+            else bx0, bx1, by0, by1, orient, lo, hi = x0, x1, y1 - d1, y1 - d0, "VERTICAL", a0, a1 end
+            Book.Parchment(t, bx0, by0, bx1, by1)
+            -- VERTICAL runs from the bottom (min) to the top (max)
+            t:SetGradient(orient, CreateColor(1, 1, 1, lo), CreateColor(1, 1, 1, hi))
+            Book.Box(t, bx0, by0, bx1, by1, rel)
+        end
+    end
+    return i
+end
+
+-- get(i, blend): the i-th texture of the caller's pool, shown, with its
+-- vertex colour reset. crop: {x0, y0, x1, y1} of the map's art layer, in its
+-- px (947's is 1002 x 668), or fractions of it with opt.frac; drawn over
+-- render px (x0, y0, w, h) of rel, a frame at the book's top-left.
+-- opt.map: the map (default 947); opt.lighten: how far toward the bare page
+-- (My Lands' 0.4: page x (0.6 x print + 0.4), never past the paper's own
+-- tone); opt.edge = false: no soft edge.
+-- Returns the next free index.
+function Book.WorldPrint(get, i, crop, x0, y0, w, h, rel, opt)
+    opt = opt or {}
+    local map = opt.map or 947
+    local files = C_Map.GetMapArtLayerTextures and C_Map.GetMapArtLayerTextures(map, 1)
+    local layers = C_Map.GetMapArtLayers and C_Map.GetMapArtLayers(map)
     local L1 = layers and layers[1]
     if not (files and L1) then return i end
     local tw, th = L1.tileWidth or 256, L1.tileHeight or 256
-    local cols = math.ceil((L1.layerWidth or 1002) / tw)
+    local LW, LH = L1.layerWidth or 1002, L1.layerHeight or 668
+    if opt.frac then crop = { crop[1] * LW, crop[2] * LH, crop[3] * LW, crop[4] * LH } end
+    local cols = math.ceil(LW / tw)
+    local l, pg = opt.lighten or 0, Book.PAGE_TONE
+    local keep = 1 - l
     local sx, sy = w / (crop[3] - crop[1]), h / (crop[4] - crop[2])
     for k, file in ipairs(files) do
         local c, r = (k - 1) % cols, math.floor((k - 1) / cols)
@@ -834,22 +904,24 @@ function Book.WorldPrint(get, i, crop, x0, y0, w, h, rel)
         if lx1 > lx0 and ly1 > ly0 then
             for pass = 1, 2 do
                 local add = pass == 2
-                local t = get(i, add and "ADD" or "MOD")
+                local t = PrintTex(get, i, add and "ADD" or "MOD", add and SUB_ADD or SUB_MOD)
                 i = i + 1
                 t:SetTexture(file)
                 t:SetTexCoord((lx0 - c * tw) / tw, (lx1 - c * tw) / tw, (ly0 - r * th) / th, (ly1 - r * th) / th)
                 t:SetDesaturated(true)
                 local v = add and PRINT_ADDART or PRINT_MOD
-                t:SetVertexColor(v[1], v[2], v[3], 1)
+                t:SetVertexColor(v[1] * keep, v[2] * keep, v[3] * keep, 1)
                 Book.Box(t, x0 + (lx0 - crop[1]) * sx, y0 + (ly0 - crop[2]) * sy,
                     x0 + (lx1 - crop[1]) * sx, y0 + (ly1 - crop[2]) * sy, rel)
             end
         end
     end
-    local t = get(i, "ADD")
-    t:SetColorTexture(PRINT_ADD[1], PRINT_ADD[2], PRINT_ADD[3], 1)
+    local t = PrintTex(get, i, "ADD", SUB_ADD + 1)
+    t:SetColorTexture(PRINT_ADD[1] * keep + pg[1] * l, PRINT_ADD[2] * keep + pg[2] * l, PRINT_ADD[3] * keep + pg[3] * l, 1)
     Book.Box(t, x0, y0, x0 + w, y0 + h, rel)
-    return i + 1
+    i = i + 1
+    if opt.edge ~= false then i = Edges(get, i, x0, y0, w, h, rel) end
+    return i
 end
 
 -- The sunk initial's stem (the right edge of the letter's upper half) and

@@ -419,6 +419,7 @@ local function MapTex(i, blend)
         t:AddMaskTexture(m.mask)
         m.tex[i] = t
     end
+    t:SetDrawLayer("ARTWORK", 1)       -- the route over the print (WorldPrint sets its own)
     t:SetBlendMode(blend or "MOD")
     t:SetDesaturated(false)
     t:SetVertexColor(1, 1, 1, 1)
