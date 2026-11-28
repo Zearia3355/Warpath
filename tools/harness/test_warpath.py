@@ -543,8 +543,12 @@ class SettingsTab(unittest.TestCase):
         self.assertIsNone(wow.eval("WarpathSetup"), "the old options window is gone")
 
     def test_every_section_fits_its_page(self):
-        wow = self.opened()
-        floor = wow.eval("WarpathChronicle:GetHeight() - 36 - 44")
+        # 3.8.5: inside the sheet (its foot at render y 650), measured in the
+        # real faces (SettingsPage checks the spec's geometry)
+        import book_render as B
+        wow, _ = B.boot(fonts="repo")
+        B.open_book(wow, "settings")
+        floor = 650
         for key in wow.eval("(function() local t = {} for _, s in ipairs(ns.Settings.Sections) do t[#t + 1] = s[1] end return table.concat(t, ',') end)()").split(","):
             with self.subTest(section=key):
                 self.assertLessEqual(wow.eval(f"ns.Settings.Bottom({lua_str(key)})"), floor)
@@ -2820,8 +2824,9 @@ class BookRender(unittest.TestCase):
                 self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 801.7, delta=0.5)
                 self.assertAlmostEqual(r["top"], 98.0, delta=0.5)
                 self.assertAlmostEqual(r["baseline"], 113.84, delta=0.5)
-        # left page: TOP 0,-32, QuestTitleFont (Morpheus 18)
-        for tab, s in (("settings", "Settings"), ("grudges", "The Ledger of Grudges")):
+        # left page: TOP 0,-32, QuestTitleFont (Morpheus 18); Settings' is the
+        # 3.8.5 page's (SettingsPage checks it)
+        for tab, s in (("grudges", "The Ledger of Grudges"),):
             with self.subTest(heading=s):
                 r = self.text(tab, s)
                 self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 295.3, delta=0.5)
@@ -3945,6 +3950,337 @@ class KillCards(unittest.TestCase):
         self.assertIsNotNone(wow.eval("WarpathKillCardText"))
         self.assertEqual(wow.eval("WarpathKillCardText:GetParent() == UIParent"), True)
 
+
+
+class SettingsPage(unittest.TestCase):
+    """The Settings tab's settled look (3.8.5, Options.lua) against its spec,
+    docs/design/chronicle-settings.md, whose tables are the page's GEOMETRY.
+    Laid out by the book renderer with EB Garamond for every face (--fonts
+    repo), so numbers don't depend on the machine's fonts."""
+
+    P = "ns.Settings.Frames()"
+    GREY, INK, FADED, RUBRIC = (133, 115, 87), (46, 28, 10), (77, 56, 31), (122, 31, 15)
+
+    def setUp(self):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo")
+        self.open("map")
+
+    def open(self, section):
+        self.B.open_book(self.wow, "settings", section=section)
+        self.paint()
+
+    def paint(self):
+        self.img, self.painter = self.B.render_book(self.wow, self.typ)
+        self.recs = {}
+        for r in self.painter.records:
+            self.recs.setdefault(r["obj"]["__seq"], r)
+
+    def rec(self, lua):
+        seq = self.wow.eval(lua + ".__seq")
+        self.assertIn(seq, self.recs, f"{lua} not drawn")
+        return self.recs[seq]
+
+    def near(self, got, want, what, tol=1.2):
+        self.assertAlmostEqual(got, want, delta=tol, msg=f"{what}: {got:.2f} != {want}")
+
+    def item(self, section, i):
+        return f"{self.P}.items.{section}[{i}]"
+
+    def colour(self, lua):
+        c = self.wow.eval(f"(function() local c = {lua}.__textColor "
+                          "return c[1] * 255 .. ',' .. c[2] * 255 .. ',' .. c[3] * 255 end)()")
+        return tuple(round(float(v)) for v in c.split(","))
+
+    def hover(self, lua, script="OnEnter"):
+        self.wow.run(f"local b = {lua} b:GetScript({lua_str(script)})(b)")
+
+    # -- the left page ---------------------------------------------------------
+    def test_the_left_page_lands_where_the_spec_says(self):
+        P = self.P
+        t = self.rec(f"{P}.title.letters[1]")
+        self.near(t["baseline"], 120, "heading")
+        self.near(t["box"][0] + self.wow.eval(f"{P}.title.width") / 2, 296, "heading centred")
+        self.near(self.rec(f"{P}.subline")["baseline"], 164, "subline")
+        for i in range(1, 7):
+            y = 228 + 70 * (i - 1)
+            with self.subTest(row=i):
+                caps = "lit" if i == 2 else "ink"
+                first = self.rec(f"{P}.rows[{i}].{caps}.letters[1]")
+                self.near(first["baseline"], y, "name")
+                self.near(first["box"][0], 100, "name x")
+                d = self.rec(f"{P}.rows[{i}].desc")
+                self.near(d["baseline"], y + 22, "description")
+                self.near(d["box"][0], 100, "description x")
+        # the open section (Map, row 2): wash, chevron, bar and diamond, rule
+        y = 298
+        w = self.wow.eval(f"{P}.rows[2].width")
+        left, mid, right = (self.rec(f"{P}.rows[2].open.t[{k}]")["box"] for k in (1, 2, 3))
+        self.near(left[0], 70, "wash from x 70")
+        self.near(right[2], 516, "wash to x 516")
+        self.near(mid[0] - left[0], 60, "wash fades over 60 px")
+        self.near(mid[1], y - 28, "wash top")
+        self.near(mid[3], y + 32, "wash bottom")
+        chev = [self.rec(f"{P}.rows[2].chevron.rows[{j}]")["box"] for j in range(1, 13)]
+        self.near(min(b[0] for b in chev), 83, "chevron's left")
+        self.near(max(b[2] for b in chev), 91, "chevron 8 wide", 0.8)
+        self.near(chev[0][1], y - 13, "chevron's top")
+        self.near(chev[-1][3], y - 1, "chevron 12 tall")
+        bar = self.rec(f"{P}.rows[2].bar")["box"]
+        self.near(bar[0], 100, "bar from the name")
+        self.near(bar[2], 100 + w + 6, "bar to the name's end + 6")
+        self.near(bar[1], y + 4, "bar's top")
+        self.near(bar[3], y + 7, "bar 3 px")
+        self.near(self.wow.eval(f"{P}.rows[2].diamond.x"), 100 + w + 12, "diamond x")
+        self.near(self.wow.eval(f"{P}.rows[2].diamond.y"), y + 5, "diamond y")
+        for k, dy in ((1, 34), (2, 35)):
+            r = self.rec(f"{P}.rows[2].rule[{k}]")["box"]
+            self.near(r[1], y + dy, f"rule {k}")
+            self.near(r[0], 100, "rule from x 100")
+            self.near(r[2], 510, "rule to LR")
+        self.assertFalse(self.wow.eval(f"{P}.rows[1].bar:IsShown()"), "only the open section has them")
+        self.assertFalse(self.wow.eval(f"{P}.rows[1].open.shown"))
+        self.near(self.rec(f"{P}.help")["baseline"], 668, "help line")
+        self.near(self.rec(f"{P}.folioL")["baseline"], 694, "left folio")
+        self.near(self.rec(f"{P}.folioR")["baseline"], 694, "right folio")
+        restore = self.rec(f"{P}.restore.label")
+        self.near(restore["box"][2], 1015, "Restore defaults right-aligned at RR-2")
+        self.near(restore["baseline"], 694, "Restore defaults' baseline")
+
+    def test_hovering_a_closed_section_washes_it_and_a_click_turns_to_it(self):
+        P = self.P
+        self.hover(f"{P}.rows[3].button")
+        self.assertTrue(self.wow.eval(f"{P}.rows[3].hover.shown"))
+        self.hover(f"{P}.rows[2].button")
+        self.assertFalse(self.wow.eval(f"{P}.rows[2].hover.shown"), "the open section gets no hover wash")
+        self.hover(f"{P}.rows[3].button", "OnClick")
+        self.assertEqual(self.wow.eval(f"{P}.section"), "guild")
+        self.assertTrue(self.wow.eval(f"{P}.rows[3].open.shown"))
+        self.assertFalse(self.wow.eval(f"{P}.rows[3].hover.shown"))
+        self.assertFalse(self.wow.eval(f"{P}.rows[2].open.shown"))
+
+    # -- the right page --------------------------------------------------------
+    def test_the_right_page_lands_where_the_spec_says(self):
+        P = self.P
+        h = self.rec(f"{P}.head.letters[1]")
+        self.near(h["baseline"], 120, "section heading")
+        self.near(h["box"][0] + self.wow.eval(f"{P}.head.width") / 2, 801, "heading centred on RCX")
+        paper = self.rec(f"{P}.sheet.paper")["box"]
+        self.assertEqual(tuple(round(v) for v in paper), (576, 152, 1010, 651), "the sheet, x 576-1009, y 152-650")
+        check = self.item("map", 1) + ".cb"
+        self.assertEqual(tuple(round(v, 1) for v in self.rec(check)["box"]), (586, 165, 610, 189),
+                         "main check: 24 px, box to baseline + 5")
+        lab = self.rec(check + ".label")
+        self.near(lab["baseline"], 184, "first row's baseline")
+        self.near(lab["box"][0], 586 + 32, "label 32 px after the box")
+        hint = self.rec(check + ".hint.fs[1]")
+        self.near(hint["baseline"], 203, "hint at y + 19")
+        self.near(hint["box"][0], 618, "hint at the label's x")
+        # the generator's steps: a topic 6 + 6 past the row before, then 30;
+        # layer rows 25; sub rows 23, lifted 2; sub radios 24; the slider 6 + 30
+        topic = self.item("map", 2)
+        ty = self.rec(topic + ".caps.letters[1]")["baseline"]
+        self.near(ty, 203 + 29 + 6 + 6, "Layers topic")
+        tw = self.wow.eval(topic + ".caps.width")
+        r1, r2 = (self.rec(f"{topic}.rules[{k}]")["box"] for k in (1, 2))
+        self.near(r1[0], 586 + tw + 10, "topic rule from the text's end + 10")
+        self.near(r1[2], 999, "topic rule to x1")
+        self.near(r1[1], ty - 6, "upper rule at y - 6")
+        self.near(r2[1], ty - 3, "lower rule at y - 3")
+        layer = self.item("map", 3) + ".cb"
+        box = self.rec(layer)["box"]
+        self.near(box[2] - box[0], 22, "layer check 22 px")
+        ly = self.rec(layer + ".label")["baseline"]
+        self.near(ly, ty + 30, "Battle haze")
+        self.near(box[3], ly + 5, "layer box to baseline + 5")
+        self.near(self.rec(layer + ".label")["box"][0], 586 + 30, "layer label 30 after the box")
+        self.near(self.rec(layer + ".inline")["box"][0], self.rec(layer + ".label")["box"][2] + 8, "inline hint 8 px after")
+        sub = self.item("map", 4) + ".cb"
+        sbox = self.rec(sub)["box"]
+        self.near(sbox[2] - sbox[0], 18, "sub-setting check 18 px")
+        self.near(sbox[0], 586 + 26, "sub-setting indented 26")
+        sy = self.rec(sub + ".label")["baseline"]
+        self.near(sy, ly + 25 - 2, "sub row: 25 on, lifted 2")
+        self.near(self.rec(sub + ".label")["box"][0], 586 + 26 + 24, "sub label 24 after its box")
+        trail = self.rec(self.item("map", 6) + ".cb.label")["baseline"]
+        self.near(trail, sy + 23 + 25, "Today's trail after Roads (a sub row steps from its lifted line)")
+        kept = self.item("map", 7)
+        rb = self.rec(kept + ".grp.buttons[1]")["box"]
+        self.near(rb[2] - rb[0], 14, "sub radio 14 px")
+        self.near(self.rec(kept + ".grp.label")["baseline"], trail + 25, "kept for under Today's trail")
+        self.near(self.rec(kept + ".grp.label")["box"][0], 586 + 26, "kept for indented")
+        self.near(self.rec(kept + ".grp.buttons[1].text2")["box"][0], rb[0] + 17, "choice 17 px after the button")
+        self.near(self.rec(self.item("map", 8) + ".cb.label")["baseline"], trail + 25 + 24, "Corpse runs after kept for")
+        self.near(self.rec(self.item("map", 17) + ".label")["baseline"], 615, "Map icon size")
+        self.near(self.wow.eval("ns.Settings.Bottom('map')"), 645, "Map ends where the spec says", 0.5)
+
+    def test_sub_settings_are_smaller_than_main_rows(self):
+        bpx = lambda lua: self.wow.eval(lua + ".bpx")
+        self.assertLess(bpx(self.item("map", 4) + ".cb.label"), bpx(self.item("map", 3) + ".cb.label"))
+        self.assertLess(self.wow.eval(self.item("map", 4) + ".cb:GetWidth()"),
+                        self.wow.eval(self.item("map", 3) + ".cb:GetWidth()"))
+        self.open("guild")
+        self.assertLess(bpx(self.item("guild", 2) + ".cb.label"), bpx(self.item("guild", 1) + ".cb.label"))
+        self.open("alerts")
+        sub_r = bpx(self.item("alerts", 3) + ".grp.buttons[1].text2")
+        self.open("grudges")
+        main_r = bpx(self.item("grudges", 8) + ".grp.buttons[1].text2")
+        self.assertLess(sub_r, main_r, "Big text size's choices are smaller than a main radio row's")
+
+    def test_rows_grey_by_their_when(self):
+        self.open("alerts")
+        big = self.item("alerts", 3)
+        self.wow.run("ns.cfg.announce = true ns.cfg.overlaySize = 'medium' ns.Settings.Refresh()")
+        self.assertTrue(self.wow.eval(big + ".grp.buttons[2]:IsEnabled()"))
+        self.assertEqual(self.colour(big + ".grp.buttons[2].text2"), self.RUBRIC, "the chosen choice is rubric")
+        self.assertTrue(self.wow.eval(big + ".grp.buttons[2].text2.twin:IsShown()"), "and faux bold")
+        self.assertEqual(self.colour(big + ".grp.buttons[1].text2"), self.INK)
+        self.assertFalse(self.wow.eval(big + ".grp.buttons[1].text2.twin:IsShown()"))
+        self.wow.run("ns.cfg.announce = false ns.Settings.Refresh()")
+        self.assertFalse(self.wow.eval(big + ".grp.buttons[2]:IsEnabled()"))
+        for i in (1, 2, 3):
+            self.assertEqual(self.colour(f"{big}.grp.buttons[{i}].text2"), self.GREY)
+        self.assertEqual(self.colour(big + ".grp.label"), self.GREY)
+        self.assertFalse(self.wow.eval(big + ".grp.buttons[2].text2.twin:IsShown()"), "greyed: no bold")
+        self.open("guild")
+        row = self.item("guild", 2)
+        self.wow.run("ns.cfg.share = false ns.Settings.Refresh()")
+        self.assertFalse(self.wow.eval(row + ".cb:IsEnabled()"))
+        self.assertEqual(self.colour(row + ".cb.label"), self.GREY)
+        self.assertEqual(self.colour(row + ".cb.hint.fs[1]"), self.GREY)
+        self.wow.run("ns.cfg.share = true ns.Settings.Refresh()")
+        self.assertEqual(self.colour(row + ".cb.label"), self.INK)
+        self.assertEqual(self.colour(row + ".cb.hint.fs[1]"), self.FADED)
+
+    def test_the_whole_label_is_the_click_area(self):
+        for lua in (self.item("map", 1) + ".cb", self.item("map", 3) + ".cb", self.item("map", 4) + ".cb",
+                    self.item("map", 7) + ".grp.buttons[5]"):
+            with self.subTest(control=lua):
+                label = lua + (".text2" if "grp" in lua else ".label")
+                box, lab = self.rec(lua)["box"], self.rec(label)["box"]
+                right = float(self.wow.eval(f"select(2, {lua}:GetHitRectInsets())"))
+                self.assertLess(right, 0)
+                self.near(box[2] - right * 1.2, lab[2], "click area reaches the label's end")
+
+    def test_restore_defaults_asks_first(self):
+        P = self.P
+        self.wow.run("ns.cfg.layers.roads = false")
+        self.hover(f"{P}.restore", "OnClick")
+        shown = self.wow.H.popups
+        self.assertEqual(shown[len(shown)]["which"], "WARPATH_RESTORE")
+        self.assertEqual(shown[len(shown)]["text1"], "Map")
+        self.assertFalse(self.wow.eval("ns.cfg.layers.roads"), "nothing reset before the answer")
+        self.wow.run("StaticPopupDialogs.WARPATH_RESTORE.OnAccept()")
+        self.assertTrue(self.wow.eval("ns.cfg.layers.roads"))
+        self.hover(f"{P}.restore")
+        self.assertEqual(self.colour(f"{P}.restore.label"), self.RUBRIC, "rubric on hover")
+        self.assertTrue(self.wow.eval(f"{P}.restore.under:IsShown()"), "and underlined")
+        self.hover(f"{P}.restore", "OnLeave")
+        self.assertEqual(self.colour(f"{P}.restore.label"), self.INK)
+        self.assertFalse(self.wow.eval(f"{P}.restore.under:IsShown()"))
+
+    # -- Screenshots -----------------------------------------------------------
+    def test_screenshots_lands_where_the_spec_says(self):
+        self.open("shots")
+        stacked, captions, ledger = self.item("shots", 3), self.item("shots", 5), self.item("shots", 6)
+        every = self.rec(stacked + ".grp.buttons[1].text2")
+        rb = self.rec(stacked + ".grp.buttons[1]")["box"]
+        self.near(rb[2] - rb[0], 16, "a main radio, 16 px")
+        self.near(every["box"][0], 586 + 22, "choice name at x0 + 22")
+        notable = self.rec(stacked + ".grp.buttons[2].text2")
+        self.near(notable["baseline"] - every["baseline"], 30, "30 px between choices without a hint")
+        hint = self.rec(stacked + ".grp.hints[2].fs[1]")
+        self.near(hint["baseline"] - notable["baseline"], 18, "the explanation under its choice")
+        pv = self.rec(captions + ".preview.art")["box"]
+        self.near(pv[0], 588, "preview from x0 + 2")
+        self.near(pv[2] - pv[0], 409, "preview 409 wide")
+        self.near(pv[3] - pv[1], 124, "preview 124 tall")
+        name1 = self.rec(captions + ".grp.buttons[1].text2")
+        self.near(pv[1] - name1["baseline"], 14, "preview 14 below the names")
+        self.near(name1["box"][0], 586 + 20, "first name 20 after its radio")
+        self.near(self.rec(captions + ".grp.buttons[2]")["box"][0] - name1["box"][2], 22, "names 22 apart")
+        lab = self.rec(ledger + ".reckon.label")
+        self.near(lab["baseline"], 628, "Pictures taken at the sheet's foot")
+        self.assertEqual(self.wow.eval(ledger + ".reckon.label.bpx"), 17)
+        self.near(self.rec(ledger + ".reckon.value")["box"][2], 998, "value right at x1 - 1")
+        self.assertLessEqual(pv[3], 628 - 21, "the preview clears the ledger line")
+
+    def test_pictures_taken_is_the_shot_count(self):
+        self.wow.run("ns.gdb.shotCount = 22")
+        self.open("shots")
+        self.assertEqual(self.wow.eval(self.item("shots", 6) + ".reckon.value:GetText()"), "22")
+
+    def test_the_preview_is_the_screenshots_caption_and_follows_hover(self):
+        self.open("shots")
+        cap = self.item("shots", 5)
+        pv = cap + ".preview"
+        self.wow.run("ns.cfg.shot.card = 'text' ns.Settings.Refresh()")
+        self.assertEqual(self.wow.eval(pv + ".kind"), "text")
+        card = pv + ".holder.warpathCards.text"
+        self.assertTrue(self.wow.eval(card + ":IsShown()"))
+        self.assertTrue(self.wow.eval(f"{pv}.card == {card}"))
+        # the same regions, fonts and text as the screenshot's own card, for the shot test's kill
+        self.wow.run("ns.KillCard.Text({ name = 'Lethality', class = select(2, UnitClass('player')), zone = '',"
+                     " times = 4, streak = 3, when = time() }) WarpathKillCardText:Hide()")
+        mine, real = KillCards.shape(self, self.wow, card), KillCards.shape(self, self.wow, "WarpathKillCardText")
+        strip = lambda s: [ln.rsplit("|", 3)[0] for ln in s.split("\n")[:-1]]   # minus the clock's minute
+        self.assertEqual([ln.split("|")[:3] for ln in mine.split("\n")[:-1]],
+                         [ln.split("|")[:3] for ln in real.split("\n")[:-1]])
+        self.assertIn("Lethality", mine)
+        # at the size a screenshot has it: 560 of 2560 screen px in 409 px
+        scale = float(self.wow.eval(card + ":GetScale()"))
+        uiw = float(self.wow.eval("UIParent:GetWidth()"))
+        self.near(scale, (409 / 1.2) / ((560 / 2560) * uiw), "preview scale", 0.001)
+        # hover: Caption strip shows the strip and washes its name; leaving goes back
+        self.hover(cap + ".grp.buttons[2]")
+        self.assertEqual(self.wow.eval(pv + ".kind"), "strip")
+        self.assertTrue(self.wow.eval(pv + ".holder.warpathCards.strip:IsShown()"))
+        self.assertFalse(self.wow.eval(card + ":IsShown()"))
+        self.assertTrue(self.wow.eval(cap + ".grp.washes[2].shown"))
+        self.assertTrue(self.wow.eval(cap + ".grp.buttons[1]:GetChecked()"), "the chosen one keeps its radio")
+        self.hover(cap + ".grp.buttons[2]", "OnLeave")
+        self.assertEqual(self.wow.eval(pv + ".kind"), "text")
+        self.assertTrue(self.wow.eval(card + ":IsShown()"))
+        self.assertFalse(self.wow.eval(cap + ".grp.washes[2].shown"))
+        self.hover(cap + ".grp.buttons[1]")
+        self.assertFalse(self.wow.eval(cap + ".grp.washes[1].shown"), "no wash on the chosen name")
+        self.hover(cap + ".grp.buttons[3]")
+        self.assertFalse(self.wow.eval(card + ":IsShown()"), "None: the picture alone")
+        self.assertFalse(self.wow.eval(pv + ".holder.warpathCards.strip:IsShown()"))
+        # the backdrop is client art, loaded at run time, never a picture shipped with Warpath
+        art = self.wow.eval(pv + ".art:GetTexture()")
+        self.assertTrue(art.startswith("Interface\\Glues\\LoadingScreens\\"), art)
+
+    def test_the_preview_goes_through_ns_killcard(self):
+        self.wow.run("""__calls = 0 local real = ns.KillCard.Strip
+            ns.KillCard.Strip = function(k, p, s) __calls = __calls + 1 return real(k, p, s) end""")
+        self.open("shots")
+        self.hover(self.item("shots", 5) + ".grp.buttons[2]")
+        self.assertGreaterEqual(self.wow.eval("__calls"), 1)
+
+    def test_caption_names_grey_with_screenshot_my_kills(self):
+        self.open("shots")
+        cap = self.item("shots", 5)
+        self.wow.run("ns.cfg.shot.on = false ns.Settings.Refresh()")
+        for i in (1, 2, 3):
+            self.assertEqual(self.colour(f"{cap}.grp.buttons[{i}].text2"), self.GREY)
+            self.assertFalse(self.wow.eval(f"{cap}.grp.buttons[{i}]:IsEnabled()"))
+        self.assertEqual(self.colour(self.item("shots", 3) + ".grp.hints[2].fs[1]"), self.GREY)
+
+    def test_every_section_fits_the_sheet_in_the_real_faces(self):
+        # EB Garamond is the real file; "game" widens Friz to the probe's width
+        for fonts in ("repo", "game"):
+            wow, typ = self.B.boot(fonts=fonts)
+            for key in ("alerts", "map", "guild", "shots", "zones", "grudges"):
+                self.B.open_book(wow, "settings", section=key)
+                with self.subTest(fonts=fonts, section=key):
+                    self.assertLessEqual(wow.eval(f"ns.Settings.Bottom({lua_str(key)})"), 650)
+                    _, painter = self.B.render_book(wow, typ)
+                    over = [r["text"] for r in painter.records if r["kind"] == "text" and r["box"][0] > 560
+                            and 150 < r["box"][1] and r["box"][3] < 650 and r["box"][2] > 1001]
+                    self.assertEqual(over, [], "every right-page text ends by x 1001")
+            self.assertLessEqual(wow.eval("ns.Settings.Bottom('shots')"), 628 - 21)
 
 
 def ledger_snapshot():

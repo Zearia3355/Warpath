@@ -661,9 +661,10 @@ end
 local Reckon = {}
 Reckon.__index = Reckon
 
-function Book.Reckon(parent)
+-- px: the label's size (default 18; the Settings tab's ledger line is 17)
+function Book.Reckon(parent, px)
     local r = setmetatable({}, Reckon)
-    r.label = Book.Str(parent, "friz", 18, Book.INK)
+    r.label = Book.Str(parent, "friz", px or 18, Book.INK)
     r.value = Book.Bold(Book.Str(parent, "garb", 21, Book.RUBRIC))
     r.rule = Book.Solid(parent, "ARTWORK", Book.INK, 0.38)
     return r

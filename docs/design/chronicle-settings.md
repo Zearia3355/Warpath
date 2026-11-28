@@ -1,6 +1,6 @@
 # Chronicle design: the Settings tab
 
-The Settings tab, redesigned to match the Campaigns page (`chronicle.md`, the canon). **Settled by Joe on 2026-11-27 ("Settled").** Design only: nothing here is built yet. Today's page is `Options.lua` (`SPEC`, `SECTIONS`, `Build`), placed by `BuildSettingsPages` in `Chronicle.lua`.
+The Settings tab, redesigned to match the Campaigns page (`chronicle.md`, the canon). **Settled by Joe on 2026-11-27 ("Settled").** Built on 2026-11-28 in `Options.lua` (`SPEC`, `SECTIONS`, the page's geometry `G`), placed by `BuildSettingsPages` in `Chronicle.lua`; see "Calls made while building" at the end.
 
 At build time, `Options.lua`'s SPEC and SECTIONS strings change to the wording below. Five changes are behaviour, not wording; they're listed under "Behaviour changes".
 
@@ -297,3 +297,16 @@ Rejected:
 - Whole-label click area.
 - Guildmates' sightings get their own sub-row under Enemy sightings.
 - "Pictures taken" ledger line on Screenshots.
+
+### Calls made while building (2026-11-28; each can be vetoed)
+
+Built in `Options.lua`: the tables above are its `G` (exposed as `ns.Settings.GEOMETRY`), and the `SettingsPage` tests check the built page against them. Where this spec's table and the settled generator differ, the page follows the generator, because the settled renders are what Joe approved.
+
+- **Main-check hints are EB Garamond Italic 15 on 16 px leading** (the generator's `c_check`), not the 16 on 17 that the table above gives. The fit figures above were measured that way too.
+- **Map's first hint is trimmed** to "Same as the crossed swords on the map. Warpath records either way." The design's italic stand-in is Monotype Garamond (`GARAIT.TTF`), which is narrower than the EB Garamond Italic that ships. In the real face the old wording wrapped to two lines and Map ended at 661, past the sheet. Now it ends at 645, as the table says. Guild gains one wrapped line (it ends at 376, not 360), which fits easily. Every other section ends where the fit table says.
+- **The preview's backdrop** is `LoadScreenArathiBasin`, cropped to `SetTexCoord(0.1, 0.9, 0.36, 0.68)`. The crop is a guess until it's seen in game, and Warsong Gulch is a one-line change (`PREVIEW` in `Options.lua`).
+- **The preview's kill** is the one `/warpath shot test` pictures: your name, class and zone, a 4th kill, ×3, now.
+- **The preview's scale and position** come from the design's crop, as shares of the screen: box (1000,180)-(1560,350) of 2560×1440. The caption fills the same part of the preview at any resolution or UI scale. That is 0.73 at Joe's settings.
+- **The hover wash on a caption name** is the generator's: (150,90,30) at 12%, from 6 px before the radio to 6 px past the name, fading over 8 px.
+- **The click area** covers the label only, not the hint lines or a layer's inline hint.
+- **Hovering a caption name previews it even while the row is greyed.** Only the click is disabled.
