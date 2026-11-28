@@ -156,22 +156,17 @@ Chron.pages.ledger = {
 }
 
 ---------------------------------------------------------------------------
--- Settings (3.8.3): built by Options.lua on the book's pages; its look is
--- a later phase
+-- Settings: built by Options.lua (3.8.5: chronicle-settings.md), on two
+-- frames that cover the book, as the kit's positions expect
 ---------------------------------------------------------------------------
 
 local function BuildSettingsPages(f)
-    local L = CreateFrame("Frame", nil, f.left)
-    L:SetAllPoints()
-    local R = CreateFrame("Frame", nil, f.right)
-    R:SetAllPoints()
+    local L = CreateFrame("Frame", nil, f)
+    L:SetAllPoints(f)
+    local R = CreateFrame("Frame", nil, f)
+    R:SetAllPoints(f)
     f.set = { L = L, R = R }
-    if ns.Settings then
-        ns.Settings.Build(L, R, { Font = O.Font,
-            Topic = function(p, text, x, y) return O.Topic(p, text, x, y) end,
-            Diamond = O.Diamond, Ornament = O.Ornament, INK = O.INK, FADED = O.FADED, RUBRIC = O.RUBRIC,
-            GREY = O.GREY, INNER = PW - 64 })
-    end
+    if ns.Settings then ns.Settings.Build(L, R) end
 end
 Chron.pages.settings = {
     Build = BuildSettingsPages,
