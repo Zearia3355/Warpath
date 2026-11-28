@@ -1015,3 +1015,74 @@ ns.outQ = outQ
 ns.recentSight = recentSight
 ns.session = session
 ns.shared = shared
+
+---------------------------------------------------------------------------
+-- Words the book shares: names, numbers and dates (3.8.5). In a do block so
+-- they cost Warpath.lua no top-level locals.
+---------------------------------------------------------------------------
+do
+    -- Names: Forever's First Last (docs/design/chronicle-grudges.md). Stored
+    -- keys come as "Plains Stomper", "Plains-Stomper", "Xaryu Forever-" or
+    -- "Charkoalz Rogue-CAMWOWUS2Realm6PvP"; all read as First Last, and a
+    -- realm id is never shown. For display only: keys stay as they are.
+    function ns.DisplayName(full)
+        if type(full) ~= "string" then return nil end
+        full = full:match("^%s*(.-)%s*$")
+        local first, rest = full:match("^%s*([^%-]-)%s*%-(.*)$")
+        if not first or first == "" then return full end
+        -- 1. "Charkoalz Rogue-CAMWOWUS2Realm6PvP": a space before the hyphen
+        if first:find(" ", 1, true) then return first end
+        -- 2. "Savage-Druiduser": the two parts, a space between
+        local last = rest:match("^%s*([^%-]-)%s*$") or rest:match("^%s*([^%-]-)%s*%-")
+        -- 3. "Xaryu Forever-" was rule 1; "Name-" alone drops the hyphen
+        if not last or last == "" then return first end
+        return first .. " " .. last
+    end
+
+    local ONES = { [0] = "no", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen" }
+    local TENS = { false, "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety" }
+    local NTH = { "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth", "ninth", "tenth",
+        "eleventh", "twelfth", "thirteenth", "fourteenth", "fifteenth", "sixteenth", "seventeenth",
+        "eighteenth", "nineteenth" }
+    local TENTH = { false, "twentieth", "thirtieth", "fortieth", "fiftieth", "sixtieth", "seventieth",
+        "eightieth", "ninetieth" }
+    local MONTHS = { "January", "February", "March", "April", "May", "June", "July", "August",
+        "September", "October", "November", "December" }
+    local DAYS = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
+
+    -- 7 -> "seven", 42 -> "forty-two", 105 -> "one hundred and five", 0 -> "no".
+    -- A thousand and more stays in figures, as a scribe would write it.
+    local function NumberWord(n)
+        n = math.floor(tonumber(n) or 0)
+        if n < 0 or n >= 1000 then return tostring(n) end
+        if n < 20 then return ONES[n] end
+        if n < 100 then
+            local t, o = math.floor(n / 10), n % 10
+            return o == 0 and TENS[t] or (TENS[t] .. "-" .. ONES[o])
+        end
+        local h, r = math.floor(n / 100), n % 100
+        return ONES[h] .. " hundred" .. (r == 0 and "" or (" and " .. NumberWord(r)))
+    end
+    ns.NumberWord = NumberWord
+
+    -- 1 -> "first", 27 -> "twenty-seventh" (1 to 99; figures beyond). Not
+    -- ns.Ordinal, which is Phrases.lua's "27th".
+    function ns.OrdinalWord(n)
+        n = math.floor(tonumber(n) or 0)
+        if n < 1 or n > 99 then return tostring(n) end
+        if n < 20 then return NTH[n] end
+        local t, o = math.floor(n / 10), n % 10
+        return o == 0 and TENTH[t] or (TENS[t] .. "-" .. NTH[o])
+    end
+
+    -- Month and weekday names in English whatever the client's locale.
+    function ns.MonthName(m) return MONTHS[m] end
+    function ns.DayName(wday) return DAYS[wday] end
+
+    -- 1795805395 -> "the twenty-seventh of November"
+    function ns.DateWords(t)
+        local d = date("*t", t)
+        return "the " .. ns.OrdinalWord(d.day) .. " of " .. MONTHS[d.month]
+    end
+end
