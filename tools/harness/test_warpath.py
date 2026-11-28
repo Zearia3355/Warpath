@@ -4004,6 +4004,72 @@ class LedgerSnapshot(unittest.TestCase):
 
 
 
+REPO = Path(__file__).resolve().parents[2]
+
+
+def read_tga(path):
+    """Parse a TGA with the stdlib: (width, height, bits, rle), checking that the pixel data is
+    complete (every RLE packet present). Raises AssertionError on anything the client can't load."""
+    data = path.read_bytes()
+    assert len(data) >= 18, "shorter than a TGA header"
+    idlen, cmap, kind = data[0], data[1], data[2]
+    w, h = int.from_bytes(data[12:14], "little"), int.from_bytes(data[14:16], "little")
+    bits, desc = data[16], data[17]
+    assert cmap == 0, "has a colour map"
+    assert kind in (2, 10), "image type %d: not true-colour (2) or RLE true-colour (10)" % kind
+    assert bits in (24, 32), "%d bits per pixel" % bits
+    assert (desc & 15) == (8 if bits == 32 else 0), "alpha bits %d for %d bpp" % (desc & 15, bits)
+    bpp, pos, need = bits // 8, 18 + idlen, w * h
+    if kind == 2:
+        assert len(data) - pos >= need * bpp, "pixel data truncated"
+    else:
+        got = 0
+        while got < need:
+            assert pos < len(data), "RLE data truncated at pixel %d of %d" % (got, need)
+            head = data[pos]
+            n = (head & 127) + 1
+            pos += 1 + (bpp if head & 128 else n * bpp)
+            got += n
+        assert got == need and pos <= len(data), "RLE packets overrun the image"
+    return w, h, bits, kind == 10
+
+
+class ArtTextures(unittest.TestCase):
+    """The chronicle's book art (tools/art/export.py writes it): present, loadable, small enough."""
+
+    # name: (width, height). Anything else in Art/book is a stray file that would ship.
+    BOOK = {"book.tga": (1024, 1024), "book-shadow.tga": (256, 256),
+            "sheet-shadow.tga": (64, 64), "map-mask.tga": (128, 128)}
+    FILE_BUDGET = 3 * 1024 * 1024
+    TOTAL_BUDGET = 4 * 1024 * 1024
+
+    def test_every_book_texture_is_there_and_nothing_else(self):
+        folder = REPO / "Art" / "book"
+        self.assertEqual(sorted(p.name for p in folder.iterdir()), sorted(self.BOOK))
+
+    def test_each_is_a_valid_tga_of_the_expected_size(self):
+        for name, size in self.BOOK.items():
+            with self.subTest(name=name):
+                w, h, bits, rle = read_tga(REPO / "Art" / "book" / name)
+                self.assertEqual((w, h), size)
+                self.assertEqual(bits, 32)          # every piece has soft alpha
+
+    def test_every_addon_tga_has_power_of_two_sides(self):
+        tgas = [p for p in (REPO / "Art").rglob("*.tga")] + [REPO / "glow.tga"]
+        self.assertTrue(tgas)
+        for p in tgas:
+            with self.subTest(tga=str(p.relative_to(REPO))):
+                w, h, _, _ = read_tga(p)
+                self.assertTrue(w and h and w & (w - 1) == 0 and h & (h - 1) == 0, (w, h))
+
+    def test_sizes_stay_under_budget(self):
+        sizes = {n: (REPO / "Art" / "book" / n).stat().st_size for n in self.BOOK}
+        for n, b in sizes.items():
+            with self.subTest(name=n):
+                self.assertLessEqual(b, self.FILE_BUDGET)
+        self.assertLessEqual(sum(sizes.values()), self.TOTAL_BUDGET)
+
+
 def lua_str(s):
     s = str(s)
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
