@@ -88,9 +88,14 @@ end
 -- Widgets ------------------------------------------------------------------------
 local Widget = {}
 local widget_mt = {}
+-- Methods the Forever client does NOT have (checked in game by the 3.8.4
+-- probe), so calling one errors there and must error here too, instead of
+-- being swallowed by the catch-all below.
+local NOT_IN_CLIENT = { SetGradientAlpha = true }
 widget_mt.__index = function(self, key)
     local m = Widget[key]
     if m ~= nil then return m end
+    if NOT_IN_CLIENT[key] then return nil end
     if type(key) == "string" and key:match("^%u") then
         H.unknownMethods[key] = (H.unknownMethods[key] or 0) + 1
         return function() end
@@ -98,10 +103,12 @@ widget_mt.__index = function(self, key)
     return nil
 end
 
+H.seq = 0
 local function NewWidget(kind, name, parent)
+    H.seq = H.seq + 1   -- creation order: the client draws same-level frames and same-layer regions in it
     local w = setmetatable({ __kind = kind, __name = name, __parent = parent, __shown = true,
         __scripts = {}, __events = {}, __points = {}, __children = {}, __w = 0, __h = 0,
-        __alpha = 1, __text = nil }, widget_mt)
+        __alpha = 1, __text = nil, __seq = H.seq }, widget_mt)
     if parent and parent.__children then parent.__children[#parent.__children + 1] = w end
     if name then _G[name] = w end
     return w
@@ -136,11 +143,26 @@ function Widget:SetHeight(h) self.__h = h end
 function Widget:GetWidth() return self.__w end
 function Widget:GetHeight() return self.__h end
 function Widget:GetSize() return self.__w, self.__h end
-function Widget:GetScale() return 1 end
-function Widget:GetEffectiveScale() return 1 end
-function Widget:GetFrameLevel() return self.__level or 1 end
+-- Scale is kept as __uiscale (render.py's map collector reads a different
+-- field, __scale, which nothing sets): the book renderer draws with it.
+function Widget:SetScale(s) self.__uiscale = s end
+function Widget:GetScale() return self.__uiscale or 1 end
+function Widget:GetEffectiveScale()
+    local s, w = 1, self
+    while w do s = s * (w.__uiscale or 1) w = w.__parent end
+    return s
+end
+-- As in the client: a frame sits one level above its parent unless set.
+function Widget:GetFrameLevel()
+    if self.__level then return self.__level end
+    return self.__parent and self.__parent.GetFrameLevel and (self.__parent:GetFrameLevel() + 1) or 0
+end
 function Widget:SetFrameLevel(l) self.__level = l end
-function Widget:GetFrameStrata() return "MEDIUM" end
+function Widget:SetFrameStrata(s) self.__strata = s end
+function Widget:GetFrameStrata()
+    if self.__strata then return self.__strata end
+    return self.__parent and self.__parent.GetFrameStrata and self.__parent:GetFrameStrata() or "MEDIUM"
+end
 function Widget:GetAlpha() return self.__alpha end
 function Widget:SetAlpha(a) self.__alpha = a end
 function Widget:GetCenter() return 400, 300 end
@@ -163,7 +185,13 @@ function Widget:GetDrawLayer() return self.__drawLayer or "ARTWORK", self.__sub 
 function Widget:SetBlendMode(mode) self.__blend = mode end
 function Widget:GetBlendMode() return self.__blend or "BLEND" end
 function Widget:ClearAllPoints() self.__points = {} end
-function Widget:SetFontObject(font) self.__font = font and font.__name end
+function Widget:SetFontObject(font)
+    if type(font) == "string" then font = _G[font] end
+    self.__font = font and font.__name
+    self.__fontObj = font
+    self.__fontPath, self.__fontSize, self.__fontFlags = nil, nil, nil
+end
+function Widget:GetFontObject() return self.__fontObj end
 function Widget:GetPoint(i) local p = self.__points[i or 1] if p then return unpack(p) end end
 function Widget:IsMouseOver() return false end
 function Widget:IsEnabled() return not self.__disabled end
@@ -199,13 +227,70 @@ function Widget:IsEventRegistered(ev) return self.__events[ev] == true end
 function Widget:SetText(t) self.__text = t ~= nil and tostring(t) or nil end -- the client takes numbers too
 function Widget:SetFormattedText(fmt, ...) self.__text = string.format(fmt, ...) end
 function Widget:GetText() return self.__text end
-function Widget:GetStringWidth() return #(self.__text or "") * 6 end
-function Widget:GetStringHeight() return 12 end
-function Widget:GetUnboundedStringWidth() return #(self.__text or "") * 6 end
-function Widget:GetNumLines() return 1 end
-function Widget:GetFont() return "Fonts\\FRIZQT__.TTF", 12, "" end
+-- Text metrics. Plain tests keep the old fixed guess (6 units a character,
+-- one 12-unit line), which their layouts were written against. The book
+-- renderer (book_render.py) sets H.measure and H.lines to real font
+-- metrics, so the code lays itself out as it would in the client.
+local function fontOf(w)
+    local o = w
+    for _ = 1, 8 do
+        if not o then break end
+        if o.__fontPath then return o.__fontPath, o.__fontSize, o.__fontFlags or "" end
+        o = o.__fontObj or (type(o.__font) == "string" and o.__font ~= o.__name and _G[o.__font]) or nil
+    end
+    return "Fonts\\FRIZQT__.TTF", 12, ""
+end
+H.fontOf = fontOf
+function Widget:GetStringWidth()
+    if H.measure and self.__text then
+        local path, size = fontOf(self)
+        return H.measure(path, size, self.__text)
+    end
+    return #(self.__text or "") * 6
+end
+Widget.GetUnboundedStringWidth = Widget.GetStringWidth
+function Widget:GetNumLines()
+    if H.lines and self.__text then
+        local path, size = fontOf(self)
+        return H.lines(path, size, self.__text, self.__w or 0, self.__wrap ~= false)
+    end
+    return 1
+end
+function Widget:GetStringHeight()
+    if H.lines and self.__text then
+        local _, size = fontOf(self)
+        local n = self:GetNumLines()
+        if H.height then return H.height(n, size, self.__spacing or 0) end
+        return n * size + (n - 1) * (self.__spacing or 0)
+    end
+    return 12
+end
+function Widget:GetFont() return fontOf(self) end
+-- The client's SetFont returned false for the addon's own .ttf files even
+-- though they drew (3.8.4 probe), so nothing may rely on its result.
+function Widget:SetFont(path, size, flags)
+    self.__fontPath, self.__fontSize, self.__fontFlags = path, size, flags or ""
+    if type(path) == "string" and path:lower():find("interface\\addons\\", 1, true) then return false end
+    return true
+end
 function Widget:SetTextColor(r, g, b, a) self.__textColor = { r, g, b, a or 1 } end
-function Widget:GetTextColor() return unpack(self.__textColor or { 1, 1, 1, 1 }) end
+function Widget:GetTextColor()
+    local o = self
+    while o and not o.__textColor do o = o.__fontObj end
+    return unpack(o and o.__textColor or { 1, 1, 1, 1 })
+end
+function Widget:SetShadowColor(r, g, b, a) self.__shadowColor = { r, g, b, a or 1 } end
+function Widget:GetShadowColor() return unpack(self.__shadowColor or { 0, 0, 0, 1 }) end
+function Widget:SetShadowOffset(x, y) self.__shadowOffset = { x or 0, y or 0 } end
+function Widget:GetShadowOffset() local o = self.__shadowOffset or { 0, 0 } return o[1], o[2] end
+function Widget:SetJustifyH(j) self.__justifyH = j end
+function Widget:GetJustifyH() return self.__justifyH or "CENTER" end
+function Widget:SetJustifyV(j) self.__justifyV = j end
+function Widget:GetJustifyV() return self.__justifyV or "MIDDLE" end
+function Widget:SetSpacing(s) self.__spacing = s end
+function Widget:GetSpacing() return self.__spacing or 0 end
+function Widget:SetWordWrap(on) self.__wrap = not not on end
+function Widget:GetWordWrap() return self.__wrap ~= false end
 function Widget:GetNumber() return tonumber(self.__text) or 0 end
 -- checks / sliders
 function Widget:SetChecked(v) self.__checked = not not v end
@@ -228,17 +313,37 @@ function Widget:SetThickness(t) self.__thick = t end
 function Widget:GetThickness() return self.__thick or 1 end
 function Widget:SetRotation(r) self.__rotation = r end
 function Widget:GetRotation() return self.__rotation or 0 end
+function Widget:GetTexCoord() return unpack(self.__texcoord or { 0, 1, 0, 1 }) end
+function Widget:SetDesaturated(on) self.__desat = not not on end
+function Widget:IsDesaturated() return self.__desat or false end
+function Widget:SetAtlas(name) self.__texture = "atlas:" .. tostring(name) end
+-- SetGradient(orientation, minColor, maxColor) with CreateColor objects: the
+-- probe found this works on Forever (SetGradientAlpha doesn't exist).
+function Widget:SetGradient(orient, a, b)
+    self.__gradient = { orient, { a.r, a.g, a.b, a.a or 1 }, { b.r, b.g, b.b, b.a or 1 } }
+end
+function Widget:AddMaskTexture(m)
+    self.__masks = self.__masks or {}
+    self.__masks[#self.__masks + 1] = m
+end
+function Widget:RemoveMaskTexture(m)
+    for i, x in ipairs(self.__masks or {}) do if x == m then table.remove(self.__masks, i) break end end
+end
+function Widget:GetNumMaskTextures() return #(self.__masks or {}) end
+-- BackdropTemplate
+function Widget:SetBackdrop(t) self.__backdrop = t end
+function Widget:GetBackdrop() return self.__backdrop end
+function Widget:SetBackdropColor(r, g, b, a) self.__backdropColor = { r, g, b, a or 1 } end
+function Widget:SetBackdropBorderColor(r, g, b, a) self.__backdropBorder = { r, g, b, a or 1 } end
 
-local seq = 0
 local function child(kind)
     -- CreateTexture(name, layer, inherits, sublevel), CreateLine(name, layer, ...)
     return function(self, name, layer, inherits, sub)
+        -- NewWidget numbers it (__seq): creation order breaks ties within a layer, as in the client
         local w = NewWidget(kind, name, self)
         w.__layer = true
-        if kind == "FontString" then w.__font = inherits end
+        if kind == "FontString" then w.__font = inherits w.__fontObj = inherits and _G[inherits] end
         w.__drawLayer, w.__sub = layer or "ARTWORK", sub or 0
-        seq = seq + 1
-        w.__seq = seq   -- creation order breaks ties within a layer, as in the client
         return w
     end
 end
@@ -255,9 +360,14 @@ function Widget:CreateAnimation(animType, name)
     return w
 end
 
+-- Sizes the client's templates give a frame before the addon sizes it.
+local TEMPLATE_SIZE = { UIPanelCloseButton = { 32, 32 }, UICheckButtonTemplate = { 32, 32 },
+    UIRadioButtonTemplate = { 16, 16 } }
 function CreateFrame(kind, name, parent, template)
     local w = NewWidget(kind or "Frame", name, parent)
     w.__template = template
+    local size = template and TEMPLATE_SIZE[template]
+    if size then w.__w, w.__h = size[1], size[2] end
     H.frames[#H.frames + 1] = w
     if template and template:find("Slider") then w.__min, w.__max = 0, 1 end
     if template and template:find("CheckButton") then w.Text = NewWidget("FontString", nil, w) end
@@ -380,6 +490,30 @@ local MAPS = {
     [2482] = { name = "Mount Hyjal", mapType = 3, parentMapID = 1414 },
 }
 H.maps = MAPS
+-- The other zones of the vanilla world, by their client uiMapIDs, so text
+-- built from map names (campaign titles, deed headings) reads as in game.
+-- Mount Hyjal (2482) is Forever's own (CLAUDE.local.md).
+local ZONES = {
+    [1411] = "Durotar", [1412] = "Mulgore", [1413] = "The Barrens", [1417] = "Arathi Highlands",
+    [1418] = "Badlands", [1419] = "Blasted Lands", [1420] = "Tirisfal Glades", [1421] = "Silverpine Forest",
+    [1422] = "Western Plaguelands", [1423] = "Eastern Plaguelands", [1425] = "The Hinterlands",
+    [1426] = "Dun Morogh", [1427] = "Searing Gorge", [1428] = "Burning Steppes", [1429] = "Elwynn Forest",
+    [1430] = "Deadwind Pass", [1431] = "Duskwood", [1432] = "Loch Modan", [1433] = "Redridge Mountains",
+    [1434] = "Stranglethorn Vale", [1435] = "Swamp of Sorrows", [1436] = "Westfall", [1437] = "Wetlands",
+    [1438] = "Teldrassil", [1439] = "Darkshore", [1441] = "Thousand Needles", [1442] = "Stonetalon Mountains",
+    [1443] = "Desolace", [1444] = "Feralas", [1445] = "Dustwallow Marsh", [1446] = "Tanaris", [1447] = "Azshara",
+    [1449] = "Un'Goro Crater", [1450] = "Moonglade", [1451] = "Silithus", [1452] = "Winterspring",
+    [1453] = "Stormwind City", [1454] = "Orgrimmar", [1455] = "Ironforge", [1456] = "Thunder Bluff",
+    [1457] = "Darnassus", [1458] = "Undercity", [1459] = "Alterac Valley", [1460] = "Warsong Gulch",
+    [1461] = "Arathi Basin",
+}
+local EASTERN = { [1416] = true, [1417] = true, [1418] = true, [1419] = true, [1420] = true, [1421] = true,
+    [1422] = true, [1423] = true, [1424] = true, [1425] = true, [1426] = true, [1427] = true, [1428] = true,
+    [1429] = true, [1430] = true, [1431] = true, [1432] = true, [1433] = true, [1434] = true, [1435] = true,
+    [1436] = true, [1437] = true, [1453] = true, [1455] = true, [1458] = true }
+for id, name in pairs(ZONES) do
+    if not MAPS[id] then MAPS[id] = { name = name, mapType = 3, parentMapID = EASTERN[id] and 1415 or 1414 } end
+end
 C_Map.GetBestMapForUnit = function(u) if isPlayer(u) then return H.player.mapID end end
 C_Map.GetMapInfo = function(id)
     -- The client raises on a missing map ID rather than returning nil
@@ -515,11 +649,38 @@ UIDropDownMenu_CreateInfo = function() return {} end
 UIDropDownMenu_AddButton = function() end
 ToggleDropDownMenu = function() end
 CloseDropDownMenus = function() end
-GameFontNormal = NewWidget("Font", "GameFontNormal")
-GameFontHighlight = NewWidget("Font", "GameFontHighlight")
-GameFontNormalLarge = NewWidget("Font", "GameFontNormalLarge")
-GameFontHighlightSmall = NewWidget("Font", "GameFontHighlightSmall")
-GameFontNormalSmall = NewWidget("Font", "GameFontNormalSmall")
+-- The client's font objects. Paths and sizes as the 3.8.4 probe read them
+-- in game; GameFontNormalHuge, GameFontHighlight*, GameFontDisable and the
+-- colours and shadows are the stock FontStyles values, not probed.
+local function FontObject(name, path, size, flags, color, shadow)
+    local f = NewWidget("Font", name)
+    f.__fontPath, f.__fontSize, f.__fontFlags = path, size, flags or ""
+    f.__textColor = color
+    if shadow then f.__shadowOffset, f.__shadowColor = { 1, -1 }, { 0, 0, 0, 1 } end
+    return f
+end
+local FRIZ, MORPH = "Fonts\\FRIZQT__.TTF", "Fonts\\MORPHEUS.ttf"
+local GOLD, WHITE, BLACK = { 1, 0.82, 0, 1 }, { 1, 1, 1, 1 }, { 0, 0, 0, 1 }
+FontObject("GameFontNormal", FRIZ, 12, "", GOLD, true)
+FontObject("GameFontHighlight", FRIZ, 12, "", WHITE, true)
+FontObject("GameFontNormalSmall", FRIZ, 10, "", GOLD, true)
+FontObject("GameFontHighlightSmall", FRIZ, 10, "", WHITE, true)
+FontObject("GameFontNormalLarge", FRIZ, 16, "", GOLD, true)
+FontObject("GameFontNormalHuge", FRIZ, 20, "", GOLD, true)
+FontObject("GameFontDisable", FRIZ, 12, "", { 0.5, 0.5, 0.5, 1 }, true)
+FontObject("QuestFont", FRIZ, 13, "", BLACK)
+FontObject("QuestTitleFont", MORPH, 18, "", BLACK)
+FontObject("QuestFontNormalSmall", FRIZ, 12, "", BLACK)
+FontObject("Fancy22Font", MORPH, 22, "", BLACK)
+FontObject("SystemFont_Med1", FRIZ, 12, "", WHITE)
+FontObject("NumberFontNormal", "Fonts\\ARIALN.TTF", 14, "OUTLINE", WHITE)
+-- Colours for SetGradient (the probe found CreateColor on Forever).
+CreateColor = function(r, g, b, a)
+    local c = { r = r, g = g, b = b, a = a or 1 }
+    function c:GetRGBA() return self.r, self.g, self.b, self.a end
+    function c:GetRGB() return self.r, self.g, self.b end
+    return c
+end
 
 -- Harness controls -----------------------------------------------------------------------------
 function H.Fire(event, ...)

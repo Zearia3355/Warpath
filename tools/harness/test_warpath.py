@@ -2741,6 +2741,155 @@ class Upgrades(unittest.TestCase):
                 self.assertEqual(after["v"], 10)
 
 
+class BookRender(unittest.TestCase):
+    """The chronicle renderer (book_render.py, render.py --book): every later
+    phase of the redesign is checked against the design renders through it,
+    so where it puts things is pinned here. Numbers are render px on the
+    1092x748 design canvas: the book's top-left at (20.5, 40.4), as in Joe's
+    screenshot, and 1.2 px a UI unit. Fonts are EB Garamond for every face
+    (--fonts repo) so the results don't depend on the machine's fonts."""
+
+    @classmethod
+    def setUpClass(cls):
+        global B
+        import book_render as B
+        cls.B = B
+        cls.wow, cls.typ = B.boot(fonts="repo")
+        cls.renders = {}
+        for tab in B.TABS:
+            B.open_book(cls.wow, tab)
+            cls.renders[tab] = B.render_book(cls.wow, cls.typ)
+
+    def text(self, tab, s):
+        """A text drawn on the pages (below the tabs, which share some names)."""
+        found = [r for r in self.renders[tab][1].records if r["kind"] == "text" and r["text"] == s and r["top"] > 60]
+        self.assertTrue(found, f"no text {s!r} drawn on {tab}")
+        return found[0]
+
+    def of(self, tab, lua):
+        seq = self.wow.eval(lua + ".__seq")
+        found = [r for r in self.renders[tab][1].records if r["obj"]["__seq"] == seq]
+        self.assertTrue(found, f"{lua} not drawn on {tab}")
+        return found[0]
+
+    def assertBox(self, box, want, tol=0.5):
+        for got, exp in zip(box, want):
+            self.assertAlmostEqual(got, exp, delta=tol, msg=f"{box} != {want}")
+
+    def test_every_tab_renders_without_errors(self):
+        for tab, (img, painter) in self.renders.items():
+            with self.subTest(tab=tab):
+                self.assertEqual(img.size, (1092, 748))
+                self.assertEqual(self.wow.eval("ns.Chronicle.Shown()") and True, True)
+                self.assertIsNone(self.wow.H.errors)
+                self.assertGreater(len([r for r in painter.records if r["kind"] == "text"]), 6)
+
+    def test_the_frame_lands_where_the_screenshot_has_it(self):
+        for tab in self.B.TABS:
+            with self.subTest(tab=tab):
+                plate = [r for r in self.renders[tab][1].records if "DialogBox-Header" in r.get("path", "")][0]
+                self.assertBox(plate["box"], (320.5, 23.6, 776.5, 100.4))
+                close = [r for r in self.renders[tab][1].records if r.get("what") == "close"][0]
+                self.assertBox(close["box"], (1040.5, 38.0, 1078.9, 76.4))
+        # the open tab stands taller: 32 units against 26
+        self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].edge")["box"], (63.7, 11.6, 202.9, 50.0))
+        self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[2].edge")["box"], (210.1, 18.8, 349.3, 50.0))
+        self.assertBox(self.of("warpath", "WarpathChronicle.tabs[4].edge")["box"], (894.1, 11.6, 1033.3, 50.0))
+
+    def test_headings_sit_where_the_code_puts_them(self):
+        # right page: TOP 0,-30, Morpheus 15; baseline 0.88 of the line down
+        for tab, s in (("campaigns", "Deeds and Losses"), ("warpath", "What's New")):
+            with self.subTest(heading=s):
+                r = self.text(tab, s)
+                self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 801.7, delta=0.5)
+                self.assertAlmostEqual(r["top"], 98.0, delta=0.5)
+                self.assertAlmostEqual(r["baseline"], 113.84, delta=0.5)
+        # left page: TOP 0,-32, QuestTitleFont (Morpheus 18)
+        for tab, s in (("settings", "Settings"), ("grudges", "The Ledger of Grudges")):
+            with self.subTest(heading=s):
+                r = self.text(tab, s)
+                self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 295.3, delta=0.5)
+                self.assertAlmostEqual(r["baseline"], 119.41, delta=0.5)
+
+    def test_wrapped_text_steps_by_whole_pixels(self):
+        # the welcome: QuestFont 13, SetSpacing(3), TOPLEFT 32,-96 of the left page
+        r = self.text("warpath", self.wow.eval("WarpathChronicle.news.prose:GetText()").replace("\r", ""))
+        self.assertGreaterEqual(len(r["lines"]), 6)
+        self.assertAlmostEqual(r["box"][0], 80.5, delta=0.5)
+        self.assertAlmostEqual(r["baselines"][0], 190.85, delta=0.5)
+        # 15.6 px rounds up to 16, 3.6 to 4: 20 px a line, as Joe's screenshot steps 19 for 13 + 2
+        self.assertAlmostEqual(r["baselines"][1] - r["baselines"][0], 20.0, delta=0.01)
+        for line in r["lines"]:
+            self.assertLessEqual(self.typ.width("Fonts\\FRIZQT__.TTF", 13, line), 358 + 0.01)
+
+    def test_the_stub_has_what_the_probe_found(self):
+        self.assertIsNone(self.wow.eval("UIParent:CreateTexture().SetGradientAlpha"), "SetGradientAlpha isn't on Forever")
+        self.assertTrue(self.wow.eval("CreateColor ~= nil"))
+        self.assertEqual(self.wow.eval("select(2, QuestFont:GetFont())"), 13)
+        self.assertEqual(self.wow.eval("WarpathChronicle.left:GetFrameLevel() - WarpathChronicle:GetFrameLevel()"), 1)
+
+    def test_paint_gradients_blends_masks_and_rotation(self):
+        wow, B = self.wow, self.B
+        wow.run("""
+            local f = CreateFrame("Frame", nil, WarpathChronicle)
+            f:SetFrameLevel(200) f:SetSize(400, 100) f:SetPoint("TOPLEFT", 100, -300)
+            local bg = f:CreateTexture(nil, "BACKGROUND") bg:SetAllPoints() bg:SetColorTexture(1, 1, 1, 1)
+            local g = f:CreateTexture(nil, "ARTWORK") g:SetSize(100, 20) g:SetPoint("TOPLEFT", 0, 0)
+            g:SetColorTexture(1, 1, 1, 1) g:SetGradient("HORIZONTAL", CreateColor(1, 0, 0, 1), CreateColor(0, 0, 1, 1))
+            local u = f:CreateTexture(nil, "BORDER") u:SetSize(40, 20) u:SetPoint("TOPLEFT", 120, 0)
+            u:SetColorTexture(1, 0.6, 0.2, 1)
+            local m = f:CreateTexture(nil, "ARTWORK") m:SetSize(40, 20) m:SetPoint("TOPLEFT", 120, 0)
+            m:SetColorTexture(0.5, 0.5, 0.5, 1) m:SetBlendMode("MOD")
+            local d = f:CreateTexture(nil, "BORDER") d:SetSize(40, 20) d:SetPoint("TOPLEFT", 180, 0)
+            d:SetColorTexture(0.2, 0.2, 0.2, 1)
+            local a = f:CreateTexture(nil, "ARTWORK") a:SetSize(40, 20) a:SetPoint("TOPLEFT", 180, 0)
+            a:SetColorTexture(0, 0, 0.5, 1) a:SetBlendMode("ADD")
+            local r = f:CreateTexture(nil, "ARTWORK") r:SetSize(40, 40) r:SetPoint("TOPLEFT", 240, -30)
+            r:SetColorTexture(0, 0, 0, 1) r:SetRotation(math.pi / 4)
+            local k = f:CreateTexture(nil, "ARTWORK") k:SetSize(40, 40) k:SetPoint("TOPLEFT", 320, -30)
+            k:SetColorTexture(0, 0.6, 0, 1)
+            local mask = f:CreateMaskTexture() mask:SetTexture("Interface\\\\AddOns\\\\Warpath\\\\glow") mask:SetAllPoints(k)
+            k:AddMaskTexture(mask)
+            local h = CreateFrame("Frame", nil, f) h:SetAllPoints() h:Hide()
+            local x = h:CreateTexture(nil, "OVERLAY") x:SetAllPoints() x:SetColorTexture(1, 0, 1, 1)
+            __H.testFrame = f""")
+        img, _ = B.render_book(wow, self.typ)
+        wow.run("__H.testFrame:Hide()")
+        P = lambda ux, uy: img.getpixel((round(20.5 + (100 + ux) * 1.2), round(40.4 + (300 + uy) * 1.2)))
+        left, right = P(3, 10), P(97, 10)
+        self.assertGreater(left[0], 220)
+        self.assertLess(left[2], 30)
+        self.assertGreater(right[2], 220)
+        self.assertLess(right[0], 30)
+        for got, want in zip(P(140, 10), (128, 77, 26)):          # MOD: orange times half
+            self.assertAlmostEqual(got, want, delta=3)
+        for got, want in zip(P(200, 10), (51, 51, 178)):          # ADD: grey plus half blue
+            self.assertAlmostEqual(got, want, delta=3)
+        self.assertLess(sum(P(260, 50)), 30, "the turned square's middle is ink")
+        self.assertEqual(P(242, 32), (255, 255, 255), "a corner of the unturned square is bare once turned")
+        self.assertLess(P(340, 50)[0], 60, "the glow mask keeps the middle")
+        self.assertEqual(P(321, 31), (255, 255, 255), "and drops the corner")
+        self.assertNotEqual(P(380, 10), (255, 0, 255), "a hidden frame draws nothing")
+
+    def test_every_real_character_renders_every_tab(self):
+        root = os.environ.get("WARPATH_WTF")
+        if not root:
+            self.skipTest("set WARPATH_WTF to render real characters' books")
+        account = Path(root) / "SavedVariables" / "Warpath.lua"
+        for path in sorted(Path(root).glob("*/*/SavedVariables/Warpath.lua")):
+            files = [p for p in (path, account) if p.exists()]
+            before = [hashlib.md5(p.read_bytes()).hexdigest() for p in files]
+            wow, typ = self.B.boot(path, account if account.exists() else None, path.parents[1].name.split("-")[0],
+                                   path.stat().st_mtime, fonts="repo")
+            for tab in self.B.TABS:
+                with self.subTest(character=path.parents[1].name, tab=tab):
+                    self.B.open_book(wow, tab)
+                    img, painter = self.B.render_book(wow, typ)
+                    self.assertIsNone(wow.H.errors)
+                    self.assertTrue(any(r["kind"] == "text" and r["top"] > 60 for r in painter.records))
+            self.assertEqual(before, [hashlib.md5(p.read_bytes()).hexdigest() for p in files])
+
+
 class RealData(unittest.TestCase):
     """Boot every character found under WARPATH_WTF. Skipped without it.
 
