@@ -69,6 +69,7 @@ for _, ev in ipairs({
     "NAME_PLATE_UNIT_REMOVED",
     "CHAT_MSG_ADDON", "PLAYER_REGEN_ENABLED", "SCREENSHOT_SUCCEEDED", "SCREENSHOT_FAILED",
     "PLAYER_ALIVE", "PLAYER_UNGHOST", "PVP_MATCH_ACTIVE", "PVP_MATCH_COMPLETE", "CHAT_MSG_SYSTEM",
+    "MIRROR_TIMER_START", "MIRROR_TIMER_STOP", "PLAYER_LOGOUT",
 }) do f:RegisterEvent(ev) end
 
 -- "No player named '%s' is currently playing." as a pattern.
@@ -228,11 +229,13 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         CreateHUD()
         UpdateHUD()
         pcall(ns.Minimap.Setup)
+        ns.Ledger.Summarize() -- this character's line in the Ledger's "All characters" (3.8.5)
         C_Timer.NewTicker(C.SAMPLE_INTERVAL, function()
             tick = tick + 1
             Sample()
+            Foes.NoteFalling()
             if tick % 4 == 0 then ns.Ground.Check() ns.TownSweep() end
-            if tick % 2 == 0 then Foes.Track() end
+            if tick % 2 == 0 then Foes.Track() Foes.NoteCreature("target") end
             if UnitAffectingCombat("player") or GetTime() - S.lastCombatEnd < 10 then Foes.ScanDead() end
             if Foes.dead and not UnitIsDeadOrGhost("player") then Foes.dead = false ns.Feats.OnAlive() end
             if tick % 10 == 0 then RefreshInstance() UpdateHUD() end
@@ -280,6 +283,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
     elseif event == "PLAYER_ALIVE" or event == "PLAYER_UNGHOST" then
         -- released: you're at the spirit healer (a moment to settle first)
         if event == "PLAYER_ALIVE" and S.ready then C_Timer.After(1, function() pcall(ns.Spirits.OnRelease) end) end
+        if event == "PLAYER_UNGHOST" and S.ready then pcall(ns.OnUnghost) end
         if not UnitIsDeadOrGhost("player") then
             Foes.dead = false
             ns.Feats.OnAlive()
@@ -293,6 +297,7 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
         Foes.SawDead("target")
         See("target")
         Foes.Track()
+        Foes.NoteCreature("target")
         ns.Grudge.OnTarget()
     elseif event == "UPDATE_MOUSEOVER_UNIT" then
         Foes.SawDead("mouseover")
@@ -310,6 +315,10 @@ f:SetScript("OnEvent", function(_, event, arg1, arg2, arg3, arg4)
     elseif event == "PLAYER_REGEN_ENABLED" then
         S.lastCombatEnd = GetTime()
         if S.setupWaiting then C_Timer.After(2, MaybeShowSetup) end
+    elseif event == "MIRROR_TIMER_START" or event == "MIRROR_TIMER_STOP" then
+        Foes.OnMirror(event, arg1, arg2, arg3, arg4)
+    elseif event == "PLAYER_LOGOUT" then
+        if db and ns.myFull then ns.Ledger.Summarize() end
     elseif event == "SCREENSHOT_SUCCEEDED" then
         FinishShot(true)
     elseif event == "SCREENSHOT_FAILED" then

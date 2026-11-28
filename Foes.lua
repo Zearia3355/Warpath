@@ -143,8 +143,88 @@ function Foes.ScanDead()
     if not ok or type(plates) ~= "table" then return end
     for _, plate in ipairs(plates) do
         local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
-        if unit then Foes.SawDead(unit) end
+        if unit then
+            Foes.SawDead(unit)
+            Foes.NoteAttacker(unit)
+        end
     end
+end
+
+---------------------------------------------------------------------------
+-- What killed you outside PvP (3.8.5, for the Ledger's Wilds). Forever
+-- closes the combat log to addons, so the cause is read from the client's
+-- state at the death: a fall, the breath or fatigue timer, or the hostile
+-- creature you fought in the last 10 seconds (your target, or one that had
+-- you targeted). Lava, fire and spells can't be told apart: no cause.
+---------------------------------------------------------------------------
+
+Foes.creature = nil  -- { name, kind, at }: the last hostile creature you fought
+Foes.fellAt = -1000  -- the last time you were seen falling
+Foes.mirror = {}     -- "BREATH" / "EXHAUSTION" -> { ends, stopped }
+
+-- unit is a hostile creature (never a player, never one the game hides): note it.
+function Foes.NoteCreature(unit)
+    local Safe = Foes.Safe
+    if Safe(UnitExists, unit) ~= true or Safe(UnitIsPlayer, unit) ~= false then return end
+    if Safe(UnitCanAttack, "player", unit) ~= true or Safe(UnitIsDeadOrGhost, unit) == true then return end
+    local name = Safe(UnitName, unit)
+    if type(name) ~= "string" or name == "" then return end
+    local kind = UnitCreatureType and Safe(UnitCreatureType, unit)
+    Foes.creature = { name = name, kind = type(kind) == "string" and kind ~= "" and kind or nil, at = GetTime() }
+end
+
+-- A creature on a nameplate that has you targeted.
+function Foes.NoteAttacker(unit)
+    if Foes.Safe(UnitIsPlayer, unit) ~= false then return end
+    if Foes.Safe(UnitIsUnit, unit .. "target", "player") == true then Foes.NoteCreature(unit) end
+end
+
+function Foes.NoteFalling()
+    if IsFalling and Foes.Safe(IsFalling) == true then Foes.fellAt = GetTime() end
+end
+
+-- MIRROR_TIMER_START (name, value in ms, max, scale: -1 counts down) and _STOP (name).
+function Foes.OnMirror(event, name, value, _, scale)
+    if type(name) ~= "string" or Secret(name) then return end
+    if event == "MIRROR_TIMER_START" then
+        local ends
+        if type(value) == "number" and type(scale) == "number" and scale < 0 then
+            ends = GetTime() + value / 1000 / -scale
+        end
+        Foes.mirror[name] = { ends = ends }
+    elseif Foes.mirror[name] then
+        Foes.mirror[name].stopped = GetTime()
+    end
+end
+
+-- At a death outside PvP: cause (a creature's name or nil), how ("fall",
+-- "drown", "fatigue", "beast" for any creature), the creature's type. A
+-- timer that ran out comes first; one still running counts only when no
+-- creature explains the death (a murloc kills you underwater, not the water).
+function Foes.Cause()
+    local now = GetTime()
+    Foes.NoteFalling()
+    if now - Foes.fellAt <= 1 then return nil, "fall" end
+    local running
+    for _, name in ipairs({ "BREATH", "EXHAUSTION" }) do
+        local t = Foes.mirror[name]
+        if t and (not t.stopped or now - t.stopped <= 2) then
+            local how = name == "BREATH" and "drown" or "fatigue"
+            if t.ends and now >= t.ends - 1 then return nil, how end
+            running = running or how
+        end
+    end
+    Foes.NoteCreature("target")
+    local ok, plates = pcall(C_NamePlate.GetNamePlates)
+    if ok and type(plates) == "table" then
+        for _, plate in ipairs(plates) do
+            local unit = plate.namePlateUnitToken or (plate.UnitFrame and plate.UnitFrame.unit)
+            if unit then Foes.NoteAttacker(unit) end
+        end
+    end
+    local c = Foes.creature
+    if c and now - c.at <= 10 then return c.name, "beast", c.kind end
+    if running then return nil, running end
 end
 
 -- Who a kill credit was for: your dead target, the last enemy you targeted

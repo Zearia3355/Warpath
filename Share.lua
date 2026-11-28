@@ -87,6 +87,11 @@ end
 local KILL_SAME, KILL_NONAME, KILL_NEAR, KILL_HOLD = 30, 10, 0.015, 2
 local recentKills = {} -- { v = victim (lower case, no realm) or nil, map, x, y, at, by, who, with, line, pin, said }
 
+-- Class tokens a kill message may carry (3.8.5). Anything else, a message
+-- cut short at 250 characters say, reads as unknown.
+local VICTIM_CLASS = { WARRIOR = true, PALADIN = true, HUNTER = true, ROGUE = true, PRIEST = true,
+    SHAMAN = true, MAGE = true, WARLOCK = true, DRUID = true }
+
 local function VictimKey(name)
     if type(name) ~= "string" or name == "" then return nil end
     return (name:gsub("%-.*$", "")):lower()
@@ -222,7 +227,7 @@ local function Receive(prefix, text, channel, sender)
     dupSeen[key] = now
 
     local sep = text:find(";", 1, true) and ";" or "|" -- 3.3.0 used "|"
-    local ver, kind, mapID, x, y, f1, f2, f3, f4, f5, f6, f7, f8, f9 = strsplit(sep, text)
+    local ver, kind, mapID, x, y, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10 = strsplit(sep, text)
     -- Flood guard for sightings only: at most 6 per sender per 10 seconds.
     -- Kills, deaths and test pings always get through (the sender already
     -- limits them). Until 3.6.1 a 3-second limit on every message dropped
@@ -277,7 +282,14 @@ local function Receive(prefix, text, channel, sender)
         -- instead of vanishing at logout. 300 per zone, oldest dropped.
         local z = ns.ZoneData(mapID)
         z.gmarks = z.gmarks or {}
-        z.gmarks[#z.gmarks + 1] = { kind = kind, x = x, y = y, t = time(), from = from, full = full }
+        local g = { kind = kind, x = x, y = y, t = time(), from = from, full = full }
+        -- 3.8.5: the victim's name and class on a kill pin, for the Ledger.
+        -- A sender before 3.8.5 sends no class; before 3.7, no name.
+        if kind == "K" then
+            if f9 and f9 ~= "" then g.vn = f9 end
+            if f10 and VICTIM_CLASS[f10] then g.vc = f10 end
+        end
+        z.gmarks[#z.gmarks + 1] = g
         if kill then kill.pin = z.gmarks[#z.gmarks] end
         while #z.gmarks > C.GMARK_CAP do table.remove(z.gmarks, 1) end
     end
