@@ -35,6 +35,12 @@ Hud.lua
 Book.lua
 Chronicle.lua
 ChronCampaigns.lua
+ChronLedger.lua
+ChronLedgerTally.lua
+ChronLedgerHours.lua
+ChronLedgerClasses.lua
+ChronLedgerLands.lua
+ChronLedgerWilds.lua
 ChronGrudges.lua
 ChronWarpath.lua
 Options.lua
