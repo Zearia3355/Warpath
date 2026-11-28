@@ -2810,7 +2810,8 @@ class BookRender(unittest.TestCase):
                 self.assertAlmostEqual(r["top"], 98.0, delta=0.5)
                 self.assertAlmostEqual(r["baseline"], 113.84, delta=0.5)
         # left page: TOP 0,-32, QuestTitleFont (Morpheus 18)
-        for tab, s in (("settings", "Settings"), ("grudges", "The Ledger of Grudges")):
+        # (Grudges' heading is the 3.8.5 page's: GrudgesPage checks it)
+        for tab, s in (("settings", "Settings"),):
             with self.subTest(heading=s):
                 r = self.text(tab, s)
                 self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 295.3, delta=0.5)
@@ -3222,6 +3223,375 @@ class CampaignsRealData(unittest.TestCase):
                     self.assertIsNone(wow.H.errors, f"campaign {i + 1}")
                     wow.run("local b = ns.ChronCampaigns.Frames().earlier b:GetScript('OnClick')(b)")
                 self.assertEqual(wow.eval("ns.Chron.view.page"), n)
+
+
+class GrudgesPage(unittest.TestCase):
+    """The Grudges tab (3.8.5, ChronGrudges.lua) against its spec,
+    docs/design/chronicle-grudges.md (R2a, empty page E1), whose tables are
+    the page's GEOMETRY. Laid out by the book renderer with EB Garamond for
+    every face (--fonts repo); the list is the design's made-up busy one
+    (ns.ChronGrudges.Samples) at the design renders' moment, 27 Nov 21:30."""
+
+    AT = 1795843800   # time.mktime((2026, 11, 27, 21, 30, 0, 0, 0, -1)) on Joe's machine
+
+    def setUp(self):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo")
+        self.wow.H.now = self.AT
+        self.wow.run(B.DESIGN_GRUDGES)
+        self.wow.run("ns.Chronicle.Open(false, 'grudges')")
+        self.P = "ns.ChronGrudges.Frames()"
+        self.paint()
+
+    def paint(self):
+        self.img, self.painter = self.B.render_book(self.wow, self.typ)
+        self.recs = {}
+        for r in self.painter.records:
+            self.recs.setdefault(r["obj"]["__seq"], r)
+
+    def rec(self, lua):
+        seq = self.wow.eval(lua + ".__seq")
+        self.assertIn(seq, self.recs, f"{lua} not drawn")
+        return self.recs[seq]
+
+    def near(self, got, want, what, tol=1.2):
+        self.assertAlmostEqual(got, want, delta=tol, msg=f"{what}: {got:.2f} != {want}")
+
+    def G(self, path):
+        return self.wow.eval("ns.ChronGrudges.GEOMETRY." + path)
+
+    def shown(self, lua):
+        return self.wow.eval(f"({lua}):IsShown() and true or false")
+
+    def keys(self):
+        n = self.wow.eval("#ns.Chron.view.grudges")
+        return [self.wow.eval(f"ns.Chron.view.grudges[{i}].full") for i in range(1, n + 1)]
+
+    def saved_keys(self):
+        return self.wow.eval("(function() local o = {} for k in pairs(WarpathGlobal.kos) do o[#o+1] = k end "
+                             "table.sort(o) return table.concat(o, '|') end)()")
+
+    # -- geometry -------------------------------------------------------------
+    def test_the_left_page_lands_where_the_spec_says(self):
+        P = self.P
+        h = self.rec(f"{P}.head.letters[1]")
+        self.near(h["baseline"], 120, "Grudges")
+        self.near(h["box"][0] + self.wow.eval(f"{P}.head.width") / 2, 296, "heading centred")
+        k = self.rec(f"{P}.kicker.caps.letters[1]")
+        self.near(k["baseline"], 158, "kicker")
+        self.near(self.rec(f"{P}.kicker.rules[1]")["box"][2], k["box"][0] - 12, "kicker rule 12 px off", 1.5)
+        paper = self.rec(f"{P}.lsheet.paper")
+        for got, want, what in zip(paper["box"], (72, 176, 519, 653), ("left", "top", "right", "bottom")):
+            self.near(got, want, "list sheet " + what)
+        leg = self.rec(f"{P}.legend")
+        self.near(leg["baseline"], 194, "legend")
+        self.near(leg["box"][2], 496, "legend right")
+        name = self.rec(f"{P}.rows[1].name")
+        self.near(name["baseline"], 235, "first row's name (row top 213)")
+        self.near(name["box"][0], 120, "name x")
+        self.near(self.rec(f"{P}.rows[2].name")["baseline"], 281, "rows 46 px apart")
+        self.near(self.rec(f"{P}.rows[1].level")["box"][0], name["box"][2] + 6, "level 6 px after the name")
+        self.near(self.rec(f"{P}.rows[1].sub")["baseline"], 252, "sub-line")
+        rim = self.rec(f"{P}.rows[2].tile.parts[2]")    # row 2 is gilt: the gold tile's light rim
+        self.near(rim["box"][0], 84 - 3, "gold tile x")
+        tile = self.rec(f"{P}.rows[3].tile.parts[2]")
+        self.near(tile["box"][0], 84, "tile x")
+        self.near(tile["box"][1], 213 + 2 * 46 + 8, "tile top")
+        self.near(tile["box"][2] - tile["box"][0], 27, "tile 26 px inclusive")
+        self.near(self.rec(f"{P}.rows[1].deaths.twin")["box"][2], 495, "tally right (bold copy)")
+        self.near(self.rec(f"{P}.rows[1].rule")["box"][1], 258, "row rule")
+        self.near(self.rec(f"{P}.rows[1].wash")["box"][3], 213 + 44, "wash 44 px")
+        self.assertEqual(self.wow.eval(f"{P}.ribbonY"), 213)
+        self.assertGreater(self.wow.eval(f"{P}.ribbon.n"), 20)
+        ins = self.rec(f"{P}.inscribe")
+        for got, want in zip(ins["box"], (211, 676, 381, 698)):
+            self.near(got, want, "Inscribe")
+
+    def test_the_right_page_lands_where_the_spec_says(self):
+        P = self.P
+        port = self.rec(f"{P}.portrait.parts[2]")     # Wreckless: gold, light rim 3 px out
+        self.near(port["box"][0], 769 - 3, "portrait x")
+        self.near(port["box"][1], 92 - 3, "portrait top")
+        t = self.rec(f"{P}.title.letters[1]")
+        self.near(t["baseline"], 192, "name")
+        self.near(t["box"][0] + self.wow.eval(f"{P}.title.width") / 2, 801, "name centred")
+        self.assertEqual(self.wow.eval(f"{P}.titlePx"), 31)
+        who = self.rec(f"{P}.who")
+        self.near(who["baseline"], 233, "who")
+        self.near((who["box"][0] + who["box"][2]) / 2, 801, "who centred")
+        self.near(self.rec(f"{P}.since.caps.letters[1]")["baseline"], 254, "held since")
+        for i in range(1, 4):
+            lab = self.rec(f"{P}.acct[{i}].label")
+            self.near(lab["baseline"], 284 + 26 * (i - 1), f"account row {i}")
+            self.near(lab["box"][0], 616, "label x")
+            self.near(self.rec(f"{P}.acct[{i}].value.twin")["box"][2], 987, "value right (bold copy)")
+        self.near(self.rec(f"{P}.seenLab")["baseline"], 362, "Last seen")
+        self.near(self.rec(f"{P}.seenVal")["box"][2], 987, "Last seen value right")
+        self.near(self.rec(f"{P}.noteText")["baseline"], 394, "note")
+        self.near(self.rec(f"{P}.noteRule")["box"][1], 400, "note rule")
+        self.near(self.rec(f"{P}.enc.letters[1]")["baseline"], 428, "Encounters")
+        paper = self.rec(f"{P}.log.paper")
+        for got, want, what in zip(paper["box"], (576, 446, 1026, 663), ("left", "top", "right", "bottom")):
+            self.near(got, want, "log sheet " + what)
+        day = self.rec(f"{P}.days[1].text")
+        self.assertEqual(day["text"], "Today")
+        self.near(day["baseline"], 463, "first day heading")
+        self.near(day["box"][0], 586, "day x")
+        self.near(self.rec(f"{P}.days[1].rule")["box"][2], 1001, "day rule to 1001")
+        tm = self.rec(f"{P}.lines[1].time")
+        self.near(tm["baseline"], 490, "first entry")
+        self.near(tm["box"][0], 606, "time x")
+        self.near(self.rec(f"{P}.lines[2].time")["baseline"], 513, "23 px a line")
+        self.near(self.rec(f"{P}.lines[1].name")["box"][0], 644, "text x")
+        self.near(self.rec(f"{P}.lines[1].zone")["box"][2], 1001, "zone right")
+        self.near(self.rec(f"{P}.lines[3].slew.letters[1]")["box"][0], 644, "SLEW at the text's x")
+        self.near(self.rec(f"{P}.lines[3].name")["box"][0], 644 + self.wow.eval(f"{P}.lines[3].slew.width") + 5,
+                  "name 5 px after SLEW")
+        for key, want in (("way", (592, 676, 792, 698)), ("forgive", (901, 676, 1011, 698))):
+            for got, w in zip(self.rec(f"{P}.{key}")["box"], want):
+                self.near(got, w, key)
+
+    def test_the_geometry_table_is_the_specs(self):
+        spec = (Path(__file__).resolve().parents[2] / "docs" / "design" / "chronicle-grudges.md").read_text(encoding="utf-8")
+        for text in ("x 72–518, y 176–652", "x 74–516, y 197–649", "46 px tall; the first row's top is at y 213",
+                     "x 769–833, top y 92", "y 284, 310, 336, 362", "x 576–1025, y 446–662", "23 px a line",
+                     "centred, y 394; rule y 400", "200 × 22, x 592, top y 676", "110 × 22, x 901, top y 676",
+                     "First baseline y 262", "cord x 509, y 203–643", "(cord at x 1016)"):
+            with self.subTest(text=text):
+                self.assertIn(text, spec)
+        self.assertEqual([self.G(f"sheet[{i}]") for i in range(1, 5)], [72, 176, 518, 652])
+        self.assertEqual([self.G(f"win[{i}]") for i in range(1, 5)], [74, 197, 516, 649])
+        self.assertEqual([self.G(f"lsheet[{i}]") for i in range(1, 5)], [576, 446, 1025, 662])
+        self.assertEqual((self.G("row.h"), self.G("row.first"), self.G("acct.y"), self.G("acct.lh")), (46, 213, 284, 26))
+        self.assertEqual((self.G("log.line"), self.G("note.y"), self.G("note.rule"), self.G("empty.y")), (23, 394, 400, 262))
+        self.assertEqual((self.G("cord[1]"), self.G("lcord[1]"), self.G("portrait.x"), self.G("portrait.y")),
+                         (509, 1016, 769, 92))
+
+    # -- the log ----------------------------------------------------------------
+    def log(self):
+        n = self.wow.eval(f"#{self.P}.logRows")
+        rows = []
+        for i in range(1, n + 1):
+            base = f"{self.P}.logRows[{i}]"
+            if self.wow.eval(f"{base}.day ~= nil"):
+                rows.append(("day", self.wow.eval(f"{base}.day"), self.wow.eval(f"{base}.y")))
+            else:
+                rows.append(("e", self.wow.eval(f"{base}.e.t"), self.wow.eval(f"{base}.e.k"),
+                             self.wow.eval(f"{base}.e.item.full"), self.wow.eval(f"{base}.y")))
+        return rows
+
+    def test_the_log_merges_every_grudge_newest_first(self):
+        rows = [r for r in self.log() if r[0] == "e"]
+        times = [r[1] for r in rows]
+        self.assertEqual(times, sorted(times, reverse=True))
+        self.assertEqual(len({r[3] for r in rows}), 11, "every grudge has a line")
+        # every saved entry, plus one "Inscribed" line for each of the five
+        # grudges whose log is empty (from before the log)
+        saved = self.wow.eval("(function() local n = 0 for _, r in pairs(WarpathGlobal.kos) do n = n + #r.log end return n end)()")
+        self.assertEqual(len(rows), saved + 5)
+        hask = [r for r in rows if r[3] == "Hask-Stonebeard"]
+        self.assertEqual([r[2] for r in hask], ["g"])
+        self.assertEqual(hask[0][1], self.wow.eval("WarpathGlobal.kos['Hask-Stonebeard'].added"))
+
+    def test_day_headings_open_each_day_and_step_the_lines(self):
+        rows = self.log()
+        self.assertEqual(rows[0][:3], ("day", "Today", 463))
+        days = [r for r in rows if r[0] == "day"]
+        self.assertEqual(len(days), len({r[1] for r in days}), "one heading a day")
+        self.assertIn("November 26", [d[1] for d in days])
+        for prev, r in zip(rows, rows[1:]):
+            step = r[-1] - prev[-1]
+            if r[0] == "day":
+                self.assertEqual(prev[0], "e", "never a day with nothing under it")
+                self.assertEqual(step, 18, f"{prev} -> {r}")
+            else:
+                self.assertEqual(step, 23 + (4 if prev[0] == "day" else 0), f"{prev} -> {r}")
+
+    def test_lines_read_as_the_spec_says(self):
+        P, w = self.P, self.wow
+
+        def text(i):
+            return "".join(w.eval(f"{P}.lines[{i}].{k}:GetText() or ''") for k in ("pre", "name", "post"))
+        self.assertEqual(text(1), "Wreckless Dawnmere sighted")
+        self.assertEqual(text(2), "Fell to Wreckless Dawnmere")
+        self.assertEqual(text(3), "Thornhelm Ironjaw")
+        self.assertTrue(self.shown(f"{P}.lines[3].slew.letters[1]"))
+        self.assertEqual(w.eval(f"{P}.lines[1].slew.width or 0"), 0)
+        self.assertEqual(w.eval(f"{P}.lines[1].zone:GetText()"), "Hillsbrad Foothills")
+        texts = set()
+        for sc in range(0, w.eval(f"{P}.log:Range()") + 150, 150):
+            w.run(f"{P}.log:SetScroll({sc})")
+            texts |= {text(i) for i in range(1, w.eval(f"#{P}.lines") + 1) if self.shown(f"{P}.lines[{i}]")}
+        self.assertIn("Inscribed Vexa Thorne", texts)
+        self.assertIn("Elowen Starfall added automatically", texts)
+
+    def test_gilt_marks_only_settlings_within_seven_days(self):
+        w, P = self.wow, self.P
+        self.assertEqual(w.eval("ns.ChronGrudges.SettledLately({ log = { { t = time() - 6.9 * 86400, k = 'k' } } })"), True)
+        self.assertEqual(w.eval("ns.ChronGrudges.SettledLately({ log = { { t = time() - 7.1 * 86400, k = 'k' } } })"), False)
+        self.assertEqual(w.eval("ns.ChronGrudges.SettledLately({ log = { { t = time() - 60, k = 'd' } } })"), False)
+        gilt = [w.eval(f"{P}.gilt[{i}]") for i in range(1, 12)]
+        self.assertEqual(gilt, [True, True, False, True, False, False, False, False, False, False, False])
+        for i, g in enumerate(gilt[:9], 1):
+            with self.subTest(row=i):
+                self.assertEqual(w.eval(f"{P}.rows[{i}].band.strips[1] ~= nil and {P}.rows[{i}].band.strips[1][1]:IsShown() or false"), g)
+        # neighbouring gilt rows join: row 2's band starts at row 1's foot
+        self.near(self.rec(f"{P}.rows[2].band.strips[1][1]")["box"][1], 213 + 44, "joined band", 0.6)
+        for i in range(1, w.eval(f"#{P}.lines") + 1):
+            if self.shown(f"{P}.lines[{i}]"):
+                k = w.eval(f"{P}.lines[{i}].e.k")
+                band = w.eval(f"{P}.lines[{i}].band.strips[1] ~= nil and {P}.lines[{i}].band.strips[1][1]:IsShown() or false")
+                self.assertEqual(band, k == "k", f"line {i} ({k})")
+        self.assertEqual(w.eval("ns.ChronGrudges.Summary(ns.Chron.view.grudges)"),
+                         "Eleven grudges held  ·  settled six times this week")
+
+    def test_the_chosen_grudge_is_washed_in_the_list_and_the_log(self):
+        w, P = self.wow, self.P
+        w.run("ns.ChronGrudges.Choose(2)")
+        self.assertEqual([self.shown(f"{P}.rows[{i}].wash") for i in range(1, 5)], [False, True, False, False])
+        self.assertEqual(w.eval(f"{P}.ribbonY"), 213 + 46)
+        washed = [w.eval(f"{P}.lines[{i}].e.item.full") for i in range(1, w.eval(f"#{P}.lines") + 1)
+                  if self.shown(f"{P}.lines[{i}]") and self.shown(f"{P}.lines[{i}].wash")]
+        self.assertTrue(washed)
+        self.assertEqual(set(washed), {"Thornhelm-Ironjaw"})
+        self.assertEqual(w.eval(f"{P}.title.letters[1]:GetText()"), "T")
+
+    def test_a_name_in_the_log_chooses_that_grudge_and_scrolls_the_list(self):
+        w, P = self.wow, self.P
+        w.run(f"{P}.log:SetScroll(9999)")
+        i = next(i for i in range(1, w.eval(f"#{P}.lines") + 1) if self.shown(f"{P}.lines[{i}]")
+                 and w.eval(f"{P}.lines[{i}].e.item.full") == "Vexa-Thorne")
+        w.run(f"local h = {P}.lines[{i}].hit h:GetScript('OnClick')(h)")
+        self.assertEqual(w.eval("ns.Chron.view.grudges[ns.Chron.view.pick].full"), "Vexa-Thorne")
+        self.assertGreater(w.eval(f"{P}.lsheet.scroll"), 0, "the list scrolled to it")
+        self.assertTrue(196 < w.eval(f"{P}.ribbonY") < 622, "its ribbon is in view")
+
+    def test_forgiving_strikes_the_name_and_its_lines_and_chooses_the_next(self):
+        w = self.wow
+        before = self.keys()
+        w.run("ns.ChronGrudges.Choose(2)")
+        w.run("ns.Grudge.Forgive('Thornhelm-Ironjaw')")
+        self.assertEqual(self.keys(), [k for k in before if k != "Thornhelm-Ironjaw"])
+        self.assertEqual(w.eval("ns.Chron.view.grudges[ns.Chron.view.pick].full"), before[2], "the next one")
+        self.assertNotIn("Thornhelm-Ironjaw", {r[3] for r in self.log() if r[0] == "e"})
+        self.assertEqual(w.eval("StaticPopupDialogs.WARPATH_GRUDGE_FORGIVE.text"), "Forgive %s?\nTheir name is struck off.")
+
+    def test_wheel_steps_a_row_and_a_line(self):
+        w, P = self.wow, self.P
+        w.run(f"local f = {P}.lsheet.frame f:GetScript('OnMouseWheel')(f, -1)")
+        self.assertEqual(w.eval(f"{P}.lsheet.scroll"), 46)
+        w.run(f"local f = {P}.log.frame f:GetScript('OnMouseWheel')(f, -1)")
+        self.assertEqual(w.eval(f"{P}.log.scroll"), 23)
+        self.assertTrue(self.shown(f"{P}.lsheet.bar"))
+
+    def test_the_note_keeps_on_enter_and_cancels_on_escape(self):
+        w, P = self.wow, self.P
+        w.run(f"local h = {P}.noteHit h:GetScript('OnClick')(h) local b = {P}.noteBox "
+              "b:SetText('Rides a raptor.') b:GetScript('OnEnterPressed')(b)")
+        self.assertEqual(w.eval("WarpathGlobal.kos['Wreckless-Dawnmere'].note"), "Rides a raptor.")
+        self.assertEqual(w.eval(f"{P}.noteText:GetText()"), "“Rides a raptor.”")
+        w.run(f"local h = {P}.noteHit h:GetScript('OnClick')(h) local b = {P}.noteBox "
+              "b:SetText('Gone') b:GetScript('OnEscapePressed')(b)")
+        self.assertEqual(w.eval("WarpathGlobal.kos['Wreckless-Dawnmere'].note"), "Rides a raptor.")
+        self.assertFalse(self.shown(f"{P}.noteBox"))
+
+    def test_long_names_step_down_to_fit(self):
+        w = self.wow
+        self.assertEqual(w.eval("ns.ChronGrudges.TitleSize('Wreckless Dawnmere')"), 31)
+        long = w.eval("ns.ChronGrudges.TitleSize('Wwwwwwwwwwww Mmmmmmmmmmmm')")
+        self.assertLess(long, 31)
+        self.assertGreaterEqual(long, 25)
+
+    # -- names, sparse and empty states ------------------------------------------
+    def test_names_show_as_first_last_and_keys_are_kept(self):
+        w, P = self.wow, self.P
+        w.run("WarpathGlobal.kos = {} local t = time() "
+              "WarpathGlobal.kos['Savage-Druiduser'] = { added = t - 10, kills = 0, deaths = 0, settled = 0, log = {}, class = 'DRUID', lv = 59 } "
+              "WarpathGlobal.kos['Xaryu Forever-'] = { added = t - 20, kills = 0, deaths = 0, settled = 0, log = {} } "
+              "WarpathGlobal.kos['Charkoalz Rogue-CAMWOWUS2Realm6PvP'] = { added = t - 30, kills = 0, deaths = 0, settled = 0, log = {} } "
+              "ns.Chronicle.Refresh()")
+        self.assertEqual([w.eval(f"{P}.rows[{i}].name:GetText()") for i in range(1, 4)],
+                         ["Savage Druiduser", "Xaryu Forever", "Charkoalz Rogue"])
+        self.assertEqual(self.saved_keys(), "Charkoalz Rogue-CAMWOWUS2Realm6PvP|Savage-Druiduser|Xaryu Forever-")
+        # nothing known: plain ink, "?" tile, "Class unknown"; no blood yet; never seen
+        w.run("ns.ChronGrudges.Choose(2)")
+        self.assertEqual(w.eval(f"{P}.who:GetText()"), "Class unknown")
+        self.assertEqual(w.eval(f"{P}.rows[2].name:GetShadowOffset()"), 0)
+        self.assertTrue(self.shown(f"{P}.rows[2].tile.q"))
+        self.assertTrue(self.shown(f"{P}.rows[2].none"))
+        self.assertEqual([w.eval(f"{P}.acct[{i}].value:GetText()") for i in range(1, 4)], ["none"] * 3)
+        self.assertTrue(w.eval(f"{P}.seenVal:GetText()").startswith("not since "))
+        self.assertTrue(w.eval(f"{P}.rows[2].sub:GetText()").startswith("not seen since "))
+        self.assertFalse(w.eval(f"{P}.way:IsEnabled() and true or false"))
+        self.assertTrue(w.eval(f"{P}.forgive:IsEnabled() and true or false"))
+
+    def test_the_empty_page_and_its_offer_lines_follow_the_setting(self):
+        w, P = self.wow, self.P
+        w.run("WarpathGlobal.kos = {} ns.Chronicle.Refresh()")
+        self.paint()
+        self.assertFalse(self.shown(f"{P}.listF"))
+        self.assertTrue(self.shown(f"{P}.emptyL"))
+        self.assertFalse(self.shown(f"{P}.entry"))
+        self.assertTrue(self.shown(f"{P}.emptyR"))
+        self.assertEqual(w.eval(f"{P}.cap:GetText()"), "L")
+        self.near(self.rec(f"{P}.cap")["baseline"], 306, "drop cap on the third line")
+        self.near(self.rec(f"{P}.prose[1]")["baseline"], 262, "first baseline")
+        self.near(self.rec(f"{P}.noname.letters[1]")["baseline"], 192, "No Name Yet")
+        self.near(self.rec(f"{P}.blind")["box"][0], 769, "blind square")
+        self.assertTrue(self.shown(f"{P}.nothing"))
+        self.near(self.rec(f"{P}.offer[1]")["baseline"], w.eval(f"{P}.proseEnd") + 58, "the ways in, 58 px under the prose")
+
+        def offer():
+            return [w.eval(f"{P}.offer[{i}]:GetText()") for i in range(1, w.eval(f"#{P}.offer") + 1)
+                    if self.shown(f"{P}.offer[{i}]")]
+        for auto, last in (("offer", "will be offered to you."), ("add", "will be added for you."), ("off", None)):
+            with self.subTest(auto=auto):
+                w.run(f"ns.cfg.grudge.auto = '{auto}' ns.Chronicle.Refresh()")
+                lines = offer()
+                self.assertEqual(lines[:2], ["Target an enemy and click the skull", "on the war table, or inscribe a name below."])
+                self.assertEqual(len(lines), 2 if last is None else 4)
+                if last:
+                    self.assertEqual(lines[3], last)
+
+    def test_preview_shows_the_samples_with_their_controls_off(self):
+        w, P = self.wow, self.P
+        w.run("WarpathGlobal.kos = {} ns.Chronicle.Open(true, 'grudges')")
+        self.assertEqual(w.eval("#ns.Chron.view.grudges"), 11)
+        self.assertEqual(w.eval(f"{P}.rows[1].name:GetText()"), "Wreckless Dawnmere")
+        for b in ("way", "forgive", "inscribe", "noteHit"):
+            self.assertFalse(w.eval(f"{P}.{b}:IsEnabled() and true or false"), b)
+
+
+class GrudgesRealData(unittest.TestCase):
+    """Every real character's grudges open, each chosen, both sheets
+    scrolled, without a Lua error (WARPATH_WTF). Nothing is written, and
+    the saved keys stay as they were (names are display only)."""
+
+    def test_every_characters_grudges_open(self):
+        root = os.environ.get("WARPATH_WTF")
+        if not root:
+            self.skipTest("set WARPATH_WTF to open real characters' grudges")
+        import book_render as B
+        account = Path(root) / "SavedVariables" / "Warpath.lua"
+        keys = "(function() local o = {} for k in pairs(WarpathGlobal.kos) do o[#o+1] = k end table.sort(o) return table.concat(o, '|') end)()"
+        for path in sorted(Path(root).glob("*/*/SavedVariables/Warpath.lua")):
+            with self.subTest(character=path.parents[1].name):
+                wow, typ = B.boot(path, account if account.exists() else None, path.parents[1].name.split("-")[0],
+                                  fonts="repo")
+                before = wow.eval(keys)
+                wow.run("ns.Chronicle.Open(false, 'grudges')")
+                n = wow.eval("#ns.Chron.view.grudges")
+                self.assertEqual(n, wow.eval("ns.Grudge.Count()"))
+                B.render_book(wow, typ)
+                self.assertIsNone(wow.H.errors)
+                for i in range(1, n + 1):
+                    wow.run(f"ns.ChronGrudges.Choose({i}, true) local P = ns.ChronGrudges.Frames() "
+                            "P.lsheet:SetScroll(9999) P.log:SetScroll(9999)")
+                    B.render_book(wow, typ)
+                    self.assertIsNone(wow.H.errors, f"grudge {i}")
+                    self.assertEqual(wow.eval("ns.Chron.view.pick"), i)
+                self.assertEqual(wow.eval(keys), before)
 
 
 class RealData(unittest.TestCase):

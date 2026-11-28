@@ -1124,6 +1124,13 @@ for _, c in ipairs(WarpathDB.campaigns) do
 end"""
 
 
+# The Grudges design renders' made-up busy list (grudges/gdata.py BUSY),
+# saved as real grudges (so Waypoint and Forgive work, unlike the preview).
+DESIGN_GRUDGES = r"""
+WarpathGlobal.kos = {}
+for _, it in ipairs(ns.ChronGrudges.Samples(time())) do WarpathGlobal.kos[it.full] = it.r end"""
+
+
 def lua_str(s):
     return '"' + str(s).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
