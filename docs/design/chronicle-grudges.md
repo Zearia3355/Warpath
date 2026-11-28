@@ -140,7 +140,7 @@ The tab strip has five tabs, each 92 game units wide: Campaigns, Grudges and Led
 | Heading "Encounters" | Morpheus small caps 21, rubric, shadow; ornament half-width 90 | centred, y 428; ornament y 441 |
 | Inset sheet | the same sheet | x 576–1025, y 446–662 (top) |
 | Log window | scrolls inside the sheet; the same edge fades and crimson scroll bar (cord at x 1016) | y 449–659 |
-| Day heading: "Today", "November 26" | EB Garamond Italic 16, faded; a 1 px faded rule at 30% from 8 px after the text to x 1001, 4 px above the baseline | x 586; 18 px above the next entry |
+| Day heading: "Today", "November 26" | EB Garamond Italic 16, faded; a 1 px faded rule at 30% from 8 px after the text to x 1001, 4 px above the baseline | x 586; it takes one 23 px slot like an entry, its baseline 3 px down the slot (first heading y 470, first entry y 490). Was 18 px above the next entry: in game (3.8.5-test4) that touched the line above (Claude's call) |
 | Entry line | 23 px a line | relative to the line's baseline `y`: |
 | · glyph | 12 px, centred at (593, y−5). `d` a skull in rubric; `k` a gilt diamond; `s` an eye in faded ink; `g`/`a` a quill nib in faded ink | |
 | · time | Arial Narrow 15, faded ("21:10") | x 606 |
@@ -210,7 +210,7 @@ The tab strip has five tabs, each 92 game units wide: Campaigns, Grudges and Led
   - **Log line:** the time; the verb before the name, the name and the verb after it, placed with `GetStringWidth`; "SLEW" as small-caps runs; the zone.
   - **Small caps:** one string per letter run, as in the canon.
   - **Faux bold:** the string drawn twice, 1 px apart.
-- **Pools:** the list needs about 11 row frames (9.5 visible); the log needs about 10 line frames (9 visible). Use a FauxScrollFrame as today, with day headings taking a 23 px slot so every slot is the same height.
+- **Pools:** the list needs about 11 row frames (9.5 visible); the log needs about 10 line frames (9 visible). Use a FauxScrollFrame as today, with day headings taking a 23 px slot so every slot is the same height (built: the log is on the kit's sheet, every row on one 23 px grid from y 467).
 - **Textures:**
   - Tiles, washes, bands, rules, the sheet and the ribbon are `SetColorTexture` solids, as the Campaigns page builds them.
   - Fading bands need `SetGradientAlpha`, or `SetGradient` with `CreateColor`; check which exists on 1.60.1. The fallback is stepped solids.

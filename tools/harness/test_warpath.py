@@ -3408,7 +3408,7 @@ class GrudgesPage(unittest.TestCase):
             self.near(got, want, "log sheet " + what)
         day = self.rec(f"{P}.days[1].text")
         self.assertEqual(day["text"], "Today")
-        self.near(day["baseline"], 463, "first day heading")
+        self.near(day["baseline"], 470, "first day heading: 3 px down its slot")
         self.near(day["box"][0], 586, "day x")
         self.near(self.rec(f"{P}.days[1].rule")["box"][2], 1001, "day rule to 1001")
         tm = self.rec(f"{P}.lines[1].time")
@@ -3466,19 +3466,34 @@ class GrudgesPage(unittest.TestCase):
         self.assertEqual([r[2] for r in hask], ["g"])
         self.assertEqual(hask[0][1], self.wow.eval("WarpathGlobal.kos['Hask-Stonebeard'].added"))
 
-    def test_day_headings_open_each_day_and_step_the_lines(self):
+    def test_day_headings_open_each_day_and_every_row_takes_one_slot(self):
         rows = self.log()
-        self.assertEqual(rows[0][:3], ("day", "Today", 463))
+        self.assertEqual(rows[0][:3], ("day", "Today", 470))
         days = [r for r in rows if r[0] == "day"]
         self.assertEqual(len(days), len({r[1] for r in days}), "one heading a day")
         self.assertIn("November 26", [d[1] for d in days])
         for prev, r in zip(rows, rows[1:]):
-            step = r[-1] - prev[-1]
             if r[0] == "day":
                 self.assertEqual(prev[0], "e", "never a day with nothing under it")
-                self.assertEqual(step, 18, f"{prev} -> {r}")
-            else:
-                self.assertEqual(step, 23 + (4 if prev[0] == "day" else 0), f"{prev} -> {r}")
+        # every row, heading or entry, on one 23 px grid from the first slot;
+        # a heading 3 px down in its slot
+        for k, r in enumerate(rows):
+            self.assertEqual(r[-1], 467 + 23 * k + (3 if r[0] == "day" else 0), f"row {k}: {r}")
+        self.assertEqual(rows[1][-1], 490, "the first entry where the design has it")
+
+    def test_day_headings_have_clear_room_above_them(self):
+        """3.8.5-test4 (Joe's shot 26): a heading 18 px under the line above
+        touched it, and the chosen line's wash touched the heading; the first
+        sat against the sheet's top edge. In game the italic also draws about
+        5 px higher than the kit's baseline says. So a heading's cap top
+        (0.72 of its 16 px over the baseline) clears the line above's band
+        (6 px under its baseline) by 6 px, and the window's top by 8."""
+        cap = 0.72 * 16
+        rows = self.log()
+        self.assertGreaterEqual(rows[0][-1] - cap - 449, 8, "under the sheet's top edge")
+        for prev, r in zip(rows, rows[1:]):
+            if r[0] == "day":
+                self.assertGreaterEqual(r[-1] - cap - (prev[-1] + 6), 6, f"{prev} -> {r}")
 
     def test_lines_read_as_the_spec_says(self):
         P, w = self.P, self.wow
