@@ -25,6 +25,7 @@ Linger.lua
 Flights.lua
 Spirits.lua
 Campaign.lua
+Chronicler.lua
 Zone.lua
 Map.lua
 MapButton.lua

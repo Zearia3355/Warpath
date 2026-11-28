@@ -2783,6 +2783,27 @@ class RealData(unittest.TestCase):
                 after = [hashlib.md5(p.read_bytes()).hexdigest() for p in files]
                 self.assertEqual(before, after)
 
+    def test_every_campaign_of_every_character_writes(self):
+        for path in self.chars:
+            with self.subTest(character=path.parents[1].name):
+                wow = Wow(saved=path, player={"name": path.parents[1].name.split("-")[0]}).login()
+                n = wow.eval("""(function()
+                    local list, n = { WarpathDB.campaign }, 0
+                    for _, c in ipairs(WarpathDB.campaigns or {}) do list[#list + 1] = c end
+                    for _, c in ipairs(list) do
+                        for _, foe in ipairs({ "Alliance", "Horde", false }) do
+                            local p = ns.Chronicler.Write(c, ns.myName, foe or nil)
+                            assert(#p.runs > 0 and p.text ~= "" and #p.title >= 1 and p.date.text)
+                            for _, r in ipairs(p.runs) do
+                                assert(type(r.text) == "string" and r.text ~= "")
+                                if r.name then assert(not r.name:find("-", 1, true), r.name) end
+                            end
+                        end
+                        n = n + 1
+                    end
+                    return n end)()""")
+                self.assertGreaterEqual(n, 1)
+
 
 class SpiritHealers(unittest.TestCase):
     """Spirit healers on the map (3.9), on the corpse runs layer.
@@ -2882,6 +2903,222 @@ class SpiritHealers(unittest.TestCase):
         self.die(0.30, 0.20)
         self.wow.run('SlashCmdList.WARPATH("debug spirits")')
         self.assertTrue(any("spirit healers:" in l for l in self.wow.chat))
+
+
+class Chronicler(unittest.TestCase):
+    """The campaign page's words (Chronicler.lua, 3.8.5): the date line, the
+    title and the prose as runs, a foe's name its own run.
+
+    Campaigns are built here with invented names. Times are local-clock
+    (time{...}), so time-of-day wording holds in any timezone."""
+
+    # Wednesday 25 November 2026, 14:46 local
+    START = "time({ year = 2026, month = 11, day = 25, hour = 14, min = 46 })"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.wow = Wow().login()
+
+    # -- building campaigns ----------------------------------------------------
+    @staticmethod
+    def kill(n, c, z, dt, lv=60, full=None):
+        full = full or (n + "-Testrealm" if n else None)
+        if not n:
+            return f"{{ z = {z}, t = S + {dt} }}"
+        return f'{{ n = "{n}", f = "{full}", c = "{c}", lv = {lv}, z = {z}, t = S + {dt} }}'
+
+    def camp(self, kl=(), dl=(), sightings=0, zones=(1448,), start=None, hours=3, best=0,
+             bestBy=None, bestEnded=None, wow=None):
+        zl = ", ".join(f"[{z}] = {{ k = 0, d = 0 }}" for z in zones)
+        bb = f', bestBy = "{bestBy}"' if bestBy else ""
+        be = ", bestEnded = true" if bestEnded else ""
+        (wow or self.wow).run(f"""
+            local S = {start or self.START}
+            __H.camp = {{ start = S, stop = S + {int(hours * 3600)}, played = {int(hours * 3600)}, cur = 0,
+                kills = {len(kl)}, deaths = {len(dl)}, best = {best}, sightings = {sightings},
+                zones = {{ {zl} }}, kl = {{ {", ".join(kl)} }}, dl = {{ {", ".join(dl)} }}{bb}{be} }}""")
+        return "__H.camp"
+
+    def write(self, camp, me='"Grimtusk"', foe='"Alliance"'):
+        self.wow.run(f"__H.page = ns.Chronicler.Write({camp}, {me}, {foe})")
+        e = self.wow.eval
+        n = int(e("#__H.page.runs"))
+        runs = []
+        for i in range(1, n + 1):
+            r = f"__H.page.runs[{i}]"
+            runs.append({k: e(f"{r}.{k}") for k in ("text", "name", "key", "class", "level", "slain", "slew")})
+        title = [e(f"__H.page.title[{i}]") for i in range(1, int(e("#__H.page.title")) + 1)]
+        return {"runs": runs, "title": title, "text": e("__H.page.text"), "scale": e("__H.page.scale"),
+                "quiet": e("__H.page.quiet"), "date": e("__H.page.date.text"), "tag": e("__H.page.date.tag")}
+
+    @staticmethod
+    def marked(p):
+        """The prose with name runs in brackets: 'the rogue [Bluey]'."""
+        return "".join(f"[{r['text']}]" if r["name"] else r["text"] for r in p["runs"])
+
+    # A long night: one of each kind of kill sentence, over both continents.
+    def night(self, start=None, wow=None):
+        k = self.kill
+        return self.camp(start=start, sightings=90, hours=9, best=6, wow=wow,
+                         zones=(1427, 1443, 1452, 1445, 1414, 1415, 1411, 1412, 1413, 1416, 1420, 1424),
+                         kl=[k("Bluey", "ROGUE", 1427, 0, 57), k("Balrog", "MAGE", 1443, 3000, 48),
+                             k("Pherk", "DRUID", 1452, 6000), k("Felon", "WARRIOR", 1452, 6011, 55),
+                             k("Felon", "WARRIOR", 1452, 6245, 55), k("Xylan", "SHAMAN", 1445, 9000, 49)])
+
+    # -- tests ----------------------------------------------------------------
+    def test_the_same_campaign_always_reads_the_same(self):
+        a = self.write(self.night())
+        self.wow.advance(5000)  # later, the same page
+        b = self.write(self.night())
+        self.assertEqual(a["runs"], b["runs"])
+        other = Wow().login()  # another session
+        self.night(wow=other)
+        self.assertEqual(other.eval('ns.Chronicler.Write(__H.camp, "Grimtusk", "Alliance").text'), a["text"])
+
+    def test_different_nights_read_differently(self):
+        openings = set()
+        for day in range(1, 15):
+            p = self.write(self.night(start=f"time({{ year = 2026, month = 11, day = {day}, hour = 14, min = 46 }})"))
+            openings.add(p["text"].split(" in the afternoon")[0])
+        self.assertEqual(openings, {"Grimtusk rode out", "Grimtusk took to the road", "Grimtusk set out"})
+
+    def test_a_foe_is_named_with_class_first_and_by_name_after(self):
+        m = self.marked(self.write(self.night()))
+        self.assertIn("the rogue [Bluey]", m)
+        self.assertIn("the warrior [Felon] fell in the same breath", m)
+        self.assertIn("and [Felon] fell again before long", m)
+        self.assertEqual(m.count("the warrior [Felon]"), 1)
+
+    def test_a_killer_already_named_is_not_introduced_again(self):
+        k = self.kill
+        m = self.marked(self.write(self.camp(zones=(1448, 1452), kl=[k("Thorn", "PALADIN", 1448, 0)],
+                                             dl=[k("Thorn", "PALADIN", 1448, 60), k(None, None, 1452, 900)])))
+        self.assertIn("the paladin [Thorn]", m)
+        self.assertIn("until Grimtusk fell to [Thorn].", m)
+        self.assertIn("Grimtusk fell to a foe no one saw", m)
+
+    def test_name_runs_carry_what_the_page_colours_and_tooltips(self):
+        p = self.write(self.night())
+        felon = [r for r in p["runs"] if r["text"] == "Felon"]
+        self.assertEqual(len(felon), 2)
+        self.assertEqual((felon[0]["name"], felon[0]["key"]), ("Felon Testrealm", "Felon-Testrealm"))
+        self.assertEqual((felon[0]["class"], felon[0]["level"], felon[0]["slain"], felon[0]["slew"]),
+                         ("WARRIOR", 55, 2, 0))
+        # one font string per run: plain prose is never split needlessly
+        for a, b in zip(p["runs"], p["runs"][1:]):
+            self.assertFalse(a["name"] is None and b["name"] is None)
+        # the drop cap is just the first letter of the first run
+        self.assertTrue(p["runs"][0]["text"].startswith("Grimtusk "))
+        self.assertEqual("".join(r["text"] for r in p["runs"]), p["text"])
+
+    def test_one_zone(self):
+        k = self.kill
+        p = self.write(self.camp(kl=[k("Ann", "MAGE", 1423, 0), k("Bo", "PRIEST", 1423, 400),
+                                     k("Cy", "ROGUE", 1423, 900)]))
+        self.assertEqual(p["title"], ["The Skirmish", "in the Eastern Plaguelands"])
+        self.assertIn("In the blighted Eastern Plaguelands, the mage [Ann] fell, the priest [Bo] soon after, "
+                      "and the rogue [Cy] soon after.", self.marked(p))
+        self.assertEqual((p["date"], p["tag"]), ("Wednesday, November 25", "a skirmish"))
+
+    def test_mount_hyjal_is_on(self):
+        p = self.write(self.camp(dl=[self.kill("Ann", "MAGE", 2482, 0)]))
+        self.assertEqual(p["title"], ["The Clash", "on Mount Hyjal"])
+
+    def test_two_zones(self):
+        k = self.kill
+        p = self.write(self.camp(kl=[k("Ann", "MAGE", 1437, 0), k("Bo", "PRIEST", 1434, 900)]))
+        self.assertEqual(p["title"], ["From the Wetlands", "to Stranglethorn Vale"])
+        self.assertIn("in the jungles of Stranglethorn", p["text"])
+
+    def test_two_thirds_in_one_zone_names_that_zone(self):
+        k = self.kill
+        p = self.write(self.camp(kl=[k("Ann", "MAGE", 1437, 0), k("Bo", "PRIEST", 1434, 900),
+                                     k("Cy", "ROGUE", 1434, 1900)]))
+        self.assertEqual(p["title"], ["The Skirmish", "in Stranglethorn Vale"])
+
+    def test_many_zones(self):
+        k = self.kill
+        zs = (1448, 1452, 1443, 1445, 1427, 1431)
+        p = self.write(self.camp(zones=zs, kl=[k(f"Foe{chr(65 + i)}", "MAGE", z, i * 600) for i, z in enumerate(zs)]))
+        self.assertEqual(p["title"], ["From Felwood", "to Duskwood"])
+        self.assertIn("There was more fighting after, two blows in all, before the day was done.", p["text"])
+        self.assertNotIn("Duskwood", p["text"].split("There was more")[0])
+
+    def test_a_night_with_no_kills(self):
+        p = self.write(self.camp(sightings=4))
+        self.assertEqual((p["title"], p["scale"], p["quiet"], p["tag"]), (["A Patrol"], "patrol", True, "a patrol"))
+        self.assertTrue(p["text"].endswith("No blood was spilled.") or p["text"].endswith("Not a blade was drawn in anger."))
+
+    def test_a_night_with_deaths_only(self):
+        k = self.kill
+        p = self.write(self.camp(zones=(1448, 1452), dl=[k("Ann", "MAGE", 1448, 0), k("Bo", "PRIEST", 1448, 500),
+                                                         k("Cy", "HUNTER", 1448, 800)]))
+        self.assertTrue(p["text"].endswith("No Alliance blood was spilled that day."))
+        self.assertRegex(self.marked(p), r"(Felwood went badly: Grimtusk fell three times there|"
+                                         r"Beneath the rotting boughs of Felwood, Grimtusk fell three times), "
+                                         r"to the mage \[Ann\], the priest \[Bo\] and the hunter \[Cy\]\.")
+
+    def test_a_big_night(self):
+        k = self.kill
+        kl = [k(f"Foe{i}", "WARRIOR", 1423, i * 30) for i in range(31)]
+        p = self.write(self.camp(kl=kl, dl=[k("Foe3", "WARRIOR", 1423, 2000)], sightings=95, best=31,
+                                 bestBy="Foe3", bestEnded=True))
+        m = self.marked(p)
+        self.assertEqual((p["scale"], p["quiet"]), ("war", False))
+        self.assertIn("thirty-one fell, the warrior [Foe0] and the warrior [Foe1] among them", m)
+        self.assertIn("Some ninety of the Alliance were seen on the roads.", p["text"])
+        self.assertTrue("thirty-one of the Alliance had fallen, at a cost of one death." in p["text"]
+                        or "Thirty-one slain, once fallen: so the day was reckoned." in p["text"])
+        self.assertIn("A streak of thirty-one was ended by [Foe3].", m)
+        ender = [r for r in p["runs"] if r["text"] == "Foe3"][-1]
+        self.assertEqual((ender["class"], ender["slew"]), ("WARRIOR", 1))
+
+    def test_unnamed_kills_and_no_faction(self):
+        k = self.kill
+        self.wow.run("__H.faction = ns.faction; ns.faction = ns.C.FACTION.Neutral")
+        try:
+            p = self.write(self.camp(kl=[k(None, None, 1448, 0), k(None, None, 1448, 900)]), foe="nil")
+        finally:
+            self.wow.run("ns.faction = __H.faction")
+        self.assertIn("Beneath the rotting boughs of Felwood, two fell.", p["text"])
+        self.assertIn("Two of the enemy", p["text"])
+        # a horde character's foe, when none is given
+        self.assertIn("of the Alliance", self.write(self.night(), foe="nil")["text"])
+
+    def test_the_character_is_named_by_first_name(self):
+        for me in ('"Grimtusk-Ironhide"', '"Grimtusk Ironhide"'):
+            with self.subTest(me=me):
+                self.assertTrue(self.write(self.camp(), me=me)["text"].startswith("Grimtusk "))
+
+    def test_display_names(self):
+        # every form found in Lethality's saved data, plus edge cases
+        for stored, shown in [("Savage-Druiduser", "Savage Druiduser"), ("Plains-Stomper", "Plains Stomper"),
+                              ("Plains Stomper", "Plains Stomper"), ("Xaryu Forever-", "Xaryu Forever"),
+                              ("Charkoalz Rogue-CAMWOWUS2Realm6PvP", "Charkoalz Rogue"),
+                              ("Dizz Zz-CAMWOWUS2Realm6PvP", "Dizz Zz"), ("Bainekx-Execute", "Bainekx Execute"),
+                              ("Wreckless", "Wreckless"), ("Bluey-", "Bluey"), ("Tiglie-Wiglie", "Tiglie Wiglie")]:
+            with self.subTest(stored=stored):
+                self.assertEqual(self.wow.eval(f"ns.DisplayName({lua_str(stored)})"), shown)
+        self.assertIsNone(self.wow.eval("ns.DisplayName(nil)"))
+
+    def test_number_words(self):
+        for n, w in [(0, "no"), (1, "one"), (13, "thirteen"), (20, "twenty"), (21, "twenty-one"), (40, "forty"),
+                     (90, "ninety"), (99, "ninety-nine"), (100, "one hundred"), (105, "one hundred and five"),
+                     (342, "three hundred and forty-two"), (1000, "1000")]:
+            with self.subTest(n=n):
+                self.assertEqual(self.wow.eval(f"ns.NumberWord({n})"), w)
+        for n, w in [(1, "first"), (2, "second"), (3, "third"), (12, "twelfth"), (20, "twentieth"),
+                     (21, "twenty-first"), (27, "twenty-seventh"), (30, "thirtieth"), (31, "thirty-first")]:
+            with self.subTest(nth=n):
+                self.assertEqual(self.wow.eval(f"ns.OrdinalWord({n})"), w)
+        for n, w in [(3, "three"), (20, "twenty"), (25, "a score and more"), (90, "some ninety"),
+                     (97, "some ninety"), (140, "over a hundred"), (261, "hundreds")]:
+            with self.subTest(crowd=n):
+                self.assertEqual(self.wow.eval(f"ns.Chronicler.Many({n})"), w)
+        self.assertEqual(self.wow.eval("ns.DateWords(time({ year = 2026, month = 11, day = 27, hour = 12 }))"),
+                         "the twenty-seventh of November")
+        self.assertEqual(self.wow.eval("ns.DateWords(time({ year = 2026, month = 3, day = 1, hour = 12 }))"),
+                         "the first of March")
 
 
 def lua_str(s):
