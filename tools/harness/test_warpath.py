@@ -3688,6 +3688,10 @@ class GrudgesRealData(unittest.TestCase):
                 self.assertEqual(wow.eval(keys), before)
 
 
+def choice_is_first(t, P):
+    return t.wow.eval(f"{P}.welcomeChoice") == 1
+
+
 class WarpathPage(unittest.TestCase):
     """The Warpath tab (3.8.5, ChronWarpath.lua) against its spec,
     docs/design/chronicle-warpath.md, whose geometry tables are the page's
@@ -3696,10 +3700,10 @@ class WarpathPage(unittest.TestCase):
 
     P = "ns.ChronWarpath.Frames()"
 
-    def boot(self, state="update", faction=None):
+    def boot(self, state="update", faction=None, name="Lethality"):
         import book_render as B
         self.B = B
-        self.wow, self.typ = B.boot(name="Lethality", fonts="repo", faction=faction)
+        self.wow, self.typ = B.boot(name=name, fonts="repo", faction=faction)
         w = self.wow
         # the notes these tests were written on: releases up to 3.8.4, so the
         # counts hold whatever releases come after (3.8.5 added its own)
@@ -3768,7 +3772,7 @@ class WarpathPage(unittest.TestCase):
         self.near(w1["baseline"], 210, "the welcome's first line")
         capw = self.wow.eval(f"{P}.cap:GetStringWidth()") * 1.2
         self.near(w1["box"][0], 82 + 1.0 * capw + 5, "line 1 tucked to the W's stem")
-        self.assertLessEqual(self.wow.eval(f"{P}.welcomeEnd"), 290, "the welcome ends by y 290")
+        self.assertLessEqual(self.wow.eval(f"{P}.welcomeEnd"), 276, "the welcome ends by y 290: four lines")
         fig = self.rec(f"{P}.figs[1]")
         self.assertEqual(self.wow.eval(f"{P}.figs[1]:GetText()"), "3.8.2")
         self.near(fig["baseline"], 210, "a figure sits on its line")
@@ -3791,6 +3795,113 @@ class WarpathPage(unittest.TestCase):
         fo = self.rec(f"{P}.folioL")
         self.near(fo["baseline"], 694, "left folio")
         self.near((fo["box"][0] + fo["box"][2]) / 2, cx, "left folio centred")
+
+    # -- what the page holds whatever the words (3.8.5-test4, shot 4) --------------
+    def widen(self, k):
+        """Every face k times as wide as the renderer's, as the game's ran in shot 4."""
+        m = self.B.Type.width
+        self.wow.H.measure = lambda path, size, text: m(self.typ, path, size, text) * k
+
+    def relay(self, state, frm=None, to=None):
+        w = self.wow
+        # a release after 3.8.4 for test builds to update into (boot trims to 3.8.4)
+        w.run("""local L = ns.NewIn.List if L[#L][1] ~= "3.8.5" then L[#L + 1] = { "3.8.5", { "A note." } } end""")
+        if to:
+            w.run(f'ns.VERSION = "{to}"')
+        w.run("if WarpathChronicle then WarpathChronicle:Hide() end")
+        if state == "update":
+            w.run(f"ns.Chronicle.News('{frm}')")
+        elif state == "first":
+            w.run("ns.Chronicle.News(nil)")
+        else:
+            w.run("ns.Chronicle.Open(false, 'warpath')")
+
+    def shown_words(self):
+        """(text, line, baseline y) of every welcome string shown, in order laid."""
+        P, out = self.P, []
+        for pool in ("words", "figs"):
+            for i in range(1, self.wow.eval(f"#{P}.{pool}") + 1):
+                fs = f"{P}.{pool}[{i}]"
+                if self.wow.eval(f"{fs}:IsShown()"):
+                    out.append((self.wow.eval(f"{fs}:GetText()"), self.wow.eval(f"{fs}.line")))
+        return out
+
+    def test_the_welcome_never_runs_into_the_picture(self):
+        # test-build versions, a name of WoW's longest (12 letters) and faces
+        # up to 30% wider than the renderer's: always four lines at most, the
+        # longest wording that fits, every word laid
+        for name in ("Lethality", "Mmmmmmmmmmmm"):
+            self.boot("update", name=name)
+            for k in (1.0, 1.15, 1.3):
+                self.widen(k)
+                for state, frm, to in (("update", "3.8.5-test2", "3.8.5-test4"), ("update", "3.8.5-test12", "3.8.5-test13"),
+                                       ("update", "3.8.4", "3.8.5"), ("first", None, None), ("settled", None, None)):
+                    if state == "first":
+                        self.wow.run("ns.gdb.installed = nil")
+                    else:
+                        self.wow.run('ns.gdb.installed = "3.7.0"')
+                    self.relay(state, frm, to)
+                    with self.subTest(name=name, wider=k, state=state, frm=frm, to=to):
+                        P = self.P
+                        lines, end = self.wow.eval(f"{P}.welcomeLines"), self.wow.eval(f"{P}.welcomeEnd")
+                        self.assertLessEqual(lines, 4)
+                        self.assertLessEqual(end, 276, "the last baseline clears the picture at 288")
+                        text = self.wow.eval(f"{P}.welcome")
+                        if choice_is_first(self, P):
+                            self.assertIn(name, text, "the spec's wording names you")
+                        laid = self.shown_words()
+                        want = self.wow.eval(f"#ns.ChronWarpath.Pieces({self.B.lua_str(text[1:])})")
+                        self.assertEqual(len(laid), want, "every word of the wording laid")
+                        self.assertTrue(all(ln <= 4 for _, ln in laid))
+                        choice = self.wow.eval(f"{P}.welcomeChoice")
+                        if choice > 1:   # a longer wording didn't fit: prove it
+                            self.assertGreater(self.lines_of(state, choice - 1), 4)
+
+    def lines_of(self, state, i):
+        """How many lines wording i of the state's welcome takes, laid as the page lays it."""
+        w, P = self.wow, self.P
+        w.run(f"""local list = ns.ChronWarpath.Welcome("{state}")
+            ns.ChronWarpath.LayOne(list[{i}])""")
+        n = w.eval(f"{P}.welcomeLines")
+        w.run(f"ns.ChronWarpath.LayOne({P}.welcome)")
+        return n
+
+    def test_the_specs_welcome_stays_when_it_fits(self):
+        w = self.boot("update")
+        self.relay("update", "3.8.4", "3.8.5")
+        self.assertEqual(w.eval(f"{self.P}.welcomeChoice"), 1)
+        self.assertIn("Lethality's war", w.eval(f"{self.P}.welcome"))
+        self.assertEqual(w.eval(f"{self.P}.welcomeLines"), 4)
+
+    def test_test_build_versions_keep_both_figures(self):
+        w = self.boot("update")
+        self.widen(1.2)            # about as wide as the game's faces ran in shot 4
+        self.relay("update", "3.8.5-test2", "3.8.5-test4")
+        figs = [w.eval(f"{self.P}.figs[{i}]:GetText()") for i in (1, 2)]
+        self.assertEqual(figs, ["3.8.5-test2", "3.8.5-test4"])
+        self.assertTrue(all(w.eval(f"{self.P}.figs[{i}]:IsShown()") for i in (1, 2)))
+        self.assertGreater(w.eval(f"{self.P}.welcomeChoice"), 1, "shot 4's wording took five lines")
+        self.assertLessEqual(w.eval(f"{self.P}.welcomeLines"), 4)
+
+    def test_the_how_to_lines_stay_inside_the_column(self):
+        w = self.boot("update")
+        for k in (1.0, 1.2, 1.4):
+            self.widen(k)
+            self.relay("update", "3.8.4", "3.8.5")
+            self.paint()
+            with self.subTest(wider=k):
+                n = w.eval(f"#{self.P}.howTo")
+                shown = [i for i in range(1, n + 1) if w.eval(f"{self.P}.howTo[{i}]:IsShown()")]
+                for i in shown:
+                    fs = f"{self.P}.howTo[{i}]"
+                    self.near(self.rec(fs)["box"][0], 120, f"line {i} x")
+                    # its width as the page measured it (the painter doesn't widen)
+                    right = 120 + w.eval(f"{fs}:GetStringWidth()") * 1.2
+                    self.assertLessEqual(right, 510 + 0.5, f"line {i} past the column")
+                self.assertLessEqual(w.eval(f"{self.P}.howToEnd"), 584, "clear of Guild sharing")
+                lines = [w.eval(f"{self.P}.howTo[{i}]:GetText()") for i in shown]
+                self.assertTrue(any("/warpath chronicle" in l for l in lines), f"the command split: {lines}")
+                self.assertIn("top right", " ".join(lines))
 
     def test_the_map_button_and_check_box_sit_where_the_spec_says(self):
         w = self.boot("update")

@@ -29,12 +29,12 @@ local G = {
     L0 = 82, LR = 510, CX = 296, R0 = 586, RR = 1017, RCX = 801,
     kicker = { y = 107, px = 12, track = 1.2, rule = 40, gap = 12, dy = -4 },
     title = { y = 150, px = 31, ratio = 0.78, track = 0.6, orn = 167, half = 120 },
-    welcome = { top = 210, px = 18, lh = 22, fig = 20, width = 428 },
+    welcome = { top = 210, px = 18, lh = 22, fig = 20, width = 428, lines = 4 },  -- 4 lines: ends by y 290
     cap = { lines = 3, px = 80, x = 81, stem = 5, foot = 6 },
     pic = { w = 392, h = 140, top = 288, cx = 296 },
     key = { cols = { 86, 330 }, y = { 448, 469, 490, 511 }, sw = 26, sh = 18, text = 34, px = 15, gloss = 5,
         pins = { kill = 20, death = 17, sight = 20 } },
-    button = { cx = 95, cy = 535, size = 24, x = 120, y = 540, px = 16, book = 562 },
+    button = { cx = 95, cy = 535, size = 24, x = 120, y = 540, px = 16, lh = 22, right = 510, last = 584 },
     share = { box = { 82, 603 }, size = 18, x = 110, y = 618, px = 18, state = 19, gap = 10,
         hint = { y = 640, px = 16, lh = 19, width = 400 } },
     folio = { y = 694, px = 17 },
@@ -58,6 +58,14 @@ Page.GEOMETRY = G
 local READ_HEAD, READ_NOTE, READ_MARK = { 150, 80, 56 }, { 104, 82, 56 }, { 150, 90, 60 }
 local GILT_RULE = { 176, 128, 52 }
 
+-- The two how-to lines beside the map button. Each wraps inside the column
+-- if the faces run wide; "~" holds two words together. The map line was
+-- "On the world map, top right: choose what Warpath shows.", which ran into
+-- the gutter in game (3.8.5-test4); the shorter one is Claude's call.
+local HOWTO = {
+    "World map, top right: choose Warpath's marks.",
+    "This book: the minimap button, or~/warpath~chronicle.",
+}
 local SHARE_HINT = "Guildmates' kills, deaths and enemy sightings on your map, and yours on theirs. "
     .. "Only between guildmates who have it on."
 
@@ -384,12 +392,7 @@ local function BuildLeft(L)
     P.mapButton = CreateFrame("Frame", nil, L)
     Book.Box(P.mapButton, bt.cx - half, bt.cy - half, bt.cx + half, bt.cy + half, L)
     ns.MapButtonArt(P.mapButton, bt.size / 1.2 / 31)
-    P.mapLine = Str(L, "friz", bt.px, INK)
-    Set(P.mapLine, "On the world map, top right: choose what Warpath shows.")
-    Put(P.mapLine, bt.x, bt.y, "l")
-    P.bookLine = Str(L, "friz", bt.px, INK)
-    Set(P.bookLine, "This book: the minimap button, or /warpath chronicle.")
-    Put(P.bookLine, bt.x, bt.book, "l")
+    P.howTo = {}
 
     P.share = ShareCheck(L)
     P.folioL = Str(L, "gari", G.folio.px, FADED)
@@ -445,17 +448,42 @@ end
 Page.State = State
 
 -- The welcome's words: { text, figure } pieces; "{3.8.2}" marks a figure.
+-- Wordings, the spec's first, each shorter; LayWelcome lays the first that
+-- fits its four lines. Long test-build versions, a long name or a long date
+-- push it down the list; the last has none of them, so it always fits
+-- (Claude's call, 2026-11-28, after 3.8.5-test4's ran into the picture).
 local function Welcome(state)
     local me = Me()
     if state == "first" then
-        return ("Here begins the chronicle of %s, opened on %s. Warpath keeps it, and draws the war on the world "
-            .. "map as it is fought, in these marks."):format(me, ns.DateWords(time()))
+        local day = ns.DateWords(time())
+        return {
+            ("Here begins the chronicle of %s, opened on %s. Warpath keeps it, and draws the war on the world "
+                .. "map as it is fought, in these marks."):format(me, day),
+            ("Here begins the chronicle of %s, opened on %s. Warpath keeps it, and draws the war on the world "
+                .. "map in these marks."):format(me, day),
+            ("Here begins the chronicle of %s. Warpath keeps it, and draws the war on the world map in these "
+                .. "marks."):format(me),
+            "Here begins your chronicle. Warpath keeps it, and draws the war on the world map in these marks.",
+        }
     elseif state == "update" then
-        return ("Warpath was just updated, from {%s} to {%s}. What changed is on the facing page, marked new. On "
-            .. "the world map it draws %s's war in these marks."):format(view.newSince, tostring(ns.VERSION), me)
+        local from, to = view.newSince, tostring(ns.VERSION)
+        return {
+            ("Warpath was just updated, from {%s} to {%s}. What changed is on the facing page, marked new. On "
+                .. "the world map it draws %s's war in these marks."):format(from, to, me),
+            ("Warpath was just updated, from {%s} to {%s}. What changed is marked new on the facing page. On "
+                .. "the world map it draws these marks."):format(from, to),
+            ("Warpath was updated from {%s} to {%s}. What changed is marked new on the facing page; on the "
+                .. "world map, these marks."):format(from, to),
+            "Warpath was just updated. What changed is marked new on the facing page. On the world map it "
+                .. "draws these marks.",
+        }
     end
-    return ("This is the chronicle of %s, kept by Warpath. On the world map it draws the war as it is fought, "
-        .. "in these marks."):format(me)
+    return {
+        ("This is the chronicle of %s, kept by Warpath. On the world map it draws the war as it is fought, "
+            .. "in these marks."):format(me),
+        "This is your chronicle, kept by Warpath. On the world map it draws the war as it is fought, in these "
+            .. "marks.",
+    }
 end
 Page.Welcome = Welcome
 
@@ -500,7 +528,7 @@ end
 
 -- The welcome under its sunk initial, wrapped by hand (the design's
 -- rich_dropcap): each piece its own string, figures in EB Garamond Bold.
-local function LayWelcome(text)
+local function LayOne(text)
     local wg, cg = G.welcome, G.cap
     local letter = text:sub(1, 1)
     Set(P.cap, letter:upper())
@@ -542,6 +570,19 @@ local function LayWelcome(text)
     for k = nw + 1, #P.words do P.words[k]:Hide() end
     for k = nf + 1, #P.figs do P.figs[k]:Hide() P.figs[k].twin:Hide() end
     P.welcomeLines, P.welcomeEnd = n, y
+    return n <= wg.lines
+end
+
+Page.LayOne = function(text) return LayOne(text) end
+
+-- The first wording that fits; the last one if none does.
+local function LayWelcome(list)
+    for i, text in ipairs(list) do
+        if LayOne(text) or i == #list then
+            P.welcome, P.welcomeChoice = text, i
+            return
+        end
+    end
 end
 
 local function LayPicture()
@@ -617,12 +658,12 @@ local function LayKey()
     pen.finish()
 end
 
--- The hint, wrapped by hand at the spec's width and leading.
+-- Wrapped by hand at a width; "~" joins two words that mustn't part.
 local function Wrap(face, px, text, width)
     local lines, line = {}, ""
     for w in text:gmatch("%S+") do
         local cand = line == "" and w or (line .. " " .. w)
-        if line ~= "" and Measure(face, px, cand) > width then
+        if line ~= "" and Measure(face, px, (cand:gsub("~", " "))) > width then
             lines[#lines + 1] = line
             line = w
         else
@@ -630,9 +671,47 @@ local function Wrap(face, px, text, width)
         end
     end
     if line ~= "" then lines[#lines + 1] = line end
+    for i, l in ipairs(lines) do lines[i] = l:gsub("~", " ") end
     return lines
 end
 Page.Wrap = Wrap
+
+-- The how-to lines: each starts a line of its own; a wrapped one carries on
+-- below, at the same indent, and the next follows it. If that would reach
+-- Guild sharing, a pixel smaller, then another (Claude's call).
+local function HowToLines(px)
+    local out = {}
+    for k, text in ipairs(HOWTO) do
+        for i, line in ipairs(Wrap("friz", px, text, G.button.right - G.button.x)) do
+            out[#out + 1] = { line, k, i == 1 }
+        end
+    end
+    return out
+end
+
+local function LayHowTo()
+    local bt = G.button
+    local px = bt.px
+    local lines = HowToLines(px)
+    while bt.y + (#lines - 1) * bt.lh > bt.last and px > bt.px - 3 do
+        px = px - 1
+        lines = HowToLines(px)
+    end
+    P.mapLine, P.bookLine, P.howToPx = nil, nil, px
+    for n, l in ipairs(lines) do
+        local fs = Pooled(P.howTo, n, function() return Str(P.L, "friz", bt.px, INK) end)
+        Book.Face(fs, "friz", px)
+        Set(fs, l[1])
+        Put(fs, bt.x, bt.y + (n - 1) * bt.lh, "l")
+        fs:Show()
+        if l[3] then
+            if l[2] == 1 then P.mapLine = fs else P.bookLine = fs end
+        end
+    end
+    for k = #lines + 1, #P.howTo do P.howTo[k]:Hide() end
+    P.howToEnd = bt.y + (#lines - 1) * bt.lh
+end
+Page.HOWTO = HOWTO
 
 function Page.LayShare()
     local cb, g = P.share, G.share
@@ -846,10 +925,10 @@ local function Render()
     local state, new = State(list)
     P.state = state
     LayHead(state, new)
-    P.welcome = Welcome(state)
-    LayWelcome(P.welcome)
+    LayWelcome(Welcome(state))
     LayPicture()
     LayKey()
+    LayHowTo()
     Page.LayShare()
     LayNews(list, state, new)
 end
