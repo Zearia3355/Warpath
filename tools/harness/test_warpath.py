@@ -305,10 +305,21 @@ class NewIn(unittest.TestCase):
                          "the options window no longer opens by itself")
         text = self.page(wow)
         self.assertIn("What's New", text)
-        # 3.8.3: a "NEW" mark beside each release newer than the last seen
+        # every page of notes: a long release (3.8.5's) fills the first page
+        earlier, turns = "WarpathChronicle.news.earlier", 0
+        for _ in range(20):
+            if not wow.eval(f"{earlier}:IsEnabled()"):
+                break
+            wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
+            text += "\n" + self.page(wow)
+            turns += 1
+        # 3.8.3: a "NEW" mark beside each release newer than the last seen;
+        # a release carried on to the next page shows its mark again there
         newer = int(wow.eval('(function() local n = 0 for _, r in ipairs(ns.NewIn.List) do '
                              'if ns.NewIn.Older("3.8.2", r[1]) then n = n + 1 end end return n end)()'))
-        self.assertEqual(text.split("\n").count("NEW"), newer, "every release after 3.8.2 is marked, nothing older")
+        marks = text.split("\n").count("NEW")
+        self.assertGreaterEqual(marks, newer, "every release after 3.8.2 is marked")
+        self.assertLessEqual(marks, newer + turns, "nothing older is marked")
         self.assertIn("ON THE MAP", text, "3.8.3's notes are grouped under topics")
 
     def test_closing_the_book_marks_the_release_seen(self):
@@ -347,7 +358,7 @@ class NewIn(unittest.TestCase):
             { "An old change that takes up a line or two of the page, for this test.", "And another." } }) end""")
         wow.run("ns.Chronicle.News('3.8.2')")
         first = self.page(wow)
-        self.assertIn("3.8.3", first)
+        self.assertIn(wow.eval("ns.NewIn.List[#ns.NewIn.List][1]"), first, "the newest release opens the notes")
         self.assertNotIn("2.0.1\n", first + "\n", "the oldest release can't fit on the first page")
         earlier = "WarpathChronicle.news.earlier"
         self.assertTrue(wow.eval(f"{earlier}:IsEnabled()"))

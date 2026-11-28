@@ -64,6 +64,21 @@ local NEW_IN = {
     "Warpath learns each graveyard your characters release to.",
     "A kill several of you share names everyone in chat.",
   } },
+  { "3.8.5", {
+    "## The chronicle",
+    "The chronicle is a new book: crimson leather, gilt and parchment.",
+    "Each campaign is written up by a chronicler, with a route map.",
+    "Deeds fold by zone and scroll inside the page.",
+    "Quiet nights (patrols, no fighting) can be hidden.",
+    "## The map",
+    "Corpse runs, flights and spirit healers are separate layers.",
+    "Guildmates' pins and sightings each have a switch, under yours.",
+    "With guild sharing off, guildmates' marks are hidden, not deleted.",
+    "## Settings",
+    "Trail, corpse-run and flight lengths sit under their layers.",
+    "## The Ledger",
+    "Warpath now counts flights, corpse runs and what kills you.",
+  } },
 }
 
 local Older = ns.VersionOlder
