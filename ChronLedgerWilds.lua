@@ -128,7 +128,7 @@ local function CauseRow(i)
         local ch, ox, oy = P6.causes.child, w.win[1], w.win[2]
         local f = CreateFrame("Frame", nil, ch)
         return { frame = f, name = Str(f, "friz", 17, INK), kind = Str(f, "gari", 14, FADED),
-            quiet = Str(f, "gari", 16, FADED), num = LG.Num(f, 18, RUBRIC, ch, ox, oy), o = { ch, ox, oy } }
+            quiet = Str(f, "gari", 16, FADED), quiet17 = Str(f, "gari", 17, FADED), num = LG.Num(f, 18, RUBRIC, ch, ox, oy), o = { ch, ox, oy } }
     end)
 end
 
@@ -150,6 +150,7 @@ local function LayCauses(wilds)
         Put(r.kind, w.name + 6 + Wpx(r.name), y, "l", ch, ox, oy)
         r.kind:Show()
         r.quiet:Hide()
+        r.quiet17:Hide()
         r.num:Set(c.n, w.count, y, "r", RUBRIC)
         Book.Box(r.frame, w.win[1], y - 18, w.win[3], y + 6, ch, ox, oy)
         sheet:Add(r.frame, y - 18 - oy, y + 6 - oy)
@@ -159,12 +160,13 @@ local function LayCauses(wilds)
     if (wilds.unrecorded or 0) > 0 then
         n = n + 1
         local r = CauseRow(n)
-        local px = #causes > 0 and 16 or 17
-        r.quiet:SetFont(Book.FACES.gari, px / 1.2, "")
-        r.quiet.bpx = px
-        Set(r.quiet, #causes > 0 and "Not recorded (before this version)" or "Not recorded")
-        Put(r.quiet, w.name, y, "l", ch, ox, oy)
-        r.quiet:Show()
+        -- 16 under recorded causes, 17 alone (two strings: no face changes)
+        local q = #causes > 0 and r.quiet or r.quiet17
+        local other = q == r.quiet and r.quiet17 or r.quiet
+        Set(q, #causes > 0 and "Not recorded (before this version)" or "Not recorded")
+        Put(q, w.name, y, "l", ch, ox, oy)
+        q:Show()
+        other:Hide()
         r.name:Hide()
         r.kind:Hide()
         r.num:Set(wilds.unrecorded, w.count, y, "r", FADED)

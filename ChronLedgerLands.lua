@@ -288,6 +288,7 @@ local function ListRow(i)
         r = LG.Hot(ch, LandTip, function(self) Choose(state.cont, self.land) end)
         r.band = Book.Band(r, ch, ox, oy, LG.BAND, 70 / 255)
         r.name = Str(r, "gari", g.px, INK)
+        r.pick = Book.Bold(Str(r, "friz", g.px, RUBRIC))   -- the chosen land's name
         r.k = LG.Num(r, 18, RUBRIC, ch, ox, oy)
         r.d = LG.Num(r, 17, INK, ch, ox, oy)
         P.rows[i] = r
@@ -311,16 +312,13 @@ local function LayList(cont)
         local chosen = id == state.land
         Book.Box(r, R0 - 4, y - 19, RR - 10, y + 6, ch, ox, oy)
         if chosen then r.band:Set(R0 - 4, RR - 10, y - 19, y + 6, true, true) else r.band:Hide() end
-        Set(r.name, ns.MapName(id) or "?")
-        r.name:SetFont(Book.FACES[chosen and "friz" or "gari"], g.px / 1.2, "")
-        r.name.bface = chosen and "friz" or "gari"
-        if chosen and not r.name.twin then Book.Bold(r.name) end
-        if r.name.twin then
-            r.name.twin:SetFont(Book.FACES[r.name.bface], g.px / 1.2, "")
-            Set(r.name, ns.MapName(id) or "?")
-            r.name.twin:SetShown(chosen)
-        end
-        Book.Color(r.name, chosen and RUBRIC or (Fought(l) and INK or FADED))
+        local name = ns.MapName(id) or "?"
+        Set(r.name, name)
+        Set(r.pick, name)
+        r.name:SetShown(not chosen)
+        LG.Show(r.pick, chosen)
+        Book.Color(r.name, Fought(l) and INK or FADED)
+        Put(r.pick, g.name, y, "l", ch, ox, oy)
         Put(r.name, g.name, y, "l", ch, ox, oy)
         r.k:Set(l.kills, g.kills, y, "r")
         r.d:Set(l.deaths, g.deaths, y, "r")
