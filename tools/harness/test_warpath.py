@@ -2884,6 +2884,557 @@ class SpiritHealers(unittest.TestCase):
         self.assertTrue(any("spirit healers:" in l for l in self.wow.chat))
 
 
+def ledger_snapshot():
+    """Joe's frozen saved data for the Ledger's design (gitignored, so only on
+    his machine): WARPATH_LEDGER_SNAPSHOT, else tools/out/design/ledger/snapshot
+    in this checkout or in the main checkout a worktree belongs to."""
+    import subprocess
+    env = os.environ.get("WARPATH_LEDGER_SNAPSHOT")
+    roots = [Path(env)] if env else []
+    here = Path(__file__).resolve().parents[2]
+    roots.append(here / "tools/out/design/ledger/snapshot")
+    common = subprocess.run(["git", "-C", str(here), "rev-parse", "--git-common-dir"],
+                            capture_output=True, text=True).stdout.strip()
+    if common:
+        roots.append((here / common).resolve().parent / "tools/out/design/ledger/snapshot")
+    for r in roots:
+        if (r / "SavedVariables" / "Warpath.lua").exists():
+            return r
+
+
+class Ledger(unittest.TestCase):
+    """The Ledger tab's data (3.8.5): the new recordings, Ledger.Stats and the
+    account view. Ledger.Stats on Joe's real data is LedgerSnapshot."""
+
+    def setUp(self):
+        self.wow = Wow().login()
+
+    # -- driving ---------------------------------------------------------------
+    def kill(self, victim="Thrall", cls="SHAMAN"):
+        w = self.wow
+        w.run(f"""ns.Foes.Pick = function() return {lua_str(victim + '-Realm')}, {lua_str(victim)}, {lua_str(cls)}, "target" end""")
+        w.H.combat = True
+        w.fire("PLAYER_REGEN_DISABLED")
+        w.H.hk = (w.H.hk or 0) + 1
+        w.fire("PLAYER_PVP_KILLS_CHANGED")
+        w.advance(1)
+        w.H.combat = False
+        w.fire("PLAYER_REGEN_ENABLED")
+        w.advance(3)
+
+    def die(self):
+        self.wow.run("__H.dead = true")
+        self.wow.fire("PLAYER_DEAD")
+        self.wow.advance(0.5)
+
+    def release(self):
+        self.wow.run("__H.dead = false; __H.ghost = true")
+        self.wow.fire("PLAYER_ALIVE")
+        self.wow.advance(1.5)
+
+    def walk(self, x, y, steps=10):
+        w = self.wow
+        x0, y0 = float(w.eval("__H.player.x")), float(w.eval("__H.player.y"))
+        for i in range(1, steps + 1):
+            w.run(f"__H.player.x = {x0 + (x - x0) * i / steps}; __H.player.y = {y0 + (y - y0) * i / steps}")
+            w.advance(0.5)
+
+    def unghost(self):
+        self.wow.run("__H.ghost = false")
+        self.wow.fire("PLAYER_UNGHOST")
+        self.wow.advance(1)
+
+    def last_mark(self, field):
+        return self.wow.eval(
+            f"(function() local ms = WarpathDB.maps[1448].marks local m = ms[#ms] return m and m.{field} end)()")
+
+    # -- recordings ------------------------------------------------------------
+    def test_a_flight_is_counted_when_it_starts(self):
+        w = self.wow
+        w.run("__H.taxi = false; UnitOnTaxi = function() return __H.taxi end")
+        w.advance(1)
+        self.assertIsNone(w.eval("WarpathDB.flights"))  # "none yet" until the first
+        w.run("__H.taxi = true")
+        w.advance(30)
+        self.assertEqual(w.eval("WarpathDB.flights"), 1)
+        w.run("__H.taxi = false")
+        w.advance(2)
+        w.run("__H.taxi = true")
+        w.advance(2)
+        self.assertEqual(w.eval("WarpathDB.flights"), 2)
+
+    def test_a_reload_mid_flight_is_not_a_second_flight(self):
+        w = Wow()
+        w.run("UnitOnTaxi = function() return true end")
+        w.login()
+        w.advance(5)
+        self.assertIsNone(w.eval("WarpathDB.flights"))
+
+    def test_a_corpse_run_ends_at_the_body(self):
+        w = self.wow
+        self.die()
+        self.release()
+        w.run("__H.player.x = 0.70")  # the graveyard, 800 yd east
+        w.advance(1)
+        self.walk(0.502, 0.5)
+        self.unghost()
+        self.assertEqual(w.eval("WarpathDB.runs"), 1)
+        self.assertEqual(w.eval("WarpathDB.maps[1448].runs_n"), 1)
+        self.assertIsNone(w.eval("WarpathDB.spirit"))
+        ghost = float(w.eval("WarpathDB.ghostYards"))
+        self.assertAlmostEqual(ghost, 0.198 * 4000, delta=40)  # the walk back, as a ghost
+        self.assertEqual(w.eval("ns.Ledger.Stats(WarpathDB, WarpathGlobal).lands[1448].runs"), 1)
+
+    def test_resurrecting_at_a_spirit_healer_is_not_a_corpse_run(self):
+        w = self.wow
+        self.die()
+        self.release()
+        w.run("__H.player.x = 0.70")
+        w.advance(1)
+        self.unghost()
+        self.assertEqual(w.eval("WarpathDB.spirit"), 1)
+        self.assertIsNone(w.eval("WarpathDB.runs"))
+
+    def test_coming_back_is_counted_once_and_only_after_a_recorded_death(self):
+        w = self.wow
+        self.unghost()  # no death recorded this session
+        self.assertIsNone(w.eval("WarpathDB.runs"))
+        self.assertIsNone(w.eval("WarpathDB.spirit"))
+        self.die()
+        self.release()
+        self.unghost()
+        self.unghost()
+        self.assertEqual(w.eval("WarpathDB.runs"), 1)
+
+    def test_kills_and_deaths_keep_your_level(self):
+        self.wow.run("__H.player.level = 42")
+        self.kill()
+        self.assertEqual(self.last_mark("my"), 42)
+        self.die()
+        self.assertEqual(self.last_mark("my"), 42)
+
+    def test_a_kill_keeps_your_health_and_the_odds(self):
+        w = self.wow
+        w.run("UnitHealth = function() return 37 end")
+        w.run("ns.Foes.near['A-R'] = GetTime(); ns.Foes.near['B-R'] = GetTime(); ns.Foes.near['C-R'] = GetTime() - 30")
+        self.kill()
+        self.assertEqual(self.last_mark("hp"), 37)
+        self.assertEqual(self.last_mark("odds[1]"), 2)
+        self.assertEqual(self.last_mark("odds[2]"), 1)
+
+    def test_a_kill_with_no_enemy_read_keeps_no_odds(self):
+        self.wow.run("for k in pairs(ns.Foes.near) do ns.Foes.near[k] = nil end")
+        self.kill()
+        self.assertIsNone(self.last_mark("odds"))
+        self.assertEqual(self.last_mark("hp"), 100)
+
+    def cause(self):
+        return (self.last_mark("cause"), self.last_mark("how"), self.last_mark("ct"))
+
+    def creature(self, name="Deadwood Ursa", kind="Beast"):
+        w = self.wow
+        w.run(f"__H.units = {{ target = {{ name = {lua_str(name)} }} }}")
+        w.run(f"UnitCanAttack = function(a, u) return u == 'target' end; UnitCreatureType = function() return {lua_str(kind)} end")
+        w.fire("PLAYER_TARGET_CHANGED")
+
+    def test_a_fall_is_a_cause(self):
+        self.wow.run("IsFalling = function() return true end")
+        self.die()
+        self.assertEqual(self.cause(), (None, "fall", None))
+
+    def test_landing_just_before_dying_is_still_a_fall(self):
+        w = self.wow
+        w.run("IsFalling = function() return true end")
+        w.advance(0.5)
+        w.run("IsFalling = function() return false end")
+        w.advance(0.6)
+        self.die()
+        self.assertEqual(self.last_mark("how"), "fall")
+
+    def test_a_fall_long_before_is_not_a_cause(self):
+        w = self.wow
+        w.run("IsFalling = function() return true end")
+        w.advance(0.5)
+        w.run("IsFalling = function() return false end")
+        w.advance(2)
+        self.die()
+        self.assertIsNone(self.last_mark("how"))
+
+    def test_drowning_is_a_cause(self):
+        w = self.wow
+        w.fire("MIRROR_TIMER_START", "BREATH", 60000, 60000, -1)
+        w.advance(61)
+        self.die()
+        self.assertEqual(self.cause(), (None, "drown", None))
+
+    def test_fatigue_is_a_cause(self):
+        w = self.wow
+        w.fire("MIRROR_TIMER_START", "EXHAUSTION", 30000, 60000, -1)
+        w.advance(31)
+        self.die()
+        self.assertEqual(self.last_mark("how"), "fatigue")
+
+    def test_a_creature_is_a_cause(self):
+        self.creature()
+        self.wow.advance(4)
+        self.die()
+        self.assertEqual(self.cause(), ("Deadwood Ursa", "beast", "Beast"))
+
+    def test_a_creature_that_has_you_targeted_is_a_cause(self):
+        w = self.wow
+        w.run("""__H.units = { nameplate1 = { name = 'Jaedenar Hound' } }
+                 C_NamePlate.GetNamePlates = function() return { { namePlateUnitToken = 'nameplate1' } } end
+                 UnitCanAttack = function(a, u) return u == 'nameplate1' end
+                 UnitIsUnit = function(a, b) return a == b or (a == 'nameplate1target' and b == 'player') end""")
+        self.die()
+        self.assertEqual(self.last_mark("cause"), "Jaedenar Hound")
+
+    def test_a_creature_underwater_beats_the_breath_timer(self):
+        w = self.wow
+        w.fire("MIRROR_TIMER_START", "BREATH", 60000, 60000, -1)
+        w.advance(10)
+        self.creature("Murloc Hunter", "Humanoid")
+        self.die()
+        self.assertEqual(self.cause(), ("Murloc Hunter", "beast", "Humanoid"))
+
+    def test_running_out_of_breath_beats_a_creature(self):
+        w = self.wow
+        w.fire("MIRROR_TIMER_START", "BREATH", 60000, 60000, -1)
+        w.advance(55)
+        self.creature("Murloc Hunter", "Humanoid")
+        w.advance(6)
+        self.die()
+        self.assertEqual(self.cause(), (None, "drown", None))
+
+    def test_a_breath_timer_still_running_counts_when_nothing_else_does(self):
+        w = self.wow
+        w.fire("MIRROR_TIMER_START", "BREATH", 60000, 60000, -1)
+        w.advance(10)
+        self.die()
+        self.assertEqual(self.last_mark("how"), "drown")
+
+    def test_a_surfaced_timer_and_an_old_creature_explain_nothing(self):
+        w = self.wow
+        w.fire("MIRROR_TIMER_START", "BREATH", 60000, 60000, -1)
+        w.advance(5)
+        w.fire("MIRROR_TIMER_STOP", "BREATH")
+        self.creature()
+        w.run("__H.units = nil")
+        w.advance(11)
+        self.die()
+        self.assertEqual(self.cause(), (None, None, None))
+
+    def test_a_pvp_death_gets_no_cause(self):
+        w = self.wow
+        w.run("IsFalling = function() return true end; ns.Foes.PlayerNearby = function() return true end")
+        self.die()
+        self.assertTrue(self.last_mark("pvp"))
+        self.assertIsNone(self.last_mark("how"))
+
+    # -- the kill message ------------------------------------------------------
+    def kill_sent(self):
+        self.wow.run("ns.cfg.share = true")
+        self.kill(victim="Thrall", cls="SHAMAN")
+        self.wow.advance(2)
+        return [m["msg"] for m in self.wow.sent if "|K|" in m["msg"]][-1]
+
+    def test_the_kill_message_carries_the_victims_class_last(self):
+        msg = self.kill_sent()
+        parts = msg.split("|")
+        self.assertEqual(parts[-1], "SHAMAN", msg)
+        self.assertEqual(parts[13], "Thrall", msg)  # the victim is still the 14th field
+
+    def receive(self, text, sender="Bob Smith"):
+        self.wow.run("ns.cfg.share = true")
+        self.wow.run(f"ns.OnComm('WARPATH', {lua_str(text)}, 'GUILD', {lua_str(sender)})")
+        self.wow.advance(2.1)
+        return self.wow.eval("(function() local g = WarpathDB.maps[1448].gmarks return g[#g] end)()")
+
+    def test_a_guild_kill_pin_keeps_the_victims_name_and_class(self):
+        g = self.receive("1|K|1448|0.40|0.60|k|1|1||||||Thrall|SHAMAN")
+        self.assertEqual((g["vn"], g["vc"]), ("Thrall", "SHAMAN"))
+
+    def test_an_old_kill_message_still_works(self):
+        chat = len(self.wow.chat)
+        g = self.receive("1|K|1448|0.40|0.60|k|1|1||||||Thrall")  # 3.7 to 3.8.4
+        self.assertEqual((g["vn"], g["vc"]), ("Thrall", None))
+        self.assertTrue(any("Bob Smith" in l for l in self.wow.chat[chat:]))
+        g = self.receive("1|K|1448|0.30|0.60", sender="Ann Lee")  # before 3.7
+        self.assertEqual((g["vn"], g["vc"]), (None, None))
+        g = self.receive("1|K|1448|0.20|0.60|k|1|1||||||Garrosh|SHAM", sender="Cid Roe")  # cut short
+        self.assertEqual((g["vn"], g["vc"]), ("Garrosh", None))
+
+    def test_the_last_release_reads_the_new_kill_message(self):
+        import subprocess
+        from render import addon_from_ref
+        repo = Path(__file__).resolve().parents[2]
+        if subprocess.run(["git", "-C", str(repo), "rev-parse", "-q", "--verify", "refs/tags/3.8.4"],
+                          capture_output=True).returncode != 0:
+            self.skipTest("no 3.8.4 tag in this checkout")
+        old = Wow(addon_dir=addon_from_ref("3.8.4")).login()
+        old.run("ns.cfg.share = true")
+        msg = self.kill_sent()
+        # the same kill without the class, as 3.8.4 itself sends it, from
+        # another guildmate on another map: 3.8.4 must read both alike
+        bare = msg.rsplit("|", 1)[0].replace("|1448|", "|1440|", 1)
+        old.run(f"ns.OnComm('WARPATH', {lua_str(msg)}, 'GUILD', 'Bob Smith')")
+        old.run(f"ns.OnComm('WARPATH', {lua_str(bare)}, 'GUILD', 'Ann Lee')")
+        old.advance(2.1)
+        self.assertEqual(old.eval("#WarpathDB.maps[1448].gmarks"), 1)
+        new_line = [l for l in old.chat if "Bob Smith" in l]
+        bare_line = [l for l in old.chat if "Ann Lee" in l]
+        self.assertEqual(len(new_line), 1, old.chat)
+        self.assertEqual(new_line[0].replace("Bob Smith", "X").replace("Felwood", "Z"),
+                         bare_line[0].replace("Ann Lee", "X").replace("Ashenvale", "Z"))
+        old.run("ns.DiagStatus()")
+        self.assertIn(" 0 errors", " ".join(old.chat))
+        self.assertIn(" 0 malformed", " ".join(old.chat))
+
+    # -- Stats -------------------------------------------------------------------
+    def test_a_new_character_gets_every_figure(self):
+        w = self.wow
+        w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        self.assertEqual([w.eval(f"__L.tally.{k}") for k in
+                          ("kills", "deaths", "best", "foes", "wilds", "flights", "runs", "spirit")], [0] * 8)
+        self.assertIsNone(w.eval("__L.tally.kd"))
+        self.assertIsNone(w.eval("next(__L.records)"))
+        self.assertEqual(w.eval("__L.multi[2] + __L.multi[5] + __L.streaks[3] + __L.streaks[20]"), 0)
+        self.assertIsNone(w.eval("__L.first"))
+        self.assertEqual(w.eval("#__L.foes.slain + #__L.foes.struck + #__L.wilds.causes"), 0)
+        self.assertEqual(w.eval("#__L.guild.mates"), 1)  # you
+        self.assertTrue(w.eval("__L.guild.mates[1].me"))
+        self.assertIsNotNone(w.eval("__L.lands[1448]"))  # walked, no fight
+
+    def test_stats_count_a_chain_once_and_streaks_at_every_title(self):
+        w = self.wow
+        for i in range(6):  # one chain of six: one bloodbath; streak titles at 3 and 5
+            self.kill(victim=f"Foe{i}")
+        w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        self.assertEqual([w.eval(f"__L.multi[{n}]") for n in (2, 3, 4, 5)], [0, 0, 0, 1])
+        self.assertEqual([w.eval(f"__L.streaks[{n}]") for n in (3, 5, 10)], [1, 1, 0])
+        self.assertEqual(w.eval("__L.records.hour.n"), 6)
+        self.assertEqual(w.eval("__L.records.longest.n"), 6)
+
+    def test_legend_of_the_warpath_counts_at_every_ten_from_twenty(self):
+        w = self.wow
+        w.run("""local ms = WarpathDB.maps[1448].marks
+                 for _, n in ipairs({ 3, 5, 10, 15, 20, 25, 30, 40 }) do ms[#ms + 1] = { 0.5, 0.5, time(), 'kill', streak = n } end
+                 __L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)""")
+        self.assertEqual([w.eval(f"__L.streaks[{n}]") for n in (3, 5, 10, 15, 20)], [1, 1, 1, 1, 3])
+
+    def test_a_chain_that_ends_on_a_tier_counts_there(self):
+        w = self.wow
+        self.kill(victim="A")
+        self.kill(victim="B")
+        self.kill(victim="C")
+        w.advance(200)
+        self.kill(victim="D")
+        self.kill(victim="E")
+        w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        self.assertEqual([w.eval(f"__L.multi[{n}]") for n in (2, 3, 4, 5)], [1, 1, 0, 0])
+
+    def test_records_from_the_new_fields(self):
+        w = self.wow
+        w.run("__H.player.level = 40; UnitHealth = function() return 12 end")
+        w.run("ns.Foes.near['A-R'] = GetTime(); ns.Foes.near['B-R'] = GetTime(); ns.Foes.near['C-R'] = GetTime()")
+        w.run("ns.Foes.info['Thrall-Realm'] = { lv = 44 }")
+        self.kill()
+        w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        self.assertEqual(w.eval("__L.records.closest.hp"), 12)
+        self.assertEqual((w.eval("__L.records.odds.foes"), w.eval("__L.records.odds.friends")), (3, 1))
+        self.assertEqual(w.eval("__L.records.gap.gap"), 4)
+
+    def test_the_wilds_count_causes(self):
+        w = self.wow
+        self.creature()
+        self.die()
+        w.run("__H.dead = false; ns.Foes.dead = false; __H.units = nil")
+        w.advance(12)
+        self.die()
+        w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        self.assertEqual(w.eval("__L.wilds.total"), 2)
+        self.assertEqual((w.eval("__L.wilds.causes[1].cause"), w.eval("__L.wilds.causes[1].how"),
+                          w.eval("__L.wilds.causes[1].kind"), w.eval("__L.wilds.causes[1].n")),
+                         ("Deadwood Ursa", "beast", "Beast", 1))
+        self.assertEqual(w.eval("__L.wilds.unrecorded"), 1)
+
+    def test_the_guild_war_names_victims_and_joins_the_roster(self):
+        self.receive("1|K|1448|0.40|0.60|k|1|1||||||Thrall|SHAMAN")
+        self.receive("1|D|1448|0.40|0.60|Garrosh-R|0|1|")
+        w = self.wow
+        w.run("""__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal, { me = 'Tester',
+            roster = { { 'Bob Smith', 'Officer', 58, 'ROGUE', 'sneaky' } } })""")
+        bob = "__L.guild.mates[1]"
+        self.assertEqual(w.eval(f"{bob}.name"), "Bob Smith")
+        self.assertEqual((w.eval(f"{bob}.kills"), w.eval(f"{bob}.deaths")), (1, 1))
+        self.assertEqual((w.eval(f"{bob}.class"), w.eval(f"{bob}.level"), w.eval(f"{bob}.note")), ("ROGUE", 58, "sneaky"))
+        self.assertEqual((w.eval(f"{bob}.victims[1].n"), w.eval(f"{bob}.victims[1].c")), ("Thrall", "SHAMAN"))
+        self.assertEqual(w.eval("__L.guild.lands[1448].kills"), 1)
+        self.assertTrue(w.eval("__L.guild.mates[2].me"))
+
+    # -- every character -----------------------------------------------------------
+    def test_login_and_logout_write_this_characters_summary(self):
+        w = self.wow
+        key = "ns.gdb.chars[ns.myFull]"
+        self.assertEqual(w.eval(f"{key}.stats.tally.kills"), 0)
+        self.kill()
+        w.fire("PLAYER_LOGOUT")
+        self.assertEqual(w.eval(f"{key}.stats.tally.kills"), 1)
+        self.assertEqual(w.eval(f"{key}.class"), "WARRIOR")
+        self.assertEqual(w.eval(f"{key}.level"), 60)
+        self.assertIsNone(w.eval(f"{key}.stats.guild"))
+
+    def test_a_summary_that_errors_says_so_once_and_is_marked(self):
+        w = self.wow
+        w.run("local real = ns.Ledger.Stats; ns.Ledger.Stats = function() error('boom') end; "
+              "ns.Ledger.Summarize(); ns.Ledger.Stats = real")
+        lines = [l for l in w.chat if "Ledger" in l]
+        self.assertEqual(len(lines), 1, w.chat)
+        self.assertIsNotNone(w.eval("ns.gdb.chars[ns.myFull].err"))
+        self.assertEqual(w.eval("ns.Ledger.Account(ns.gdb).failed[1]"), w.eval("ns.myFull"))
+
+    def test_the_account_adds_characters_together(self):
+        w = self.wow
+        self.kill()
+        self.die()
+        w.run("ns.Ledger.Summarize()")
+        w.run("""local function copy(t) local c = {} for k, v in pairs(t) do c[k] = type(v) == 'table' and copy(v) or v end return c end
+                 local other = copy(ns.gdb.chars[ns.myFull])
+                 other.stats.tally.best = 7
+                 other.stats.records.longest.n = 7
+                 ns.gdb.chars['Alt-Realm'] = other
+                 __A = ns.Ledger.Account(ns.gdb)""")
+        self.assertEqual(w.eval("#__A.chars"), 2)
+        self.assertEqual(w.eval("__A.tally.kills"), 2)
+        self.assertEqual(w.eval("__A.tally.wilds"), 2)
+        self.assertEqual(w.eval("__A.tally.best"), 7)
+        self.assertIsNone(w.eval("__A.tally.kd"))  # no PvP deaths
+        self.assertEqual(w.eval("__A.records.longest.char"), "Alt-Realm")
+        self.assertEqual(w.eval("__A.slain.SHAMAN"), 2)
+        self.assertEqual(w.eval("__A.lands[1448].kills"), 2)
+        self.assertEqual(w.eval("__A.foes.slain[1].count"), 2)
+        self.assertEqual(w.eval("__A.wilds.unrecorded"), 2)
+        self.assertEqual(w.eval("__A.continents[1414].bloodiest"), 1448)
+        self.assertIsNone(w.eval("__A.guild"))
+
+    def test_one_character_alone_adds_up_to_itself(self):
+        w = self.wow
+        self.kill()
+        self.kill(victim="Garrosh", cls="WARRIOR")
+        self.die()
+        w.run("ns.Ledger.Summarize(); __L = ns.Ledger.Stats(WarpathDB, WarpathGlobal); __A = ns.Ledger.Account(ns.gdb)")
+        for e in ("tally.kills", "tally.deaths", "tally.best", "tally.foes", "tally.wilds", "multi[2]", "streaks[3]",
+                  "slain.SHAMAN", "slain.WARRIOR", "lands[1448].kills", "records.firstBlood.t", "records.hour.n",
+                  "foes.slain[1].count", "wilds.total", "continents[1414].kills"):
+            with self.subTest(figure=e):
+                self.assertEqual(w.eval(f"__A.{e}"), w.eval(f"__L.{e}"))
+        hour = int(w.eval("tonumber(date('%H'))"))
+        self.assertEqual(w.eval(f"__A.hours[{hour}]"), 2)
+
+
+class LedgerSnapshot(unittest.TestCase):
+    """Ledger.Stats on Joe's frozen saved data, against the figures the spec
+    (docs/design/chronicle-ledger.md) quotes from it. Hours and dates are
+    local time, so these hold in Joe's time zone. Skipped without the
+    snapshot (it's gitignored)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.root = ledger_snapshot()
+        if not cls.root:
+            raise unittest.SkipTest("no Ledger snapshot (tools/out/design/ledger/snapshot)")
+
+    def boot(self, char):
+        w = Wow(saved=self.root / "91" / char / "SavedVariables" / "Warpath.lua",
+                saved_global=self.root / "SavedVariables" / "Warpath.lua", player={"name": char.split("-")[0]})
+        # where the client puts these zones (the stub's unknown maps sit on Kalimdor)
+        w.run("""for id, name in pairs({ [1423] = 'Eastern Plaguelands', [1422] = 'Western Plaguelands',
+                    [1437] = 'Wetlands', [1431] = 'Duskwood' }) do
+                    __H.maps[id] = { name = name, mapType = 3, parentMapID = 1415 } end""")
+        w.login()
+        return w
+
+    def test_lethality(self):
+        w = self.boot("Lethality-Starunner")
+        w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal)")
+        ev = w.eval
+        self.assertEqual((ev("__L.tally.kills"), ev("__L.tally.deaths"), ev("__L.tally.best")), (28, 27, 6))
+        self.assertEqual(round(ev("__L.tally.kd"), 2), 1.04)
+        self.assertEqual(ev("__L.tally.foes"), 16)
+        self.assertEqual(ev("__L.tally.avenged"), 0)
+        self.assertEqual(ev("__L.tally.wilds"), 34)
+        self.assertEqual(round(ev("__L.tally.yards") / 1760, 1), 1402.6)
+        self.assertEqual(ev("__L.tally.sightings"), 1696)
+        self.assertEqual(ev("__L.tally.shots"), 22)
+        self.assertEqual([ev(f"__L.multi[{n}]") for n in (2, 3, 4, 5)], [2, 1, 0, 0])
+        self.assertEqual([ev(f"__L.streaks[{n}]") for n in (3, 5, 10, 15, 20)], [4, 3, 0, 0, 0])
+        busiest = ev("(function() local b, h = 0 for k, v in pairs(__L.hours) do if v > b then b, h = v, k end end return h .. ' ' .. b end)()")
+        self.assertEqual(busiest, "22 6")
+        days = [ev(f"__L.weekdays[{d}] or 0") for d in range(1, 8)]
+        self.assertEqual((days[3], max(days)), (10, 10))  # Thursday
+        slain = {"PALADIN": 4, "SHAMAN": 4, "WARRIOR": 3, "HUNTER": 2, "MAGE": 2, "PRIEST": 2, "ROGUE": 2,
+                 "DRUID": 1, "WARLOCK": None, "unknown": 8}
+        for c, n in slain.items():
+            with self.subTest(slain=c):
+                self.assertEqual(ev(f"__L.slain.{c}"), n)
+        slew = {"unknown": 17, "HUNTER": 2, "PALADIN": 2, "WARLOCK": 2, "DRUID": 1, "PRIEST": 1, "SHAMAN": 1, "WARRIOR": 1}
+        for c, n in slew.items():
+            with self.subTest(slew=c):
+                self.assertEqual(ev(f"__L.slew.{c}"), n)
+        ep = "__L.lands[1423]"
+        self.assertEqual((ev(f"{ep}.kills"), ev(f"{ep}.deaths"), ev(f"{ep}.best")), (8, 1, 5))
+        self.assertEqual((ev(f"{ep}.top.f"), ev(f"{ep}.top.count")), ("Kourne-Bladeheart", 2))
+        self.assertEqual(ev("__L.continents[1415].bloodiest"), 1423)
+        # the wilds' lands: Un'Goro Crater 5, Mount Hyjal 5, Western Plaguelands 4
+        self.assertEqual([ev(f"__L.wilds.lands[{m}]") for m in (1449, 2482, 1422)], [5, 5, 4])
+        self.assertEqual(ev("__L.wilds.unrecorded"), 34)
+        r = "__L.records"
+        self.assertEqual(ev(f"date('%B %d', {r}.firstBlood.t)"), "November 19")
+        self.assertEqual(ev(f"{r}.firstBlood.map"), 1422)
+        self.assertIsNone(ev(f"{r}.firstBlood.n"))  # the foe unnamed
+        self.assertEqual(ev(f"{r}.bloodiest.kills .. date(' %A, %B %d', {r}.bloodiest.start)"), "8 Tuesday, November 24")
+        self.assertEqual(ev(f"{r}.hour.n .. date(' %A, %B %d, %H:%M', {r}.hour.t)"), "6 Tuesday, November 24, 19:09")
+        self.assertEqual((ev(f"{r}.longest.n"), ev(f"{r}.longest.map"), ev(f"{r}.longest.shot")), (6, 1431, 22))
+        self.assertEqual(ev(f"date('%B %d', {r}.longest.t)"), "November 26")
+        self.assertEqual(ev(f"{r}.worst.deaths .. date(' %A, %B %d', {r}.worst.start)"), "4 Sunday, November 22")
+        self.assertEqual((ev(f"{r}.smallest.lv"), ev(f"{r}.smallest.f"), ev(f"{r}.smallest.c"),
+                          ev(f"{r}.smallest.ra"), ev(f"{r}.smallest.map")),
+                         (28, "Isitin-Mytruck", "MAGE", "High Order Skyborne", 1437))
+        self.assertEqual(ev(f"math.floor({r}.longNight.played / 60)"), 15 * 60 + 59)
+        self.assertEqual(ev(f"date('%A, %B %d', {r}.longNight.start)"), "Saturday, November 21")
+        self.assertEqual(round(ev(f"{r}.farthest.yards") / 1760, 1), 218.6)
+        self.assertEqual(ev(f"{r}.mostSeen.n"), 291)
+        for k in ("revenge", "closest", "odds", "gap"):
+            with self.subTest(record=k):
+                self.assertIsNone(ev(f"{r}.{k}"))
+
+    def test_lethalitys_guild_war_joins_the_roster(self):
+        roster = self.root / "roster" / "Warpath.lua"
+        if not roster.exists():
+            self.skipTest("no roster capture")
+        w = self.boot("Lethality-Starunner")
+        w.run(f"""local env = {{}} local f = assert(loadfile({lua_str(str(roster))})) setfenv(f, env)()
+                  __L = ns.Ledger.Stats(WarpathDB, WarpathGlobal, {{ me = 'Lethality Starunner', roster = env.WarpathGlobal.roster }})""")
+        ev = w.eval
+        self.assertEqual((ev("__L.guild.mates[1].name"), ev("__L.guild.mates[1].kills")), ("Plains Stomper", 38))
+        me = "__L.guild.mates[2]"
+        self.assertEqual((ev(f"{me}.name"), ev(f"{me}.me"), ev(f"{me}.class"), ev(f"{me}.kills")),
+                         ("Lethality Starunner", True, "DRUID", 28))
+        self.assertEqual(ev(f"{me}.note"), "Joe")
+
+    def test_empty_characters_give_every_figure(self):
+        for char in ("Dabank-Dabonk", "Derelect-Armstrong"):
+            with self.subTest(character=char):
+                w = self.boot(char)
+                w.run("__L = ns.Ledger.Stats(WarpathDB, WarpathGlobal); ns.Ledger.Summarize(); __A = ns.Ledger.Account(ns.gdb)")
+                self.assertEqual((w.eval("__L.tally.kills"), w.eval("__L.tally.deaths"), w.eval("__L.tally.best")), (0, 0, 0))
+                self.assertIsNone(w.eval("next(__L.records)"))
+                self.assertEqual(w.eval("#__A.chars"), 1)
+                self.assertGreater(lua_count(w, "__L.lands"), 0)
+                self.assertFalse([l for l in w.chat if "Ledger" in l])
+
+
+
 def lua_str(s):
     s = str(s)
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'

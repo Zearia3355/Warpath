@@ -17,6 +17,8 @@ local hist = {}
 local sightSeen = {}
 local lastHostile, pendingAvenge = -1000, nil
 local lastShot, shotPending = -1000, nil
+local onTaxi       -- on a flight at the last sample; nil before the first (3.8.5)
+local body         -- { mapID, x, y }: where your last recorded death left your body (3.8.5)
 
 ---------------------------------------------------------------------------
 -- Recording
@@ -255,6 +257,12 @@ local function Visit(mapID, x, y, mode)
 end
 
 local function Sample()
+    -- A flight starts when you go from the ground to a taxi (3.8.5). The
+    -- first sample only learns where you are: a /reload mid-flight is not a
+    -- second flight.
+    local taxi = UnitOnTaxi("player") and true or false
+    if onTaxi == false and taxi and not S.inInstance then db.flights = (db.flights or 0) + 1 end
+    onTaxi = taxi
     local mapID, x, y = PlayerPos()
     if not mapID then
         CloseStroke()
@@ -281,6 +289,7 @@ local function Sample()
             z.yards = z.yards + yards
             db.yards = db.yards + yards
             session.yards = session.yards + yards
+            if mode == "g" then db.ghostYards = (db.ghostYards or 0) + yards end -- 3.8.5
         end
     end
 
@@ -381,6 +390,9 @@ local function AddMark(kind, extra)
     local z = ZoneData(mapID)
     local m = { Q(x), Q(y), time(), kind }
     for k, v in pairs(extra or {}) do m[k] = v end
+    -- 3.8.5: your own level, for the Ledger's level-gap records
+    local my = Foes.Safe(UnitLevel, "player")
+    if type(my) == "number" and my > 0 then m.my = my end
     z.marks[#z.marks + 1] = m
     if #z.marks > C.MARK_CAP then table.remove(z.marks, 1) end
     db[kind == "death" and "lastDeath" or "lastKill"] = { mapID, m[1], m[2], m[3] }
@@ -664,6 +676,12 @@ local function OnKill(full, short, class)
         m.tag, m.streak, m.times = tag, session.streak, times
         m.mk = n >= 2 and n or nil
         m.ft = k.feat
+        -- 3.8.5: your health and the odds, for the Ledger's records. Enemies
+        -- the game hides aren't counted; a kill with none read keeps no odds.
+        local hp = Feats.HealthPct()
+        if hp then m.hp = math.floor(hp * 100 + 0.5) end
+        local foes, friends = Feats.Odds()
+        if foes > 0 then m.odds = { foes, friends } end
         k.entry = ns.CampaignKill({ n = short, f = full, c = class, z = mapID, x = m[1], y = m[2],
             t = m[3], tag = tag, st = session.streak, grudge = k.grudge, lv = info.lv, ra = info.ra, gu = info.gu,
             mk = m.mk, ft = k.feat })
@@ -841,8 +859,44 @@ local function OnDeath()
         end
     else
         Feats.OnDied(false)
+        -- 3.8.5: what killed you, as far as the client can tell
+        if m then
+            local ok, cause, how, kind = pcall(Foes.Cause)
+            if ok then m.cause, m.how, m.ct = cause, how, kind end
+        end
     end
+    body = m and { mapID = mapID, x = m[1], y = m[2] } or nil
     ns.UpdateHUD()
+end
+
+-- Back from being a ghost (PLAYER_UNGHOST, 3.8.5): at your body, that was a
+-- corpse run; anywhere else, a spirit healer brought you back. Counted only
+-- for a death that was recorded (never inside an instance).
+local BODY_YARDS = 100
+local function OnUnghost()
+    local b = body
+    body = nil
+    if not b or S.inInstance then return end
+    local mapID, x, y = PlayerPos()
+    if not mapID then return end
+    local near = false
+    if mapID == b.mapID then
+        local ax, ay = WorldXY(mapID, x, y)
+        local bx, by = WorldXY(b.mapID, b.x, b.y)
+        if ax and bx then
+            near = (ax - bx) ^ 2 + (ay - by) ^ 2 <= BODY_YARDS * BODY_YARDS
+        else
+            near = (x - b.x) ^ 2 + (y - b.y) ^ 2 <= 0.02 * 0.02
+        end
+    end
+    if near then
+        db.runs = (db.runs or 0) + 1
+        local z = ZoneData(mapID)
+        z.runs_n = (z.runs_n or 0) + 1
+    else
+        db.spirit = (db.spirit or 0) + 1
+    end
+    S.dirty = true
 end
 
 -- Forget recording state (/warpath clear).
@@ -858,6 +912,7 @@ ns.MergeLanes = MergeLanes
 ns.CloseStroke = CloseStroke
 ns.FinishShot = FinishShot
 ns.OnDeath = OnDeath
+ns.OnUnghost = OnUnghost
 ns.Sample = Sample
 ns.See = See
 ns.TakeKillShot = TakeKillShot

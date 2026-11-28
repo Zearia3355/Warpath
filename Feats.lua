@@ -56,6 +56,7 @@ local function Odds()
     end
     return foes, friends
 end
+Feats.Odds, Feats.HealthPct = Odds, HealthPct -- the Ledger's records keep both at each kill (3.8.5)
 
 -- Who has killed you most this campaign (2+ times).
 local function Nemesis()
@@ -177,7 +178,8 @@ Feats.CODE_POOL = CODE_POOL
 local function Clean(v) return (tostring(v or ""):gsub("[|;]", "")) end
 
 -- Fields after the position: base pool, line number, chain, extra key,
--- extra line number, two arguments, faction cry, victim name.
+-- extra line number, two arguments, faction cry, victim name, and (3.8.5)
+-- the victim's class token. Older versions read nine fields and ignore it.
 function Feats.KillFields(n, k, feats)
     local pool = P.TierPool(n)
     local list = {}
@@ -200,7 +202,7 @@ function Feats.KillFields(n, k, feats)
             if f.a1 >= 10 and math.random(3) == 1 and P.CRY[UnitFactionGroup("player") or ""] then cry = "1" end
         end
     end
-    return table.concat({ POOL_CODE[pool], pi, n, ek, ei, Clean(a1), Clean(a2), cry, Clean(k.short) }, "|")
+    return table.concat({ POOL_CODE[pool], pi, n, ek, ei, Clean(a1), Clean(a2), cry, Clean(k.short), Clean(k.class) }, "|")
 end
 
 -- A guildmate's kill line. Fields from a 3.6 sender are missing: their line
