@@ -74,7 +74,7 @@ local function Band(lv)
     if lv >= 60 then return "60" end
     if lv <= 20 then return "1-20" end
     local lo = math.floor((lv - 1) / 10) * 10 + 1
-    return lo .. "-" .. (lo + 9)
+    return lo .. "-" .. math.min(lo + 9, 59) -- 51-59: 60 is its own band
 end
 
 local function Add(t, k, n) t[k] = (t[k] or 0) + (n or 1) end

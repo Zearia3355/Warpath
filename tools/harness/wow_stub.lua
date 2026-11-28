@@ -495,6 +495,15 @@ UnitIsUnit = function(a, b) return a == b end
 InCombatLockdown = function() return false end
 IsInGuild = function() return H.player.guild ~= nil end
 GetGuildInfo = function(u) if isPlayer(u) then return H.player.guild, "Member", 1 end end
+-- The guild roster (the Ledger's Guild spread): H.roster = { { name, rank,
+-- level, class token, public note, officer note } }, as GetGuildRosterInfo
+-- gives them.
+GetNumGuildMembers = function() return H.roster and #H.roster or 0 end
+GetGuildRosterInfo = function(i)
+    local r = H.roster and H.roster[i]
+    if r then return r[1], r[2], 1, r[3], r[4], "Felwood", r[5], r[6] or "", true, 0, r[4] end
+end
+C_GuildInfo = { GuildRoster = function() H.rosterAsked = (H.rosterAsked or 0) + 1 end }
 GetNormalizedRealmName = function() return "" end   -- WoW Forever: empty
 GetRealmName = function() return "" end
 IsInInstance = function() if H.instance then return true, "pvp" end return false, "none" end

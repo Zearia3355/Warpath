@@ -459,8 +459,9 @@ local BAND_COL, BAND_A = { 222, 150, 44 }, 160 / 255
 local Band = {}
 Band.__index = Band
 
-function Book.Band(parent, rel, ox, oy)
-    return setmetatable({ parent = parent, rel = rel, ox = ox, oy = oy, strips = {}, n = 0 }, Band)
+-- col, a: another colour and strength (the Ledger's rubric band); default gilt.
+function Book.Band(parent, rel, ox, oy, col, a)
+    return setmetatable({ parent = parent, rel = rel, ox = ox, oy = oy, strips = {}, n = 0, col = col, a = a }, Band)
 end
 
 function Band:Strip(i)
@@ -477,7 +478,7 @@ function Band:Strip(i)
 end
 
 function Band:Set(x0, x1, y0, y1, roundTop, roundBot)
-    local r, g, b = RGB(BAND_COL)
+    local r, g, b = RGB(self.col or BAND_COL)
     local rows = {}
     local h = y1 - y0
     local t0, t1 = y0, y1
@@ -490,7 +491,7 @@ function Band:Set(x0, x1, y0, y1, roundTop, roundBot)
         local s = self:Strip(i)
         for k = 1, #BAND_U - 1 do
             local xa, xb = x0 + (x1 - x0) * BAND_U[k], x0 + (x1 - x0) * BAND_U[k + 1]
-            local a = BAND_A * row[3]
+            local a = (self.a or BAND_A) * row[3]
             s[k]:SetGradient("HORIZONTAL", CreateColor(r, g, b, a * BAND_V[k]), CreateColor(r, g, b, a * BAND_V[k + 1]))
             Book.Box(s[k], xa, row[1], xb, row[2], self.rel, self.ox, self.oy)
             s[k]:Show()

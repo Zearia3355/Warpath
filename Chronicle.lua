@@ -4,7 +4,7 @@
 -- of the title plate, Settings and Warpath right of it), routing between
 -- the pages, opening, What's New after an update, refreshing, and the
 -- popups. Each page is its own file (ChronCampaigns, ChronGrudges,
--- ChronWarpath; Settings in Options.lua) and registers in Chron.pages.
+-- ChronLedger, ChronWarpath; Settings in Options.lua) and registers in Chron.pages.
 -- The shared art and type are Book.lua.
 local ADDON, ns = ...
 local C = ns.C
@@ -139,24 +139,6 @@ local function BuildBook()
     for i, spec in ipairs(TABS) do f.tabs[i] = SectionTab(f, spec) end
     return f
 end
-
----------------------------------------------------------------------------
--- The Ledger tab: its pages come in a later phase (Claude's call: one line
--- on the left page meanwhile)
----------------------------------------------------------------------------
-
-local function BuildLedgerPages(f)
-    local L = CreateFrame("Frame", nil, f)
-    L:SetAllPoints(f)
-    f.ledger = { L = L }
-    local s = Book.Str(L, "gari", 18, Book.FADED)
-    s:SetText("The Ledger is being written.")
-    Book.Put(s, 296, 380, "m")
-end
-Chron.pages.ledger = {
-    Build = BuildLedgerPages,
-    Render = function() Chron.book.left.number:SetText("") Chron.book.right.number:SetText("") end,
-}
 
 ---------------------------------------------------------------------------
 -- Settings: built by Options.lua (3.8.5: chronicle-settings.md), on two

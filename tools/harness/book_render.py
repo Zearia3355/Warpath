@@ -630,12 +630,23 @@ def world_tile(tex):
     im = _world["im"]
     if im is None:
         return None
-    i = int(str(tex).rsplit(":", 1)[1]) - 1
+    _, mid, i = str(tex).split(":")
+    i = int(i) - 1
     c, r = i % 4, i // 4
-    k = (WORLD_CANVAS[2] - WORLD_CANVAS[0]) / 1002
-    box = (WORLD_CANVAS[0] + c * 256 * k, WORLD_CANVAS[1] + r * 256 * k,
-           WORLD_CANVAS[0] + (c + 1) * 256 * k, WORLD_CANVAS[1] + (r + 1) * 256 * k)
+    W, H = WORLD_CANVAS[2] - WORLD_CANVAS[0], WORLD_CANVAS[3] - WORLD_CANVAS[1]
+    # a continent's own map (the Ledger's My Lands): its layer is cut from
+    # the world map through the continent's fitted rect on it (wow_stub's
+    # H.worldRects), so it's the world map's art, not the continent map's
+    l, rr, t, b = CONTINENT_ON_WORLD.get(int(mid), (0, 1, 0, 1))
+    fx = lambda x: WORLD_CANVAS[0] + (l + (rr - l) * x / 1002) * W
+    fy = lambda y: WORLD_CANVAS[1] + (t + (b - t) * y / 668) * H
+    box = (fx(c * 256), fy(r * 256), fx((c + 1) * 256), fy((r + 1) * 256))
     return im.crop(tuple(int(round(v)) for v in box)).resize((256, 256), Image.LANCZOS)
+
+
+# Kalimdor and the Eastern Kingdoms on the world map: the stub's fitted rects
+# (wow_stub.lua H.worldRects), left, right, top, bottom.
+CONTINENT_ON_WORLD = {1414: (-0.182, 0.644, 0.071, 0.897), 1415: (0.338, 1.164, 0.027, 0.854)}
 
 
 # ---------------------------------------------------------------------------- painting
