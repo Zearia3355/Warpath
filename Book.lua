@@ -59,11 +59,41 @@ Book.RGB = RGB
 -- Type
 ---------------------------------------------------------------------------
 
+-- Fonts the client hasn't loaded yet. On Forever SetFont returns false
+-- for an addon's own .ttf until the file has loaded, and leaves the string
+-- with no font at all: SetText on it then errors ("Font not set"), which
+-- broke 3.8.5-test1's first opening. So every string gets a game font
+-- first, and a face that didn't take is set again by Book.Refont().
+local pending = {}
+
+-- fs in a face at a size in render px. A size alone may change later.
+function Book.Face(fs, face, px)
+    if not fs.bface then fs:SetFontObject(GameFontHighlight) end
+    fs.bface, fs.bpx = face, px
+    if fs:SetFont(Book.FACES[face], px / 1.2, "") then
+        pending[fs] = nil
+    else
+        pending[fs] = true
+    end
+end
+
+-- Set again every face that hadn't taken; true if any took now.
+function Book.Refont()
+    local took = false
+    for fs in pairs(pending) do
+        if fs:SetFont(Book.FACES[fs.bface], fs.bpx / 1.2, "") then
+            pending[fs] = nil
+            took = true
+        end
+    end
+    return took
+end
+function Book.Pending() local n = 0 for _ in pairs(pending) do n = n + 1 end return n end
+
 -- A font string in a face at a size in render px, coloured, no shadow.
 function Book.Str(parent, face, px, col, layer, sub)
     local fs = parent:CreateFontString(nil, layer or "OVERLAY", nil, sub)
-    fs:SetFont(Book.FACES[face], px / 1.2, "")
-    fs.bface, fs.bpx = face, px
+    Book.Face(fs, face, px)
     local r, g, b = RGB(col or Book.INK)
     fs:SetTextColor(r, g, b)
     fs:SetShadowOffset(0, 0)
@@ -84,7 +114,7 @@ end
 -- Faux bold: the same string again 1 px to the right.
 function Book.Bold(fs)
     local twin = fs:GetParent():CreateFontString(nil, fs:GetDrawLayer())
-    twin:SetFont(Book.FACES[fs.bface], fs.bpx / 1.2, "")
+    Book.Face(twin, fs.bface, fs.bpx)
     twin:SetTextColor(fs:GetTextColor())
     twin:SetShadowOffset(0, 0)
     twin:SetWordWrap(false)
@@ -718,8 +748,9 @@ function Book.Settle(relayout)
     local tries = 0
     local function Check()
         tries = tries + 1
+        local took = Book.Refont()
         local now = Book.FontSig()
-        if now ~= last then
+        if took or now ~= last then
             last = now
             relayout()
         end

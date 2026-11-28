@@ -4564,6 +4564,46 @@ class ArtTextures(unittest.TestCase):
         self.assertLessEqual(sum(sizes.values()), self.TOTAL_BUDGET)
 
 
+class BookFonts(unittest.TestCase):
+    """3.8.5-test1 broke on its first opening in game: SetFont returns false
+    for the addon's own .ttf until the file has loaded, leaving a string with
+    no font, and SetText on it errors. The stub now behaves that way too."""
+
+    def opened(self):
+        wow = Wow()
+        wow.run('WarpathGlobal = { installed = "3.7.0", seenVersion = "3.8.4", cfg = {} }')
+        wow.login()
+        return wow
+
+    def test_the_first_opening_builds_every_page(self):
+        wow = self.opened()
+        self.assertEqual(wow.eval('ns.Chronicle.Shown()'), "warpath")
+        self.assertFalse(any("couldn't" in l for l in wow.chat), wow.chat)
+        self.assertIsNone(wow.eval("WarpathGlobal.bookErrors"))
+        for key in ("campaigns", "grudges", "warpath", "settings", "ledger"):
+            self.assertFalse(wow.eval(f'ns.Chron.pages["{key}"].broken == true'), key)
+
+    def test_addon_fonts_take_once_loaded(self):
+        wow = self.opened()
+        wow.advance(5)  # the book settles: faces that hadn't taken are set again
+        self.assertEqual(wow.eval("ns.Book.Pending()"), 0)
+        path = wow.eval("""(function() local P = ns.Chron.book.camp
+            local p = P.reck[1].value:GetFont() return p end)()""")
+        self.assertIn("EBGaramond-Bold", path)
+
+    def test_a_broken_page_leaves_the_rest_of_the_book(self):
+        wow = Wow()
+        wow.run('ns.Chron.pages.grudges.Build = function() error("boom") end')
+        wow.login()
+        wow.run('ns.Chronicle.Open(false, "campaigns")')
+        self.assertTrue(wow.eval("WarpathChronicle:IsShown()"))
+        self.assertTrue(any("couldn't build its grudges page" in l for l in wow.chat), wow.chat)
+        self.assertEqual(wow.eval("WarpathGlobal.bookErrors[1].page"), "grudges")
+        self.assertIn("Chronicle of", wow.eval("ns.Chron.book.title:GetText()"))
+        wow.run('ns.Chronicle.Open(false, "grudges")')  # drawing a broken page draws nothing, no error
+        self.assertEqual(wow.eval('ns.Chronicle.Shown()'), "grudges")
+
+
 def lua_str(s):
     s = str(s)
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'

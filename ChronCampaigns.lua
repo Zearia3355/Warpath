@@ -746,12 +746,12 @@ local function LayRow(r, it, y, prevHonour, nextHonour)
     local nx = x0 + 32 + 42
     if e.n then
         Set(r.name, e.n:match("^[^%-]+"))
-        r.name:SetFont(Book.FACES.friz, 18 / 1.2, "")
+        Book.Face(r.name, "friz", 18)
         r.name.bface, r.name.bpx = "friz", 18
         Book.NameColor(r.name, e.c)
     else
         Set(r.name, "someone unseen")
-        r.name:SetFont(Book.FACES.gari, 17 / 1.2, "")
+        Book.Face(r.name, "gari", 17)
         r.name.bface, r.name.bpx = "gari", 17
         Book.Color(r.name, FADED)
         r.name:SetShadowOffset(0, 0)
