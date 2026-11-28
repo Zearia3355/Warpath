@@ -2807,11 +2807,16 @@ class BookRender(unittest.TestCase):
                 close = [r for r in self.renders[tab][1].records if r.get("what") == "close"][0]
                 self.assertBox(close["box"], (1040.5, 38.0, 1078.9, 76.4))
         # five tabs of 92 units (ledger/lbase.py TABS_A), the open one taller:
-        # its top at 12 against 20, each with a 1 px dark edge round its rim
+        # its top at 12 against 17 (20 in the design: 3 px taller after Joe
+        # saw Friz's capitals touch the top edge in test2), each with a 1 px
+        # dark edge round its rim; the label's baseline stays at 37
         for i, x0, x1 in ((1, 65, 175), (2, 183, 293), (3, 301, 411), (4, 813, 923), (5, 931, 1041)):
             with self.subTest(tab=i):
                 self.assertBox(self.of("warpath", f"WarpathChronicle.tabs[{i}].rim")["box"],
-                               (x0, 12 if i == 5 else 20, x1 + 1, 46))
+                               (x0, 12 if i == 5 else 17, x1 + 1, 46))
+                if i != 5:
+                    label = self.of("warpath", f"WarpathChronicle.tabs[{i}].text")
+                    self.assertAlmostEqual(label["baseline"], 37, delta=0.6)
         self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].rim")["box"], (65, 12, 176, 46))
         self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].edge")["box"], (64, 11, 177, 46))
 

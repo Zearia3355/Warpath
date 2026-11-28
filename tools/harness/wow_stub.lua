@@ -377,6 +377,12 @@ local function child(kind)
     -- CreateTexture(name, layer, inherits, sublevel), CreateLine(name, layer, ...)
     return function(self, name, layer, inherits, sub)
         -- NewWidget numbers it (__seq): creation order breaks ties within a layer, as in the client
+        -- a template the client can't find is an error, as in the client: a
+        -- sublevel passed one place early (GetDrawLayer returns two values)
+        -- broke 3.8.5-test1's Campaigns page with 'inherited node "0"'
+        if inherits ~= nil and kind ~= "AnimationGroup" and (type(inherits) ~= "string" or not _G[inherits]) then
+            error(("Frame:Create%s(): Couldn't find inherited node \"%s\""):format(kind, tostring(inherits)), 2)
+        end
         local w = NewWidget(kind, name, self)
         w.__layer = true
         if kind == "FontString" then w.__font = inherits w.__fontObj = inherits and _G[inherits] end

@@ -113,7 +113,11 @@ end
 
 -- Faux bold: the same string again 1 px to the right.
 function Book.Bold(fs)
-    local twin = fs:GetParent():CreateFontString(nil, fs:GetDrawLayer())
+    -- GetDrawLayer returns the layer and its sublevel: passing both straight
+    -- on put the sublevel where the template goes ('inherited node "0"',
+    -- which broke 3.8.5-test1's Campaigns page in game)
+    local layer, sub = fs:GetDrawLayer()
+    local twin = fs:GetParent():CreateFontString(nil, layer, nil, sub)
     Book.Face(twin, fs.bface, fs.bpx)
     twin:SetTextColor(fs:GetTextColor())
     twin:SetShadowOffset(0, 0)

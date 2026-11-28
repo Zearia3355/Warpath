@@ -79,7 +79,10 @@ end
 
 local function LayTab(f, t, on)
     local x0, x1 = t.x0, t.x1
-    local top = on and 12 or 20
+    -- unselected tabs 3 px taller than the design drew them: in game Friz's
+    -- capitals touched their top edge (Joe, 3.8.5-test2); the open one still
+    -- stands 5 px higher
+    local top = on and 12 or 17
     Book.Box(t, x0 - 1, top - 1, x1 + 2, 46, f)
     local o = { t, x0 - 1, top - 1 }
     Book.Box(t.edge, x0 - 1, top - 1, x1 + 2, 46, o[1], o[2], o[3])
@@ -90,7 +93,7 @@ local function LayTab(f, t, on)
     local r, g, b = Book.RGB(on and { 45, 25, 9 } or { 21, 15, 10 })
     t.bg:SetColorTexture(r, g, b, 1)
     Book.Color(t.text, on and { 255, 209, 0 } or { 196, 196, 196 })
-    Book.Put(t.text, (x0 + x1) / 2, top + (on and 21 or 17), "m", t, o[2], o[3])
+    Book.Put(t.text, (x0 + x1) / 2, top + (on and 21 or 20), "m", t, o[2], o[3])
 end
 
 local function BuildBook()
