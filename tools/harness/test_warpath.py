@@ -3169,6 +3169,107 @@ class CampaignsPage(unittest.TestCase):
         self.assertIn("SAMPLE PAGES", self.date_text())
 
 
+class SmallCaps(unittest.TestCase):
+    """Book.Caps (3.8.5-test4 fix): in game a lone small "R" in Morpheus
+    measured wider than it draws, so one string a letter, placed by each
+    letter's width, opened gaps ("Gr udges"). Runs of same-size letters are
+    one string each, placed by the run's width; letterspaced capitals are
+    placed by the width of their run up to each letter. The stub here makes
+    a lone "R" (and "S") measure 5 units too wide, as the client did."""
+
+    def setUp(self):
+        import book_render as B
+        self.wow, typ = B.boot(fonts="repo")
+        real = self.real = self.wow.H.measure
+        self.wow.H.measure = lambda path, size, text: real(path, size, text) + (5 if text in ("R", "S") else 0)
+        self.wow.run("""
+            local f = CreateFrame("Frame", nil, UIParent)
+            __H.caps = ns.Book.Caps(f, "morph", 25, ns.Book.RUBRIC, { ratio = 0.78, track = 0.6 })
+            __H.spaced = ns.Book.Caps(f, "friz", 12, ns.Book.FADED, { track = 1.2 })""")
+
+    def strings(self, obj):
+        out = []
+        for i in range(1, 60):
+            if not self.wow.eval(f"{obj}.letters[{i}] ~= nil and {obj}.letters[{i}]:IsShown()"):
+                break
+            out.append((self.wow.eval(f"{obj}.letters[{i}]:GetText()"), self.wow.eval(f"{obj}.letters[{i}].bx"),
+                        self.wow.eval(f"{obj}.letters[{i}].bpx")))
+        return out
+
+    def test_a_heading_is_one_string_a_run(self):
+        w = self.wow.eval('__H.caps:Set("Grudges", 300, 100, "l")')
+        got = self.strings("__H.caps")
+        self.assertEqual([t for t, _, _ in got], ["G", "RUDGES"])
+        self.assertEqual([p for _, _, p in got], [25, 19])
+        g = self.wow.eval('ns.Book.Measure("morph", 25, "G")')
+        rudges = self.wow.eval('ns.Book.Measure("morph", 19, "RUDGES")')
+        self.assertAlmostEqual(got[1][1], 300 + g + 0.6, places=6, msg="placed by the run's width")
+        self.assertAlmostEqual(w, g + 0.6 + rudges, places=6)
+
+    def test_a_lone_letters_width_moves_nothing(self):
+        # the quirk only touches a letter measured alone: runs don't see it
+        self.wow.run('__H.caps:Set("Version Encounters", 300, 100, "l")')
+        got = self.strings("__H.caps")
+        self.assertEqual([t for t, _, _ in got], ["V", "ERSION", " E", "NCOUNTERS"])
+        x = 300
+        for text, bx, px in got:
+            self.assertAlmostEqual(bx, x, places=6, msg=text)
+            x += self.wow.eval(f'ns.Book.Measure("morph", {px}, "{text}")') + 0.6
+
+    def test_letterspaced_capitals_place_by_the_run(self):
+        self.wow.run('__H.spaced:Set("SIRS", 100, 50, "l")')
+        got = self.strings("__H.spaced")
+        self.assertEqual([t for t, _, _ in got], ["S", "I", "R", "S"])
+        self.wow.H.measure = self.real
+        self.wow.run('__H.spaced:Set("SIRS", 100, 50, "l")')
+        for (t, quirky, _), (_, clean, _) in zip(got, self.strings("__H.spaced")):
+            self.assertAlmostEqual(quirky, clean, places=6, msg=f"{t} moved by a lone letter's width")
+
+class WorldPrint(unittest.TestCase):
+    """The sepia map print (Book.WorldPrint), drawn by the client's rules as
+    Joe's 3.8.5-test4 screenshots showed them: a mask can't soften MOD, and an
+    ADD texture behind a mask draws nothing. test4's print came out dark
+    olive and hard-edged on every page; these pin the fix."""
+
+    def setUp(self):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo")
+        self.wow.run(REF_CAMPAIGN)
+        self.wow.run("ns.Chronicle.Open(false, 'campaigns')")
+        self.img, self.painter = B.render_book(self.wow, self.typ)
+        self.prints = [r for r in self.painter.records if r["kind"] == "texture"
+                       and (r["path"].startswith("worldmap:") or (r["obj"]["__blend"] == "ADD" and r["path"] == "color"))]
+
+    def test_no_layer_of_the_print_is_masked(self):
+        self.assertGreater(len(self.prints), 12)
+        for r in self.prints:
+            self.assertEqual(self.B.lua_list(r["obj"]["__masks"]), [], r["path"])
+
+    def test_the_mod_layer_is_drawn_before_the_adds(self):
+        mods = [r["obj"]["__sub"] for r in self.prints if r["obj"]["__blend"] == "MOD"]
+        adds = [r["obj"]["__sub"] for r in self.prints if r["obj"]["__blend"] == "ADD"]
+        self.assertTrue(mods and adds)
+        self.assertLess(max(mods), min(adds))
+
+    def test_it_prints_sepia_with_a_soft_edge(self):
+        if not self.B.WORLD_PNG.exists():
+            self.skipTest("no world map screenshot to stand in for the client's art")
+        rect = self.wow.eval("ns.ChronCampaigns.Frames().mapRect[1]"), self.wow.eval("ns.ChronCampaigns.Frames().mapRect[2]")
+        def avg(x0, y0, x1, y1):
+            px = list(self.img.crop((x0, y0, x1, y1)).get_flattened_data())
+            return [sum(p[i] for p in px) / len(px) for i in range(3)]
+        x, y = rect
+        mid = avg(x + 120, y + 60, x + 260, y + 120)
+        # the design's print there: about (200, 132, 61); test4 drew (155, 115, 55)
+        self.assertGreater(mid[0], 185, f"the print is dark: {mid}")
+        self.assertGreater(mid[0] - mid[2], 110, "and sepia, not grey")
+        page = avg(x - 30, y + 60, x - 10, y + 120)
+        edge = avg(x + 1, y + 60, x + 4, y + 120)
+        for got, want in zip(edge, page):
+            self.assertAlmostEqual(got, want, delta=12, msg=f"the picture's edge fades into the page: {edge} vs {page}")
+
+
 class CampaignsRealData(unittest.TestCase):
     """Every campaign of every real character opens, renders and turns
     without a Lua error (WARPATH_WTF). Nothing is written."""

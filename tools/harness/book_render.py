@@ -718,6 +718,8 @@ class Painter:
         if tile is None:
             return
         tile = self.shade(o, tile)
+        if tile is None:
+            return
         rot = o["__rotation"] or 0
         x, y = round(x0), round(y0)
         if rot:
@@ -801,6 +803,16 @@ class Painter:
             tile.putalpha(tile.getchannel("A").point(lambda x, a=a: int(x * a)))
         masks = lua_list(o["__masks"])
         if masks:
+            blend = o["__blend"] or "BLEND"
+            # As the client draws them (Joe's 3.8.5-test4 screenshots): a mask
+            # only changes alpha, which MOD blending ignores, so a masked MOD
+            # texture is drawn whole; and a masked ADD texture drew nothing at
+            # all (the prints came out as their MOD layer alone).
+            if blend == "MOD":
+                return tile
+            if blend == "ADD":
+                self.standins["masked ADD texture: not drawn, as in game"] = True
+                return None
             tile = self.apply_masks(o, tile, masks)
         return tile
 
