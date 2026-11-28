@@ -25,7 +25,7 @@ All of it is under `tools/out/design/`, which git ignores. Each folder has its o
 
 ## Type (Joe: "Settled")
 
-- **Display faces:** Morpheus small caps, in rubric, with a 1 px dark-red shadow. They're for titles and page headings ("Deeds and Losses", "The Reckoning"), each followed by the rubric ornament (rules and a gilt diamond).
+- **Display faces:** Morpheus small caps, in rubric, with a 1 px dark-red shadow. Morpheus's capital S has a closed upper loop and can read like an "8" ("8tranglethorn"); it's the game's own font, kept as it is (Joe, 2026-11-28: "Keep Morpheus's S, it's fine"). They're for titles and page headings ("Deeds and Losses", "The Reckoning"), each followed by the rubric ornament (rules and a gilt diamond).
 - **Date and kicker lines:** Friz capitals, letterspaced and faded, between short rubric rules.
 - **Body:** Friz, 18 px on 22 px leading.
 - **Drop cap:** a sunk Morpheus capital in rubric, three lines tall, with no box. The lines tuck in against its stem. It's for a page that opens with prose.
