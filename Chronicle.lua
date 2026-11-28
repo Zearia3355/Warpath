@@ -203,7 +203,9 @@ function Render()
     end
     for _, t in ipairs(book.tabs) do LayTab(book, t, t.key == sec) end
     local page = Chron.pages[sec] or Chron.pages.warpath
-    page.Render()
+    if page.broken then return end
+    local ok, err, stack = Chron.Try(page.Render)
+    if not ok then Chron.Fail(sec, "draw", err, stack) end
 end
 Chron.Render = Render
 
@@ -237,12 +239,38 @@ end
 
 local ORDER = { "campaigns", "grudges", "warpath", "settings", "ledger" }
 
+-- One page that fails to build or draw doesn't take the book down with it
+-- (3.8.5-test1 lost every tab to one font error): one chat line, the rest
+-- of the book works, and the error is kept for whoever fixes it.
+-- fn(...) under xpcall: ok, the error, and where it happened
+function Chron.Try(fn, ...)
+    local args, stack = { ... }, nil
+    local ok, err = xpcall(function() return fn(unpack(args)) end,
+        function(e) stack = debugstack and debugstack(2, 12, 0) or nil return e end)
+    return ok, err, stack
+end
+
+function Chron.Fail(key, what, err, stack)
+    local page = Chron.pages[key]
+    if page then page.broken = true end
+    ns.Print(("the chronicle couldn't %s its %s page: %s"):format(what, key, tostring(err)))
+    if gdb then
+        gdb.bookErrors = gdb.bookErrors or {}
+        table.insert(gdb.bookErrors, 1, { t = time(), v = ns.VERSION, page = key, what = what, err = tostring(err),
+            stack = stack })
+        while #gdb.bookErrors > 5 do table.remove(gdb.bookErrors) end
+    end
+end
+
 local function Build()
     local book = BuildBook()
     Chron.book = book
     for _, key in ipairs(ORDER) do
         local p = Chron.pages[key]
-        if p and p.Build then p.Build(book) end
+        if p and p.Build then
+            local ok, err, stack = Chron.Try(p.Build, book)
+            if not ok then Chron.Fail(key, "build", err, stack) end
+        end
     end
     Popups()
 end
@@ -260,8 +288,18 @@ function Chronicle.Open(preview, section)
     view.section = section or (preview and view.section) or "campaigns"
     view.page, view.pick = 1, 1
     view.newsStart, view.newsLine, view.newsStack, view.newsNext, view.newSince = nil, nil, {}, nil, nil
-    for _, p in pairs(Chron.pages) do if p.Open then p.Open(preview) end end
-    for _, p in pairs(Chron.pages) do if p.Reset then p.Reset(book) end end
+    for key, p in pairs(Chron.pages) do
+        if p.Open and not p.broken then
+            local ok, err, stack = Chron.Try(p.Open, preview)
+            if not ok then Chron.Fail(key, "open", err, stack) end
+        end
+    end
+    for key, p in pairs(Chron.pages) do
+        if p.Reset and not p.broken then
+            local ok, err, stack = Chron.Try(p.Reset, book)
+            if not ok then Chron.Fail(key, "open", err, stack) end
+        end
+    end
     Render()
     if not book:IsShown() then UISound("IG_QUEST_LOG_OPEN", 844) end
     book:Show()

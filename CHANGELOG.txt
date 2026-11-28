@@ -1,6 +1,50 @@
 Warpath changelog
 
 =====================================================================
+3.8.5 (in progress: test builds)
+=====================================================================
+
+The chronicle
+- The chronicle is a new book: crimson leather with gold corners, a
+  stack of pages, and parchment. Its type is the game's own, with a
+  bundled Garamond (free to share, OFL) for italics and figures.
+- Each campaign is written up by a chronicler, zone by zone, with a
+  route map of where you went, and its deeds and losses on a sheet
+  that folds by zone and scrolls. One spread per campaign.
+- Quiet nights (patrols with no fighting) can be hidden.
+- A new Ledger tab is on its way: your whole war in figures.
+
+On the map
+- Corpse runs, flights and spirit healers are now three map layers,
+  each with its own switch: in Settings, on the map button's
+  right-click, and with /warpath layer runs|flights|spirits.
+- Guildmates' kills and deaths and guildmates' sightings each have
+  their own switch, under Kill and death pins and Enemy sightings.
+  /warpath layer guild still switches both.
+- With guild sharing off, guildmates' pins, sightings and battle haze
+  are hidden from your map, and their deaths no longer count toward
+  dangerous-ground warnings. Nothing is deleted: turn sharing back on
+  and they're back.
+
+Settings
+- Each length (trail, corpse runs, flights) sits under its layer and
+  greys while that layer is off. Clearer wording throughout.
+- Grudge messages no longer call your grudges a "ledger".
+
+Guild sharing
+- Kill messages now carry the victim's class, for the Ledger.
+  Guildmates need the new version for their victims' classes to show;
+  kills from older versions show the class as unknown.
+
+- Your saved data: nothing is removed or changed. The new map layers
+  start as the old ones were set, and the old switches are kept for
+  older versions. Warpath now also counts flights, corpse runs,
+  releases at a spirit healer, miles as a ghost, your level and health
+  at each kill, and what killed you in the wilds; these start from
+  your first fight on the new version.
+- Needs a full game restart (new files), not just /reload.
+
+=====================================================================
 3.8.4
 =====================================================================
 

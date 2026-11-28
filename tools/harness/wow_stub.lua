@@ -224,7 +224,25 @@ function Widget:UnregisterAllEvents() self.__events = {} self.__allEvents = nil 
 function Widget:IsEventRegistered(ev) return self.__events[ev] == true end
 
 -- text
-function Widget:SetText(t) self.__text = t ~= nil and tostring(t) or nil end -- the client takes numbers too
+-- A font string with no font errors on SetText, as in the client ("Font
+-- not set"; 3.8.5-test1's first opening broke on exactly that).
+local function hasFont(w)
+    local o = w
+    for _ = 1, 8 do
+        if not o then return false end
+        if o.__fontPath then return true end
+        if o ~= w and o.__name then return true end -- a font object (GameFontNormal...)
+        o = o.__fontObj or (type(o.__font) == "string" and o.__font ~= o.__name and _G[o.__font]) or nil
+    end
+    return false
+end
+H.hasFont = hasFont
+function Widget:SetText(t)
+    if self.__kind == "FontString" and t ~= nil and not hasFont(self) then
+        error("FontString:SetText(): Font not set", 2)
+    end
+    self.__text = t ~= nil and tostring(t) or nil -- the client takes numbers too
+end
 function Widget:SetFormattedText(fmt, ...) self.__text = string.format(fmt, ...) end
 function Widget:GetText() return self.__text end
 -- Text metrics. Plain tests keep the old fixed guess (6 units a character,
@@ -268,9 +286,19 @@ end
 function Widget:GetFont() return fontOf(self) end
 -- The client's SetFont returned false for the addon's own .ttf files even
 -- though they drew (3.8.4 probe), so nothing may rely on its result.
+-- And it didn't apply them either: an addon's own .ttf starts loading at
+-- its first SetFont, which returns false and leaves the string as it was;
+-- once loaded (here: from the next call on), SetFont works.
+H.fontsLoaded = {}
 function Widget:SetFont(path, size, flags)
+    if type(path) == "string" and path:lower():find("interface\\addons\\", 1, true) then
+        local key = path:lower()
+        if not H.fontsLoaded[key] then
+            H.fontsLoaded[key] = true
+            return false
+        end
+    end
     self.__fontPath, self.__fontSize, self.__fontFlags = path, size, flags or ""
-    if type(path) == "string" and path:lower():find("interface\\addons\\", 1, true) then return false end
     return true
 end
 function Widget:SetTextColor(r, g, b, a) self.__textColor = { r, g, b, a or 1 } end
