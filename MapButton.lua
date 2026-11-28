@@ -135,6 +135,25 @@ local function Introduce()
     end)
 end
 
+-- The button's art on frame b (31 x 31 units at k = 1): the minimap's dark
+-- disc, the crossed swords, the tracking ring. The chronicle's Warpath tab
+-- draws the same button, smaller (3.8.5).
+function ns.MapButtonArt(b, k)
+    b.bg = b:CreateTexture(nil, "BACKGROUND")
+    b.bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+    b.bg:SetSize(24 * k, 24 * k)
+    b.bg:SetPoint("CENTER")
+    b.icon = b:CreateTexture(nil, "ARTWORK")
+    b.icon:SetTexture(C.TEX_SWORDS)
+    b.icon:SetSize(19 * k, 19 * k)
+    b.icon:SetPoint("CENTER", 0, 1 * k)
+    b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
+    b.border = b:CreateTexture(nil, "OVERLAY")
+    b.border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    b.border:SetSize(53 * k, 53 * k)
+    b.border:SetPoint("TOPLEFT")
+end
+
 local function SetupMapButton()
     if button or not WorldMapFrame then return end
     local host = WorldMapFrame.ScrollContainer or WorldMapFrame
@@ -147,19 +166,7 @@ local function SetupMapButton()
     button:SetMovable(true)
     button:SetClampedToScreen(true)
 
-    local bg = button:CreateTexture(nil, "BACKGROUND")
-    bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
-    bg:SetSize(24, 24)
-    bg:SetPoint("CENTER")
-    button.icon = button:CreateTexture(nil, "ARTWORK")
-    button.icon:SetTexture(C.TEX_SWORDS)
-    button.icon:SetSize(19, 19)
-    button.icon:SetPoint("CENTER", 0, 1)
-    button.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-    local border = button:CreateTexture(nil, "OVERLAY")
-    border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
-    border:SetSize(53, 53)
-    border:SetPoint("TOPLEFT")
+    ns.MapButtonArt(button, 1)
     button:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight", "ADD")
 
     -- pulse for the first showing

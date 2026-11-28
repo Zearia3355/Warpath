@@ -283,20 +283,24 @@ class NewIn(unittest.TestCase):
         return wow.eval('ns.Chronicle.Shown() == "warpath"')
 
     def page(self, wow):
-        """The notes page's visible text, top to bottom."""
+        """The Warpath tab's visible text: every font string under the book,
+        and the letter-by-letter capitals (title, headings, topics) joined
+        into their words."""
         return wow.eval("""(function() local t = {}
-            local function add(fs) if fs:IsShown() and fs:GetText() then
-                local _, _, _, _, y = fs:GetPoint(1) t[#t + 1] = { y or 0, fs:GetText() } end end
-            for _, f in ipairs(WarpathChronicle.__children) do
-                for _, c in ipairs(f.__children) do
-                    for _, r in ipairs(c.__children) do
-                        if r.__kind == "FontString" and r:IsVisible() then add(r) end
-                    end
+            local function walk(f)
+                for _, r in ipairs(f.__children or {}) do
+                    if r.__kind == "FontString" and r:IsVisible() and r:GetText() then t[#t + 1] = r:GetText() end
+                    walk(r)
                 end
             end
-            table.sort(t, function(a, b) return a[1] > b[1] end)
-            local out = {} for _, v in ipairs(t) do out[#out + 1] = v[2] end
-            return table.concat(out, "|") end)()""").replace("|", "\n")
+            walk(WarpathChronicle)
+            local P = ns.ChronWarpath.Frames()
+            local function caps(c) local s = "" for _, l in ipairs(c.letters) do
+                if l:IsVisible() then s = s .. l:GetText() end end t[#t + 1] = s end
+            caps(P.title) caps(P.head)
+            for _, h in ipairs(P.heads) do if h:IsShown() then caps(h.caps) end end
+            for _, x in ipairs(P.topics) do if x:IsShown() then caps(x.caps) end end
+            return table.concat(t, "|") end)()""").replace("|", "\n")
 
     def test_an_update_opens_the_book_on_whats_new(self):
         wow = self.booted("3.8.2")
@@ -304,23 +308,17 @@ class NewIn(unittest.TestCase):
         self.assertFalse(wow.eval("WarpathSetup ~= nil and WarpathSetup:IsShown()"),
                          "the options window no longer opens by itself")
         text = self.page(wow)
-        self.assertIn("What's New", text)
-        # every page of notes: a long release (3.8.5's) fills the first page
-        earlier, turns = "WarpathChronicle.news.earlier", 0
-        for _ in range(20):
-            if not wow.eval(f"{earlier}:IsEnabled()"):
-                break
-            wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
-            text += "\n" + self.page(wow)
-            turns += 1
-        # 3.8.3: a "NEW" mark beside each release newer than the last seen;
-        # a release carried on to the next page shows its mark again there
+        self.assertIn("WELCOME BACK", text, "the title is in small caps")
+        # 3.8.5: gilt diamonds flank each release newer than the last seen
         newer = int(wow.eval('(function() local n = 0 for _, r in ipairs(ns.NewIn.List) do '
                              'if ns.NewIn.Older("3.8.2", r[1]) then n = n + 1 end end return n end)()'))
-        marks = text.split("\n").count("NEW")
-        self.assertGreaterEqual(marks, newer, "every release after 3.8.2 is marked")
-        self.assertLessEqual(marks, newer + turns, "nothing older is marked")
+        self.assertEqual(self.marked(wow), newer, "every release after 3.8.2 is marked, nothing older")
         self.assertIn("ON THE MAP", text, "3.8.3's notes are grouped under topics")
+
+    def marked(self, wow):
+        """How many releases on the sheet show their gilt diamonds."""
+        return wow.eval("""(function() local n = 0 for _, h in ipairs(ns.ChronWarpath.Frames().heads) do
+            if h:IsShown() and h.dia[1].fill:IsShown() then n = n + 1 end end return n end)()""")
 
     def test_closing_the_book_marks_the_release_seen(self):
         wow = self.booted("3.8.2")
@@ -331,8 +329,8 @@ class NewIn(unittest.TestCase):
         wow = self.booted(None, installed=None)
         self.assertTrue(self.shown(wow))
         text = self.page(wow)
-        self.assertIn("Welcome to Warpath", text)
-        self.assertNotIn("NEW", text.split("\n"), "nothing is 'new' on a first install")
+        self.assertIn("WELCOME TO WARPATH", text)
+        self.assertEqual(self.marked(wow), 0, "nothing is 'new' on a first install")
         # 3.8.3: sharing starts on for a new install, with its switch on this page
         self.assertIn("Guild sharing", text)
         self.assertTrue(wow.eval("ns.cfg.share"))
@@ -351,36 +349,6 @@ class NewIn(unittest.TestCase):
                 if walk(c) then return true end end end walk(WarpathChronicle) end)()""")
         self.assertFalse(wow.eval("ns.cfg.share"))
 
-    def test_older_releases_are_a_page_turn_away(self):
-        wow = self.booted("3.8.2")
-        # enough releases that they can't all fit on one page
-        wow.run("""for i = 1, 12 do table.insert(ns.NewIn.List, 1, { "2.0." .. i,
-            { "An old change that takes up a line or two of the page, for this test.", "And another." } }) end""")
-        wow.run("ns.Chronicle.News('3.8.2')")
-        first = self.page(wow)
-        self.assertIn(wow.eval("ns.NewIn.List[#ns.NewIn.List][1]"), first, "the newest release opens the notes")
-        self.assertNotIn("2.0.1\n", first + "\n", "the oldest release can't fit on the first page")
-        earlier = "WarpathChronicle.news.earlier"
-        self.assertTrue(wow.eval(f"{earlier}:IsEnabled()"))
-        turns = 0
-        for _ in range(20):
-            if not wow.eval(f"{earlier}:IsEnabled()"):
-                break
-            wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
-            turns += 1
-        self.assertFalse(wow.eval(f"{earlier}:IsEnabled()"), "Earlier never reached the oldest page")
-        self.assertIn("2.0.1", self.page(wow), "the oldest release is on the last page")
-        # 3.8.3 (layout C, as mocked): "1 of N" under the notes, counted ahead
-        pages = wow.eval("WarpathChronicle.right.number:GetText()")
-        n = pages.split(" of ")[1]
-        self.assertEqual(int(n), turns + 1, "the count matches the pages turned")
-        self.assertEqual(pages, f"{n} of {n}", "the last page counts itself last")
-        wow.run("ns.Chronicle.News('3.8.2')")
-        self.assertEqual(wow.eval("WarpathChronicle.right.number:GetText()"), f"1 of {n}",
-                         "the first page knows how many follow")
-        wow.run("WarpathChronicle.news.later:GetScript('OnClick')(WarpathChronicle.news.later)")
-        self.assertNotIn("2.0.1\n", self.page(wow) + "\n")
-
     def test_notes_stay_short(self):
         # Joe picked layout C for its short lines (2026-11-26); test10's
         # paragraphs let two topics fill a page.
@@ -389,31 +357,6 @@ class NewIn(unittest.TestCase):
             for _, rel in ipairs(ns.NewIn.List) do for _, l in ipairs(rel[2]) do
                 if #l > m then m, at = #l, l end end end return at end)()""")
         self.assertLessEqual(len(longest), 70, f"a note too long for one line: {longest!r}")
-
-    def test_a_long_release_carries_on_to_the_next_page(self):
-        # 3.8.3-test8 drew a release whole, however long, so it ran off the book.
-        wow = self.booted("3.8.2")
-        wow.run("""local t = {} for k = 1, 30 do t[k] = "Long note " .. k
-            .. ", written out to take two lines of the page or so, for this test." end
-            table.insert(ns.NewIn.List, { "99.0.0", t })""")
-        wow.run("ns.Chronicle.News('3.8.2')")
-        floor = wow.eval("WarpathChronicle:GetHeight()") - 36 - 44
-        lowest = wow.eval("""(function() local low = 0
-            for _, l in ipairs(WarpathChronicle.news.lines) do if l:IsShown() then
-                local p = { l:GetPoint(1) } low = math.max(low, -p[#p]) end end
-            return low end)()""")
-        self.assertLess(lowest, floor, "a note starts below the page's floor")
-        first = self.page(wow)
-        self.assertIn("Long note 1,", first)
-        self.assertNotIn("Long note 30,", first)
-        earlier = "WarpathChronicle.news.earlier"
-        self.assertTrue(wow.eval(f"{earlier}:IsEnabled()"))
-        wow.run(f"{earlier}:GetScript('OnClick')({earlier})")
-        second = self.page(wow)
-        self.assertIn("99.0.0 (continued)", second)
-        self.assertNotIn("Long note 1,", second)
-        wow.run("WarpathChronicle.news.later:GetScript('OnClick')(WarpathChronicle.news.later)")
-        self.assertIn("Long note 1,", self.page(wow))
 
     def test_versions_order_with_test_builds_first(self):
         wow = Wow()
@@ -2756,6 +2699,19 @@ class Upgrades(unittest.TestCase):
                 self.assertEqual(after["v"], 10)
 
 
+# A wrapped string as the 3.8.3 welcome set it, for the renderer's line pitch.
+PROBE_WRAP = r"""
+__probe = ns.Book.Old.Font(WarpathChronicle.news.L, QuestFont, GameFontHighlight, ns.Book.Old.INK)
+__probe:SetPoint("TOPLEFT", WarpathChronicle.left, "TOPLEFT", 32, -96)
+__probe:SetWidth(ns.Book.PW - 64)
+__probe:SetJustifyV("TOP")
+__probe:SetSpacing(3)
+__probe:SetText("Warpath draws your war on the world map: the roads you travel, today's trail, where you fought, "
+    .. "killed and fell, and the enemies you've seen.\n\nThis book keeps a campaign for each time you ride out, "
+    .. "and your ledger of grudges. Open it from the minimap button or with /warpath chronicle.")
+"""
+
+
 class BookRender(unittest.TestCase):
     """The chronicle renderer (book_render.py, render.py --book): every later
     phase of the redesign is checked against the design renders through it,
@@ -2773,6 +2729,8 @@ class BookRender(unittest.TestCase):
         cls.renders = {}
         for tab in B.TABS:
             B.open_book(cls.wow, tab)
+            if tab == "warpath":
+                cls.wow.run(PROBE_WRAP)
             cls.renders[tab] = B.render_book(cls.wow, cls.typ)
 
     def text(self, tab, s):
@@ -2821,16 +2779,8 @@ class BookRender(unittest.TestCase):
         self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].edge")["box"], (64, 11, 177, 46))
 
     def test_headings_sit_where_the_code_puts_them(self):
-        # right page: TOP 0,-30, Morpheus 15; baseline 0.88 of the line down
-        # (Campaigns' heading is the 3.8.5 page's: CampaignsPage checks it)
-        for tab, s in (("warpath", "What's New"),):
-            with self.subTest(heading=s):
-                r = self.text(tab, s)
-                self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 801.7, delta=0.5)
-                self.assertAlmostEqual(r["top"], 98.0, delta=0.5)
-                self.assertAlmostEqual(r["baseline"], 113.84, delta=0.5)
-        # left page: the 3.8.3 headings are gone (Settings' and Grudges' are the
-        # 3.8.5 pages': SettingsPage and GrudgesPage check them)
+        # (Campaigns' and Warpath's headings are the 3.8.5 pages': CampaignsPage
+        # and WarpathPage check them; so are Settings' and Grudges')
         for tab, s in ():
             with self.subTest(heading=s):
                 r = self.text(tab, s)
@@ -2838,8 +2788,9 @@ class BookRender(unittest.TestCase):
                 self.assertAlmostEqual(r["baseline"], 119.41, delta=0.5)
 
     def test_wrapped_text_steps_by_whole_pixels(self):
-        # the welcome: QuestFont 13, SetSpacing(3), TOPLEFT 32,-96 of the left page
-        r = self.text("warpath", self.wow.eval("WarpathChronicle.news.prose:GetText()").replace("\r", ""))
+        # the 3.8.3 welcome's settings (QuestFont 13, SetSpacing(3), TOPLEFT
+        # 32,-96 of the left page), kept as a probe string (setUpClass)
+        r = self.text("warpath", self.wow.eval("__probe:GetText()").replace("\r", ""))
         self.assertGreaterEqual(len(r["lines"]), 6)
         self.assertAlmostEqual(r["box"][0], 80.5, delta=0.5)
         self.assertAlmostEqual(r["baselines"][0], 190.85, delta=0.5)
@@ -3634,6 +3585,363 @@ class GrudgesRealData(unittest.TestCase):
                     self.assertIsNone(wow.H.errors, f"grudge {i}")
                     self.assertEqual(wow.eval("ns.Chron.view.pick"), i)
                 self.assertEqual(wow.eval(keys), before)
+
+
+class WarpathPage(unittest.TestCase):
+    """The Warpath tab (3.8.5, ChronWarpath.lua) against its spec,
+    docs/design/chronicle-warpath.md, whose geometry tables are the page's
+    GEOMETRY. Laid out by the book renderer with EB Garamond for every face
+    (--fonts repo), so the numbers don't depend on the machine's fonts."""
+
+    P = "ns.ChronWarpath.Frames()"
+
+    def boot(self, state="update", faction=None):
+        import book_render as B
+        self.B = B
+        self.wow, self.typ = B.boot(name="Lethality", fonts="repo", faction=faction)
+        w = self.wow
+        # what News knows: installed before (or not), the book closed
+        w.run("if WarpathChronicle then WarpathChronicle:Hide() end")
+        w.run("ns.gdb.installed = " + ("nil" if state == "first" else '"3.7.0"'))
+        if state == "update":
+            w.run("ns.Chronicle.News('3.8.2')")
+        elif state == "first":
+            w.run("ns.Chronicle.News(nil)")
+        else:
+            w.run("if WarpathChronicle then WarpathChronicle:Hide() end ns.Chronicle.Open(false, 'warpath')")
+        return w
+
+    def paint(self):
+        self.img, self.painter = self.B.render_book(self.wow, self.typ)
+        self.recs = {}
+        for r in self.painter.records:
+            self.recs.setdefault(r["obj"]["__seq"], r)
+
+    def rec(self, lua):
+        seq = self.wow.eval(lua + ".__seq")
+        self.assertIn(seq, self.recs, f"{lua} not drawn")
+        return self.recs[seq]
+
+    def near(self, got, want, what, tol=1.2):
+        self.assertAlmostEqual(got, want, delta=tol, msg=f"{what}: {got:.2f} != {want}")
+
+    def G(self, path):
+        return self.wow.eval("ns.ChronWarpath.GEOMETRY." + path)
+
+    def versions(self):
+        return self.wow.eval("""(function() local t = {} for i = #ns.NewIn.List, 1, -1 do
+            t[#t + 1] = ns.NewIn.List[i][1] end return table.concat(t, ",") end)()""").split(",")
+
+    def heads(self):
+        """(version, baseline, gilt diamonds shown) of each release heading on the sheet."""
+        out = []
+        n = self.wow.eval(f"#{self.P}.heads")
+        for i in range(1, n + 1):
+            h = f"{self.P}.heads[{i}]"
+            if self.wow.eval(f"{h}:IsShown()"):
+                out.append((self.wow.eval(f"{h}.version"), self.wow.eval(f"{h}.caps.letters[1].by"),
+                            self.wow.eval(f"{h}.dia[1].fill:IsShown() and {h}.dia[2].fill:IsShown()")))
+        return out
+
+    # -- geometry -------------------------------------------------------------
+    def test_the_left_page_lands_where_the_spec_says(self):
+        self.boot("update")
+        self.paint()
+        P, cx = self.P, 296
+        k = self.rec(f"{P}.kicker.letters[1]")
+        self.near(k["baseline"], 107, "kicker")
+        self.near(k["box"][0] + self.wow.eval(f"{P}.kicker.width") / 2, cx, "kicker centred")
+        rule = self.rec(f"{P}.kickerRules[2]")
+        self.near(rule["box"][1], 103, "kicker rule y")
+        t = self.rec(f"{P}.title.letters[1]")
+        self.near(t["baseline"], 150, "title")
+        self.near(t["box"][0] + self.wow.eval(f"{P}.title.width") / 2, cx, "title centred")
+        cap = self.rec(f"{P}.cap")
+        self.near(cap["baseline"], 254, "the initial sunk three lines")
+        self.near(cap["box"][0], 81, "the initial's left")
+        w1 = self.rec(f"{P}.words[1]")
+        self.near(w1["baseline"], 210, "the welcome's first line")
+        capw = self.wow.eval(f"{P}.cap:GetStringWidth()") * 1.2
+        self.near(w1["box"][0], 82 + 1.0 * capw + 5, "line 1 tucked to the W's stem")
+        self.assertLessEqual(self.wow.eval(f"{P}.welcomeEnd"), 290, "the welcome ends by y 290")
+        fig = self.rec(f"{P}.figs[1]")
+        self.assertEqual(self.wow.eval(f"{P}.figs[1]:GetText()"), "3.8.2")
+        self.near(fig["baseline"], 210, "a figure sits on its line")
+        self.assertEqual([self.wow.eval(f"{P}.picRect[{i}]") for i in range(1, 5)], [100, 288, 492, 428])
+        for i in range(1, 9):
+            lab = self.rec(f"{P}.keyLabels[{i}]")
+            self.near(lab["baseline"], (448, 469, 490, 511)[(i - 1) // 2], f"key row {i}")
+            self.near(lab["box"][0], (86, 330)[(i - 1) % 2] + 34, f"key label {i} x")
+        gl = self.rec(f"{P}.keyGloss[1]")
+        self.near(gl["box"][0], self.rec(f"{P}.keyLabels[1]")["box"][2] + 5, "the gloss 5 px after its label", 1.5)
+        btn = self.rec(f"{P}.mapButton.bg")
+        self.near((btn["box"][0] + btn["box"][2]) / 2, 95, "map button centre x")
+        self.near((btn["box"][1] + btn["box"][3]) / 2, 535, "map button centre y")
+        for lua, x, y in ((f"{P}.mapLine", 120, 540), (f"{P}.bookLine", 120, 562), (f"{P}.share.label", 110, 618),
+                          (f"{P}.share.hint[1]", 110, 640), (f"{P}.share.hint[2]", 110, 659)):
+            r = self.rec(lua)
+            self.near(r["box"][0], x, lua + " x")
+            self.near(r["baseline"], y, lua + " baseline")
+        self.near(self.rec(f"{P}.share.state")["box"][0], self.rec(f"{P}.share.label")["box"][2] + 10, "state", 1.5)
+        fo = self.rec(f"{P}.folioL")
+        self.near(fo["baseline"], 694, "left folio")
+        self.near((fo["box"][0] + fo["box"][2]) / 2, cx, "left folio centred")
+
+    def test_the_map_button_and_check_box_sit_where_the_spec_says(self):
+        w = self.boot("update")
+        # frames, not drawn regions: their boxes from Book.Box
+        bx = [w.eval(f"select({i}, {self.P}.mapButton:GetPoint(1))") for i in (4, 5)]
+        self.near(bx[0] * 1.2 + 20.5, 95 - 12, "map button's left")
+        self.near(-bx[1] * 1.2 + 40.4, 535 - 12, "map button's top")
+        self.near(w.eval(f"{self.P}.mapButton:GetWidth()") * 1.2, 24, "map button at 24 px")
+        cb = [w.eval(f"select({i}, {self.P}.share:GetPoint(1))") for i in (4, 5)]
+        self.near(cb[0] * 1.2 + 20.5, 82, "check box x")
+        self.near(-cb[1] * 1.2 + 40.4, 603, "check box top")
+
+    def test_the_right_page_lands_where_the_spec_says(self):
+        self.boot("update")
+        self.paint()
+        P = self.P
+        h = self.rec(f"{P}.head.letters[1]")
+        self.near(h["baseline"], 120, "What's New")
+        self.near(h["box"][0] + self.wow.eval(f"{P}.head.width") / 2, 801, "heading centred")
+        paper = self.rec(f"{P}.sheet.paper")
+        for got, want, what in zip(paper["box"], (576, 150, 1026, 669), ("left", "top", "right", "bottom")):
+            self.near(got, want, "sheet " + what)
+        v1 = self.rec(f"{P}.heads[1].caps.letters[1]")
+        self.near(v1["baseline"], 176, "the first release's heading")
+        self.near(v1["box"][0] + self.wow.eval(f"{P}.heads[1].caps.width") / 2, 796.5, "heading centred on the column")
+        n1 = self.rec(f"{P}.notes[1].lines[1]")
+        self.near(n1["box"][0], 606, "note text x")
+        self.near(n1["baseline"], 176 + 26, "3.8.4 has no title: notes 26 below")
+        self.near(self.wow.eval(f"{P}.notes[1].mark.x"), 594, "note mark centre")
+        foot = self.rec(f"{P}.footer")
+        self.near(foot["box"][2], 1017, "footer right edge")
+        self.near(foot["baseline"], 694, "footer baseline")
+        fr = self.rec(f"{P}.folioR")
+        self.near((fr["box"][0] + fr["box"][2]) / 2, 801, "right folio centred")
+
+    def test_a_note_wraps_with_a_hanging_indent(self):
+        w = self.boot("update")
+        self.assertTrue(w.eval(f"{self.P}.notes[1].lines[2] ~= nil and {self.P}.notes[1].lines[2]:IsShown()"),
+                        "3.8.4's spirit-healer note takes two lines at 397 px")
+        self.paint()
+        a, b = self.rec(f"{self.P}.notes[1].lines[1]"), self.rec(f"{self.P}.notes[1].lines[2]")
+        self.near(b["box"][0], a["box"][0], "the second line under the text, not the mark")
+        self.near(b["baseline"] - a["baseline"], 20, "20 px leading")
+
+    def test_the_geometry_table_is_the_specs(self):
+        self.boot("settled")
+        spec = (Path(__file__).resolve().parents[2] / "docs" / "design" / "chronicle-warpath.md").read_text(encoding="utf-8")
+        for text in ("centred at (296, 107)", "centred at (296, 150); ornament at y 167", "from (82, 210), 428 wide",
+                     "392 × 140, centred, top y 288", "columns at x 86 and 330; baselines 448, 469, 490, 511",
+                     "icon centre (95, 535); text at (120, 540)", "(120, 562)", "box top-left (82, 603); label (110, 618)",
+                     "from (110, 640), 400 wide", "box (576, 150)–(1025, 668)", "x 590–1003; first baseline at sheet top + 26",
+                     "mark at x 594; text at x 606", "cord at x 1016", "right-aligned at (1017, 694)"):
+            with self.subTest(text=text):
+                self.assertIn(text, spec)
+        self.assertEqual([self.G(f"sheet[{i}]") for i in range(1, 5)], [576, 150, 1025, 668])
+        self.assertEqual([self.G(f"col[{i}]") for i in range(1, 3)], [590, 1003])
+        self.assertEqual(self.G("win[2]") + self.G("first"), 150 + 26)
+        self.assertEqual((self.G("note.mark"), self.G("note.x"), self.G("cord[1]")), (594, 606, 1016))
+
+    # -- What's New -----------------------------------------------------------
+    def test_every_release_is_on_the_sheet_newest_first(self):
+        w = self.boot("update")
+        self.assertEqual(w.eval(f"table.concat({self.P}.order, ',')").split(","), self.versions())
+        heads = self.heads()
+        self.assertEqual([h[0] for h in heads], self.versions())
+        ys = [h[1] for h in heads]
+        self.assertEqual(ys, sorted(ys), "laid out top to bottom, newest first")
+        self.assertTrue(w.eval(f"{self.P}.heads[1]:GetParent() == {self.P}.sheet.child"), "on the sheet's scroll child")
+        self.assertFalse(w.eval("WarpathChronicle.news.earlier ~= nil or WarpathChronicle.news.later ~= nil"), "no paging")
+        self.assertGreater(w.eval(f"{self.P}.sheet:Range()"), 0, "it doesn't all fit: the sheet scrolls")
+        self.assertEqual(w.eval(f"{self.P}.sheet.scroll"), 0, "opens at the top, on the newest")
+        w.run(f"{self.P}.sheet:SetScroll(10000)")
+        self.assertEqual(w.eval(f"{self.P}.sheet.scroll"), w.eval(f"{self.P}.sheet:Range()"))
+        w.run("ns.Chronicle.News('3.8.2')")
+        self.assertEqual(w.eval(f"{self.P}.sheet.scroll"), 0, "opened again: back at the top")
+
+    def test_the_divider_sits_before_the_first_release_already_read(self):
+        w = self.boot("update")
+        self.assertTrue(w.eval(f"{self.P}.dividerShown"))
+        self.assertEqual(w.eval(f"{self.P}.divider.text:GetText()"), "read before, at version 3.8.2")
+        dy = w.eval(f"{self.P}.divider.y")
+        ys = {v: y for v, y, _ in self.heads()}
+        self.assertLess(ys["3.8.3"], dy, "below the last new release")
+        self.assertLess(dy, ys["3.8.2"], "above 3.8.2, the first one read")
+        self.assertEqual(ys["3.8.2"] - dy, 40, "the divider takes its room")
+
+    def test_no_divider_on_a_first_install_or_from_the_tab(self):
+        for state in ("first", "settled"):
+            with self.subTest(state=state):
+                w = self.boot(state)
+                self.assertFalse(w.eval(f"{self.P}.dividerShown"))
+                self.assertFalse(w.eval(f"{self.P}.divider ~= nil and {self.P}.divider:IsShown()"))
+                self.assertEqual(w.eval(f"{self.P}.footer:GetText()"), f"{len(self.versions())} releases")
+
+    def test_gilt_diamonds_on_new_releases_only(self):
+        w = self.boot("update")
+        newer = [v for v in self.versions() if w.eval(f'ns.NewIn.Older("3.8.2", "{v}")')]
+        self.assertEqual([v for v, _, new in self.heads() if new], newer)
+        self.assertEqual(newer, ["3.8.4", "3.8.3"])
+        self.assertEqual(w.eval(f"{self.P}.footer:GetText()"), f"{len(self.versions())} releases  ·  2 new")
+        # read ones are faded: their heading in (150,80,56), without a shadow
+        h = f"{self.P}.heads[3]"
+        self.assertEqual(w.eval(f"{h}.version"), "3.8.2")
+        col = tuple(round(w.eval(f"select({i}, {h}.caps.letters[1]:GetTextColor())") * 255) for i in (1, 2, 3))
+        self.assertEqual(col, (150, 80, 56))
+        for state in ("first", "settled"):
+            with self.subTest(state=state):
+                self.boot(state)
+                self.assertFalse(any(new for _, _, new in self.heads()))
+
+    def test_a_release_title_shows_when_there_is_one(self):
+        w = self.boot("update")
+        titled = [i for i, h in enumerate(self.heads(), 1) if h[0] == "3.8.3"][0]
+        self.assertEqual(w.eval(f"{self.P}.heads[{titled}].title:GetText()"), "Scores and a clearer trail")
+        self.assertTrue(w.eval(f"{self.P}.heads[{titled}].title:IsShown()"))
+        self.assertFalse(w.eval(f"{self.P}.heads[1].title:IsShown()"), "3.8.4 has no title yet")
+        w.run('ns.NewIn.List[#ns.NewIn.List].title = "Spirit healers" ns.Chronicle.News("3.8.2")')
+        self.assertTrue(w.eval(f"{self.P}.heads[1].title:IsShown()"))
+        self.assertEqual(w.eval(f"{self.P}.heads[1].title:GetText()"), "Spirit healers")
+
+    # -- the left page's words -------------------------------------------------
+    def kicker(self):
+        w, P = self.wow, self.P
+        return "".join(w.eval(f"{P}.kicker.letters[{i}]:GetText()") for i in range(1, 80)
+                       if w.eval(f"{P}.kicker.letters[{i}] ~= nil and {P}.kicker.letters[{i}]:IsShown()"))
+
+    def test_the_three_states_read_as_the_spec(self):
+        w = self.boot("update")
+        v = w.eval("ns.VERSION")
+        self.assertEqual(self.kicker(), f"VERSION {v}  ·  TWO NEW RELEASES")
+        self.assertEqual(w.eval(f"{self.P}.welcome"), "Warpath was just updated, from {3.8.2} to {" + v + "}. What "
+                         "changed is on the facing page, marked new. On the world map it draws Lethality's war in these marks.")
+        self.assertEqual(w.eval(f"{self.P}.figs[2]:GetText()"), v)
+        self.assertTrue(w.eval(f"{self.P}.figs[1].twin ~= nil"), "figures are faux bold")
+        w = self.boot("first")
+        self.assertEqual(self.kicker(), f"VERSION {v}  ·  A NEW CHRONICLE")
+        self.assertRegex(w.eval(f"{self.P}.welcome"),
+                         r"^Here begins the chronicle of Lethality, opened on the [a-z-]+ of [A-Z][a-z]+\. ")
+        self.assertFalse(w.eval(f"{self.P}.figs[1] ~= nil and {self.P}.figs[1]:IsShown()"))
+        w = self.boot("settled")
+        self.assertEqual(self.kicker(), f"VERSION {v}")
+        self.assertEqual(w.eval(f"{self.P}.welcome"), "This is the chronicle of Lethality, kept by Warpath. On the world "
+                         "map it draws the war as it is fought, in these marks.")
+        self.assertEqual(w.eval(f"{self.P}.cap:GetText()"), "T")
+        self.assertEqual(w.eval(f"{self.P}.words[1]:GetText()"), "his", "the initial's letter leaves the words")
+
+    def test_one_new_release_is_singular(self):
+        w = self.boot("update")
+        w.run("ns.Chronicle.News('3.8.3')")
+        self.assertTrue(self.kicker().endswith("ONE NEW RELEASE"), self.kicker())
+        self.assertEqual(w.eval(f"{self.P}.footer:GetText()"), f"{len(self.versions())} releases  ·  1 new")
+
+    def test_punctuation_stays_on_a_figures_line(self):
+        self.boot("settled")
+        pieces = self.wow.eval("""(function() local t = {}
+            for _, p in ipairs(ns.ChronWarpath.Pieces("from {3.8.2} to {3.8.4}. What")) do
+                t[#t + 1] = p[1] .. (p[2] and "*" or "") .. (p[3] and "+" or "") end
+            return table.concat(t, " ") end)()""")
+        self.assertEqual(pieces, "from 3.8.2* to 3.8.4* .+ What")
+
+    # -- the key ---------------------------------------------------------------
+    def test_the_keys_crest_and_trail_follow_the_faction(self):
+        for faction, crest, red in (("Horde", "UI-PVP-Alliance", True), ("Alliance", "UI-PVP-Horde", False)):
+            with self.subTest(faction=faction):
+                w = self.boot("settled", faction=faction)
+                self.assertIn(crest, w.eval(f"{self.P}.keyPins.sight:GetTexture()"))
+                self.assertEqual(w.eval(f"{self.P}.keyPins.sight:GetTexture()"), w.eval('(ns.MapLook.Pin("sight"))'))
+                sight = [p for p in range(1, 9)
+                         if w.eval(f"{self.P}.scenePins[{p}] ~= nil and {self.P}.scenePins[{p}].kind == 'sight'")]
+                self.assertIn(crest, w.eval(f"{self.P}.scenePins[{sight[0]}]:GetTexture()"), "the picture's enemy too")
+                rgb = [w.eval(f"{self.P}.trailColor[{i}]") for i in (1, 2, 3)]
+                self.assertEqual(rgb[0] > rgb[2], red, f"the trail sample is {faction}'s colour: {rgb}")
+                want = [w.eval(f"select({i}, ns.MapLook.Trail(ns.C.LINE_SOLID + 60, 43200))") for i in (1, 2, 3)]
+                self.assertEqual(rgb, want, "the map's own trail colour")
+
+    def test_the_keys_pins_use_the_maps_textures(self):
+        w = self.boot("settled")
+        for kind, tex, size in (("kill", "TEX_BLADES", 20), ("death", "TEX_SKULL", 17), ("sight", None, 20)):
+            with self.subTest(kind=kind):
+                p = f"{self.P}.keyPins.{kind}"
+                self.assertEqual(w.eval(f"{p}:GetTexture()"), w.eval(f'(ns.MapLook.Pin("{kind}"))'))
+                if tex:
+                    self.assertEqual(w.eval(f"{p}:GetTexture()"), w.eval(f"ns.C.{tex}"))
+                got = [w.eval(f"select({i}, {p}:GetTexCoord())") for i in (1, 2, 3, 4)]
+                want = [w.eval(f'select({i}, ns.MapLook.PinCoords("{kind}"))') for i in (1, 2, 3, 4)]
+                self.assertEqual(got, want)
+                self.assertAlmostEqual(w.eval(f"{p}:GetWidth()") * 1.2, size, delta=0.01)
+                self.assertEqual([w.eval(f"select({i}, {p}:GetVertexColor())") for i in (1, 2, 3)], [1, 1, 1],
+                                 "untinted, as your own marks")
+
+    def test_the_map_pins_through_the_same_look(self):
+        # the other half of "can't drift": DrawMarks takes its textures from Look
+        w = self.boot("settled")
+        self.assertEqual(w.eval('(ns.MapLook.Pin("kill"))'), w.eval("ns.C.TEX_BLADES"))
+        self.assertEqual(w.eval('(ns.MapLook.Pin("death"))'), w.eval("ns.C.TEX_SKULL"))
+        self.assertEqual([w.eval(f'select({i}, ns.MapLook.PinCoords("sight"))') for i in (1, 2, 3, 4)], [0, 0.62, 0, 0.62])
+        src = (Path(__file__).resolve().parents[2] / "Map.lua").read_text(encoding="utf-8")
+        self.assertIn('f.tex:SetTexCoord(Look.PinCoords(kind))', src)
+        self.assertIn('(Look.Pin("sight"))', src)
+
+    def test_dashes_never_stall_where_a_dash_rounds_to_nothing(self):
+        # the picture's trail found it: 5.95 on, 2.13 off along this stretch,
+        # a dash's end rounded onto its start and Look.Dashes looped for ever
+        # (the map's corpse runs used the same loop). Capped, so the old code
+        # fails instead of hanging; the book stays shut (its picture stalled too).
+        w = Wow()
+        w.run("WarpathGlobal = { installed = '3.7.0', seenVersion = '99.0.0', cfg = {} }")
+        w = w.login()
+        n = w.eval("""(function() local n = 0
+            local put = function() n = n + 1 if n > 100 then error("stalled") end end
+            local h = 0 debug.sethook(function() h = h + 1 if h > 2000 then debug.sethook() error("looped") end end, "", 1000)
+            ns.MapLook.Dashes(put, 6, 1, 0, 0, 0, 1, 5.95, 2.1291666666667, 0, 141.12, -133, 164.64, -120.4)
+            debug.sethook() return n end)()""")
+        self.assertLessEqual(n, 5, "about four dashes in 27 px")
+
+    def test_the_picture_is_drawn_with_the_maps_pieces(self):
+        w = self.boot("settled")
+        self.assertGreater(w.eval(f"{self.P}.printN"), 2, "the world map's art is under the marks")
+        self.assertTrue(w.eval(f"{self.P}.ground[1].__masks ~= nil"), "printed through the mask")
+        cols = w.eval(f"""(function() local t = {{}} for i = 1, {self.P}.picPen.n do
+            local r, g, b = {self.P}.picPen.tex[i]:GetVertexColor()
+            local c = {self.P}.picPen.tex[i].__color
+            if c then r, g, b = c[1], c[2], c[3] end
+            t[#t + 1] = ("%.2f,%.2f,%.2f"):format(r, g, b) end
+            return table.concat(t, ";") end)()""").split(";")
+        self.assertIn("0.10,0.04,0.03", cols, "the trail's casing (Look.Case)")
+        self.assertIn("0.25,0.45,1.00", cols, "a flight's royal blue (Look.Air)")
+        self.assertIn("0.24,0.15,0.05", cols, "a gold road's bronze edge (Look.Road)")
+        self.assertEqual(w.eval(f"{self.P}.picPen.dots[1]:GetTexture()"), w.eval("ns.C.TEX_DOT"), "haze is the map's dot")
+
+    # -- sharing ---------------------------------------------------------------
+    def hint(self):
+        w, P = self.wow, self.P
+        return " ".join(w.eval(f"{P}.share.hint[{i}]:GetText()") for i in range(1, 4)
+                        if w.eval(f"{P}.share.hint[{i}] ~= nil and {P}.share.hint[{i}]:IsShown()"))
+
+    def test_the_sharing_hint_is_the_shorter_one(self):
+        self.boot("settled")
+        self.assertEqual(self.hint(), "Guildmates' kills, deaths and enemy sightings on your map, and yours on theirs. "
+                         "Only between guildmates who have it on.")
+        self.assertEqual(self.wow.eval(f"#{self.P}.share.hint"), 2, "two lines at 400 px")
+
+    def test_the_switch_turns_sharing_off_and_on_but_never_in_a_preview(self):
+        w = self.boot("settled")
+        cb = f"{self.P}.share"
+        w.run("ns.cfg.share = true ns.Chronicle.Open(false, 'warpath')")
+        self.assertEqual(w.eval(f"{cb}.state:GetText()"), "on")
+        w.run(f"{cb}:SetChecked(false) {cb}:GetScript('OnClick')({cb})")
+        self.assertFalse(w.eval("ns.cfg.share"))
+        self.assertEqual(w.eval(f"{cb}.state:GetText()"), "off")
+        w.run(f"{cb}:SetChecked(true) {cb}:GetScript('OnClick')({cb})")
+        self.assertTrue(w.eval("ns.cfg.share"))
+        w.run("ns.Chronicle.Open(true, 'warpath')")
+        w.run(f"{cb}:SetChecked(false) {cb}:GetScript('OnClick')({cb})")
+        self.assertTrue(w.eval("ns.cfg.share"), "a preview never changes the setting")
+        self.assertTrue(w.eval(f"{cb}:GetChecked()"), "and the box goes back")
 
 
 class RealData(unittest.TestCase):

@@ -1060,10 +1060,13 @@ def gradient(orient, lo, hi, size):
 TABS = ("campaigns", "grudges", "ledger", "settings", "warpath")
 
 
-def boot(saved=None, account=None, name="Tester", at=None, fonts="standin", addon_dir=REPO):
+def boot(saved=None, account=None, name="Tester", at=None, fonts="standin", addon_dir=REPO, faction=None):
     """The addon booted with real text metrics, logged in, ready to open."""
     typ = Type(fonts)
-    wow = Wow(saved=saved, saved_global=account, player={"name": name}, addon_dir=addon_dir)
+    player = {"name": name}
+    if faction:
+        player["faction"] = faction
+    wow = Wow(saved=saved, saved_global=account, player=player, addon_dir=addon_dir)
     if at:
         wow.H.now = int(at)
     wow.H.measure = lambda path, size, text: typ.width(path, size, text)
@@ -1087,9 +1090,8 @@ def open_book(wow, tab="campaigns", page=None, section=None, preview=False):
         if tab == "campaigns":
             for _ in range(page - 1):
                 wow.run("local b = WarpathChronicle.camp.earlier if b:IsEnabled() then b:GetScript('OnClick')(b) end")
-        elif tab == "warpath":
-            for _ in range(page - 1):
-                wow.run("local b = WarpathChronicle.news.earlier if b:IsEnabled() then b:GetScript('OnClick')(b) end")
+        elif tab == "warpath":       # one sheet that scrolls: a "page" is a sheet's height further down
+            wow.run(f"local s = WarpathChronicle.news.sheet s:SetScroll({int(page) - 1} * s:Height())")
         elif tab == "grudges":
             wow.run(f"ns.ChronGrudges.Choose({int(page)}, true)")
     return already
