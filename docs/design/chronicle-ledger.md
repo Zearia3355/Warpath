@@ -68,7 +68,7 @@ Everything is in `tools/out/design/ledger/`, which git ignores. Run the scripts 
 
 ## Layout rules (all spreads)
 
-Positions are render pixels on the 1092 × 748 book, the frame of the Campaigns renders. Multiply by 0.806 for UI units (`W = 880`). The y values are baselines unless stated.
+Positions are render pixels on the 1092 × 748 book, the frame of the Campaigns renders. To get UI units, use the canon's conversion (settled 2026-11-27 by measuring the book art; the earlier "× 0.806" assumed the book filled the canvas, which it doesn't): left page x = (render x − 44) / 1.2, right page x = (render x − 550) / 1.2, y = (render y − 66) / 1.2, from each page's top-left. Sizes divide by 1.2. The y values are baselines unless stated.
 
 - **Left page:** x 82–510, centre 296. **Right page:** x 586–1017, centre 801.
 - **Colours:** the canon's ink (46,28,10), faded (77,56,31), rubric (122,31,15).
