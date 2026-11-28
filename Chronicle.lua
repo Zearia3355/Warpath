@@ -18,8 +18,7 @@ ns.OnBind(function() db, gdb, cfg, myName = ns.db, ns.gdb, ns.cfg, ns.myName end
 
 local W, H, PAD, PW, PH = Book.W, Book.H, Book.PAD, Book.PW, Book.PH
 
-local view = { section = "campaigns", list = {}, page = 1, preview = false, grudges = {}, pick = 1,
-    newsStack = {} }
+local view = { section = "campaigns", list = {}, page = 1, preview = false, grudges = {}, pick = 1 }
 
 -- What the page files share: the view, the book once built, Render, and
 -- each page's Build/Render/Reset.
@@ -259,7 +258,7 @@ function Chronicle.Open(preview, section)
     view.preview = preview and true or false
     view.section = section or (preview and view.section) or "campaigns"
     view.page, view.pick = 1, 1
-    view.newsStart, view.newsLine, view.newsStack, view.newsNext, view.newSince = nil, nil, {}, nil, nil
+    view.newSince = nil
     for _, p in pairs(Chron.pages) do if p.Open then p.Open(preview) end end
     for _, p in pairs(Chron.pages) do if p.Reset then p.Reset(book) end end
     Render()

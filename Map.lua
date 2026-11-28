@@ -1831,8 +1831,12 @@ function Look.Dashes(put, sub, thick, r, g, b, a, dash, gap, phase, x1, y1, x2, 
     local pos = 0
     while pos < len do
         local inPat = (phase + pos) % period
-        if inPat < dash then
-            local stop = math.min(len, pos + (dash - inPat))
+        local stop = math.min(len, pos + (dash - inPat))
+        if inPat < dash and stop <= pos then
+            -- the dash's end rounds onto where it starts: go on into the gap
+            -- (before 3.8.5 this could loop for ever)
+            pos = pos + math.max(period - inPat, period * 1e-6)
+        elseif inPat < dash then
             if put(sub, "BLEND", thick, r, g, b, a, x1 + ux * pos, y1 + uy * pos, x1 + ux * stop, y1 + uy * stop) == false then
                 return phase + len
             end
