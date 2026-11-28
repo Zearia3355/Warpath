@@ -391,4 +391,4 @@ local function Render(F, ctx)
     LayRight(ctx)
 end
 
-LG.spreads[2] = { Build = Build, Render = Render }
+LG.spreads[2] = { Build = Build, Render = Render, only = { 296, 648 } }

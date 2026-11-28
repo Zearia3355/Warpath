@@ -36,7 +36,10 @@ local G = {
     foot = { y = 694, navY = 692, prev = 106, next = 990, page = 801,
              arrowL = { 70.9, 671.6, 705.2 }, arrowR = 1026.1 },
     toggle = { x = 250, y = 675, w = 118, h = 26, gap = 4, px = 14 },
-    only = { y = 88, px = 16 },
+    -- "Only {Name} has opened the chronicle since 3.8.5.": once a spread,
+    -- where that spread leaves room (its `only` = { x, y }); at the top of the
+    -- pages it ran into the page's edge and the Tally's kicker (3.8.5-test4)
+    only = { px = 16, at = { 801, 664 } },
 }
 LG.G = G
 LG.NAMES = { "The Tally", "The Hours", "The Classes", "My Lands", "The Foes", "The Wilds", "The Guild" }
@@ -202,6 +205,16 @@ end
 
 -- Column heads: Friz capitals, letterspaced 1.0.
 function LG.Head(parent, px, col) return Book.Caps(parent, "friz", px or 10, col or FADED, { track = 1.0 }) end
+
+-- Two column heads right-aligned over their figures at x1 and x2: the first
+-- moves left when the second's measured width would reach it (Friz in game
+-- is wider than the design's stand-in: "KILLDEATHS", 3.8.5-test4).
+LG.HEAD_GAP = 8
+function LG.HeadPair(h1, t1, x1, h2, t2, x2, y, rel, ox, oy)
+    local w2 = h2:Set(t2, x2, y, "r", rel, ox, oy)
+    local w1 = h1:Set(t1, math.min(x1, x2 - w2 - LG.HEAD_GAP), y, "r", rel, ox, oy)
+    return w1, w2
+end
 
 -- A figure: EB Garamond Bold, faux bold; a zero is an en dash in EB
 -- Garamond Italic, faded, two px smaller.
@@ -571,7 +584,7 @@ local function BuildFooter(L)
     P.all.frame:SetScript("OnLeave", GameTooltip_Hide)
     P.all.catch:SetScript("OnEnter", function() P.all.frame:GetScript("OnEnter")(P.all.frame) end)
     P.all.catch:SetScript("OnLeave", GameTooltip_Hide)
-    P.only = { Str(L, "gari", G.only.px, FADED), Str(L, "gari", G.only.px, FADED) }
+    P.only = Str(L, "gari", G.only.px, FADED)
     P.failed = Str(L, "gari", 18, FADED)
     Set(P.failed, "The Ledger couldn't be read.")
     Put(P.failed, G.CX, 380, "m")
@@ -652,12 +665,11 @@ function Render()
         LG.spreads[n].Render(F, ctx)
     end
     local only = ctx and ctx.only
-    for i, fs in ipairs(P.only) do
-        fs:SetShown(only ~= nil)
-        if only then
-            Set(fs, "Only " .. only .. " has opened the chronicle since 3.8.5.")
-            Put(fs, i == 1 and G.CX or G.RCX, G.only.y, "m")
-        end
+    P.only:SetShown(only ~= nil)
+    if only then
+        local at = LG.spreads[n] and LG.spreads[n].only or G.only.at
+        Set(P.only, "Only " .. only .. " has opened the chronicle since 3.8.5.")
+        Put(P.only, at[1], at[2], "m")
     end
     LayFooter(n)
 end

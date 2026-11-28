@@ -40,9 +40,9 @@
 --   s.continents [continent mapID] = { kills, deaths, lands = { mapID... }
 --                (by kills + deaths, then name), bloodiest = mapID or nil }
 --   s.foes       slain / struck: up to ten { f, n, count, last, c, lv, gu },
---                by count, then latest first. Struck counts are
---                WarpathGlobal.killers (account-wide); details from this
---                character's PvP death marks.
+--                by count, then latest first. Struck: this character's
+--                PvP death marks (3.8.5-test5; WarpathGlobal.killers is
+--                every character's), counts and details alike.
 --   s.who        levels ("60", "51-59", "41-50", "31-40", "21-30", "1-20",
 --                "unknown"), races (or "unknown"), guilds (or "none")
 --   s.wilds      total, unrecorded, causes = { { cause, how, kind, n } } (most
@@ -277,6 +277,7 @@ local function DeathMark(s, m, mapID, land, struckInfo)
         if m.kf then
             local i = struckInfo[m.kf]
             if not i or t > i.last then struckInfo[m.kf] = { last = t, n = m.kn, c = m.kc, lv = m.lv, gu = m.gu } end
+            struckInfo.count[m.kf] = (struckInfo.count[m.kf] or 0) + 1
         end
         return
     end
@@ -437,7 +438,7 @@ function Ledger.Stats(db, gdb, opt)
     t.shots = gdb and gdb.shotCount or 0
     for _ in pairs(db.victims or {}) do t.foes = t.foes + 1 end
 
-    local info, struckInfo, times, chains, bestMark = {}, {}, {}, {}, nil
+    local info, struckInfo, times, chains, bestMark = {}, { count = {} }, {}, {}, nil
     for mapID, z in pairs(db.maps or {}) do
         local land = { kills = z.kills or 0, deaths = z.pdeaths or 0, best = z.bestStreak or 0, foes = 0, wilds = 0,
                        yards = z.yards or 0, sightings = 0, gkills = 0, runs = z.runs_n or 0 }
@@ -473,7 +474,11 @@ function Ledger.Stats(db, gdb, opt)
     HourRecord(s, times)
     CampaignRecords(s, db)
     s.foes.slain = TopTen(db.victims or {}, info)
-    s.foes.struck = TopTen(gdb and gdb.killers or {}, struckInfo)
+    -- this character's own PvP deaths (WarpathGlobal.killers is every
+    -- character's: an alt's page listed its main's killers, with no class or date)
+    local struckCount = struckInfo.count
+    struckInfo.count = nil
+    s.foes.struck = TopTen(struckCount, struckInfo)
     if opt.guild ~= false then
         s.guild = Guild(db, opt.me or ns.myName, opt.roster or Ledger.Roster())
     end
@@ -529,7 +534,7 @@ local function Latest(a, b)
 end
 
 -- Foes lists merged by name. counts: sum (each character's own kills) or
--- max (struck down: the counts are already account-wide).
+-- max.
 local function MergeFoes(lists, how)
     local counts, info = {}, {}
     for _, list in ipairs(lists) do
@@ -608,7 +613,7 @@ function Ledger.Account(gdb)
         end
     end
     out.foes.slain = MergeFoes(slain, "sum")
-    out.foes.struck = MergeFoes(struck, "max")
+    out.foes.struck = MergeFoes(struck, "sum")
     return Finish(out)
 end
 
