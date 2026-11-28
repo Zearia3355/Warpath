@@ -2695,6 +2695,19 @@ class Upgrades(unittest.TestCase):
                 self.assertEqual(after["v"], 10)
 
 
+# A wrapped string as the 3.8.3 welcome set it, for the renderer's line pitch.
+PROBE_WRAP = r"""
+__probe = ns.Book.Old.Font(WarpathChronicle.news.L, QuestFont, GameFontHighlight, ns.Book.Old.INK)
+__probe:SetPoint("TOPLEFT", WarpathChronicle.left, "TOPLEFT", 32, -96)
+__probe:SetWidth(ns.Book.PW - 64)
+__probe:SetJustifyV("TOP")
+__probe:SetSpacing(3)
+__probe:SetText("Warpath draws your war on the world map: the roads you travel, today's trail, where you fought, "
+    .. "killed and fell, and the enemies you've seen.\n\nThis book keeps a campaign for each time you ride out, "
+    .. "and your ledger of grudges. Open it from the minimap button or with /warpath chronicle.")
+"""
+
+
 class BookRender(unittest.TestCase):
     """The chronicle renderer (book_render.py, render.py --book): every later
     phase of the redesign is checked against the design renders through it,
@@ -2712,6 +2725,8 @@ class BookRender(unittest.TestCase):
         cls.renders = {}
         for tab in B.TABS:
             B.open_book(cls.wow, tab)
+            if tab == "warpath":
+                cls.wow.run(PROBE_WRAP)
             cls.renders[tab] = B.render_book(cls.wow, cls.typ)
 
     def text(self, tab, s):
@@ -2755,14 +2770,8 @@ class BookRender(unittest.TestCase):
         self.assertBox(self.of("campaigns", "WarpathChronicle.tabs[1].edge")["box"], (64, 11, 177, 46))
 
     def test_headings_sit_where_the_code_puts_them(self):
-        # right page: TOP 0,-30, Morpheus 15; baseline 0.88 of the line down
-        # (Campaigns' heading is the 3.8.5 page's: CampaignsPage checks it)
-        for tab, s in (("warpath", "What's New"),):
-            with self.subTest(heading=s):
-                r = self.text(tab, s)
-                self.assertAlmostEqual((r["box"][0] + r["box"][2]) / 2, 801.7, delta=0.5)
-                self.assertAlmostEqual(r["top"], 98.0, delta=0.5)
-                self.assertAlmostEqual(r["baseline"], 113.84, delta=0.5)
+        # (Campaigns' and Warpath's headings are the 3.8.5 pages': CampaignsPage
+        # and WarpathPage check them)
         # left page: TOP 0,-32, QuestTitleFont (Morpheus 18)
         for tab, s in (("settings", "Settings"), ("grudges", "The Ledger of Grudges")):
             with self.subTest(heading=s):
@@ -2771,8 +2780,9 @@ class BookRender(unittest.TestCase):
                 self.assertAlmostEqual(r["baseline"], 119.41, delta=0.5)
 
     def test_wrapped_text_steps_by_whole_pixels(self):
-        # the welcome: QuestFont 13, SetSpacing(3), TOPLEFT 32,-96 of the left page
-        r = self.text("warpath", self.wow.eval("WarpathChronicle.news.prose:GetText()").replace("\r", ""))
+        # the 3.8.3 welcome's settings (QuestFont 13, SetSpacing(3), TOPLEFT
+        # 32,-96 of the left page), kept as a probe string (setUpClass)
+        r = self.text("warpath", self.wow.eval("__probe:GetText()").replace("\r", ""))
         self.assertGreaterEqual(len(r["lines"]), 6)
         self.assertAlmostEqual(r["box"][0], 80.5, delta=0.5)
         self.assertAlmostEqual(r["baselines"][0], 190.85, delta=0.5)
@@ -3476,6 +3486,21 @@ class WarpathPage(unittest.TestCase):
         src = (Path(__file__).resolve().parents[2] / "Map.lua").read_text(encoding="utf-8")
         self.assertIn('f.tex:SetTexCoord(Look.PinCoords(kind))', src)
         self.assertIn('(Look.Pin("sight"))', src)
+
+    def test_dashes_never_stall_where_a_dash_rounds_to_nothing(self):
+        # the picture's trail found it: 5.95 on, 2.13 off along this stretch,
+        # a dash's end rounded onto its start and Look.Dashes looped for ever
+        # (the map's corpse runs used the same loop). Capped, so the old code
+        # fails instead of hanging; the book stays shut (its picture stalled too).
+        w = Wow()
+        w.run("WarpathGlobal = { installed = '3.7.0', seenVersion = '99.0.0', cfg = {} }")
+        w = w.login()
+        n = w.eval("""(function() local n = 0
+            local put = function() n = n + 1 if n > 100 then error("stalled") end end
+            local h = 0 debug.sethook(function() h = h + 1 if h > 2000 then debug.sethook() error("looped") end end, "", 1000)
+            ns.MapLook.Dashes(put, 6, 1, 0, 0, 0, 1, 5.95, 2.1291666666667, 0, 141.12, -133, 164.64, -120.4)
+            debug.sethook() return n end)()""")
+        self.assertLessEqual(n, 5, "about four dashes in 27 px")
 
     def test_the_picture_is_drawn_with_the_maps_pieces(self):
         w = self.boot("settled")
